@@ -1,0 +1,33 @@
+.pageTitle { font-size: 1.5rem; font-weight: 700; color: var(--foreground); margin-bottom: 0.25rem; }
+.pageSubtitle { font-size: 0.9rem; color: var(--muted-foreground); margin-bottom: 1.5rem; }
+
+.stockCardsGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
+.stockCard { background-color: var(--card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 1.25rem; box-shadow: var(--shadow); }
+.stockCardHeader { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.75rem; }
+.stockCardTitle { font-size: 0.9375rem; font-weight: 600; color: var(--foreground); }
+.stockCardValues { display: flex; align-items: baseline; gap: 0.15rem; }
+.stockCurrent { font-size: 1.75rem; font-weight: 700; color: var(--foreground); }
+.stockCapacity { font-size: 1rem; color: var(--muted-foreground); }
+.gaugeContainer { margin-bottom: 0.75rem; }
+.stockCardFooter { display: flex; align-items: center; justify-content: space-between; }
+.thresholdLabel { font-size: 0.8rem; color: var(--muted-foreground); }
+.alertBadge {}
+
+.formsGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem; margin-bottom: 1.5rem; }
+.card { background-color: var(--card); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow); overflow: hidden; margin-bottom: 0; }
+.cardHeader { padding: 1rem 1.25rem; border-bottom: 1px solid var(--border); }
+.cardTitle { font-size: 0.9375rem; font-weight: 600; }
+.cardBody { padding: 1.25rem; }
+
+.formLayout { display: flex; flex-direction: column; gap: 1rem; }
+.formFooter { display: flex; justify-content: flex-end; padding-top: 0.25rem; }
+
+.tableWrapper { overflow-x: auto; }
+.table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
+.table th { padding: 0.75rem 1rem; text-align: left; font-size: 0.75rem; font-weight: 600; color: var(--muted-foreground); text-transform: uppercase; letter-spacing: 0.04em; border-bottom: 1px solid var(--border); background-color: hsl(40, 15%, 98%); white-space: nowrap; }
+.table td { padding: 0.75rem 1rem; border-bottom: 1px solid var(--border); color: var(--foreground); }
+.table tbody tr:last-child td { border-bottom: none; }
+.table tbody tr:hover { background-color: var(--muted); }
+.monoText { font-family: var(--font-family-monospace); font-size: 0.8125rem; }
+.boldText { font-weight: 600; }
+.mutedText { color: var(--muted-foreground); }

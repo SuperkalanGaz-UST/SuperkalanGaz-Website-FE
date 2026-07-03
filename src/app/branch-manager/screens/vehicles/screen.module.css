@@ -1,0 +1,41 @@
+.pageWrapper { display: flex; flex-direction: column; gap: 1.5rem; }
+.header { display: flex; flex-direction: column; gap: 0.25rem; }
+.pageTitle { font-size: 1.5rem; font-weight: 700; color: var(--foreground); }
+.pageDescription { font-size: 0.9rem; color: var(--muted-foreground); }
+
+.statsGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; }
+.statCard { background-color: var(--card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 1.25rem; box-shadow: var(--shadow); }
+.statHeader { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem; }
+.statLabel { font-size: 0.8rem; font-weight: 500; color: var(--muted-foreground); text-transform: uppercase; letter-spacing: 0.05em; }
+.statIcon { color: var(--muted-foreground); }
+.statValue { font-size: 2rem; font-weight: 700; color: var(--foreground); line-height: 1; }
+
+.vehiclesGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap: 1.5rem; }
+
+.vehicleCard { background-color: var(--card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 1.25rem; box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 1.25rem; }
+.cardHeader { display: flex; justify-content: space-between; align-items: flex-start; }
+.vehicleIdentity { display: flex; flex-direction: column; gap: 0.15rem; }
+.vehicleName { font-size: 1.1rem; font-weight: 600; color: var(--foreground); }
+.vehiclePlate { font-family: var(--font-family-monospace); font-size: 0.85rem; color: var(--muted-foreground); background: var(--muted); padding: 0.15rem 0.4rem; border-radius: var(--radius-sm); width: fit-content; }
+
+.metricsRow { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+.metricBox { display: flex; flex-direction: column; gap: 0.35rem; padding: 0.75rem; background-color: var(--muted); border-radius: var(--radius-md); }
+.metricLabel { font-size: 0.75rem; font-weight: 500; color: var(--muted-foreground); text-transform: uppercase; }
+.metricValueWrapper { display: flex; align-items: baseline; gap: 0.25rem; }
+.metricValue { font-size: 1.5rem; font-weight: 700; color: var(--foreground); line-height: 1; font-family: var(--font-family-monospace); }
+.metricUnit { font-size: 0.8rem; color: var(--muted-foreground); font-weight: 500; }
+
+.progressSection { display: flex; flex-direction: column; gap: 0.5rem; }
+.progressHeader { display: flex; justify-content: space-between; font-size: 0.8rem; font-weight: 500; }
+.progressText { color: var(--muted-foreground); }
+.progressPercentage { font-weight: 600; color: var(--foreground); }
+
+.actionRow { display: flex; justify-content: flex-end; margin-top: auto; padding-top: 0.5rem; border-top: 1px solid var(--border); }
+
+/* Dialog Styles */
+.dialogOverlay { position: fixed; inset: 0; background-color: rgba(0, 0, 0, 0.5); z-index: 50; display: flex; align-items: center; justify-content: center; padding: 1rem; }
+.dialogContent { background-color: var(--card); border-radius: var(--radius-lg); padding: 1.5rem; width: 100%; max-width: 400px; box-shadow: var(--shadow-lg); display: flex; flex-direction: column; gap: 1.25rem; }
+.dialogHeader { display: flex; flex-direction: column; gap: 0.25rem; }
+.dialogTitle { font-size: 1.25rem; font-weight: 600; color: var(--foreground); }
+.dialogDescription { font-size: 0.875rem; color: var(--muted-foreground); }
+.dialogFooter { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem; }
