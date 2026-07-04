@@ -67,11 +67,6 @@ export default function FleetPage() {
 
     return (
         <div className={styles.pageWrapper}>
-            <div className={styles.header}>
-                <h1 className={styles.pageTitle}>Fleet Management</h1>
-                <p className={styles.pageDescription}>Real-time tracking and logistics overview</p>
-            </div>
-
             <div className={styles.statsGrid}>
                 <div className={styles.statCard}><div className={styles.statHeader}><span className={styles.statLabel}>Total Riders</span><Truck className={styles.statIcon} size={20} /></div><div className={styles.statValue}>{MOCK_RIDERS.length}</div></div>
                 <div className={styles.statCard}><div className={styles.statHeader}><span className={styles.statLabel}>Active Now</span><Navigation className={styles.statIcon} style={{ color: "var(--success)" }} size={20} /></div><div className={styles.statValue}>{activeRiders}</div></div>

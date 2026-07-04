@@ -1,188 +1,211 @@
-import { Header } from "./Header";
-import { KPICard } from "./KPICard";
-import { OrderVolumeChart } from "./OrderVolumeChart";
-import { CSATChart } from "./CSATChart";
-import { SLATable } from "./SLATable";
-import { Star } from "lucide-react";
-import { useBranchData } from "../hooks/useBranchData";
-import { useBranch } from "../contexts/BranchContext";
+import { Header } from './Header';
+import { KPICard } from './KPICard';
+import { ShoppingCart, Truck, Star, Gift } from 'lucide-react';
+import { useBranchData } from '../hooks/useBranchData';
 import {
-  BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  BarChart, Bar, Cell, AreaChart, Area, LineChart, Line,
+  XAxis, YAxis, Tooltip, ResponsiveContainer,
 } from 'recharts';
 
-const weeklyExpenses = [
-  { week: 'Week 1', amount: 18500 },
-  { week: 'Week 2', amount: 22000 },
-  { week: 'Week 3', amount: 19200 },
-  { week: 'Week 4', amount: 21300 },
-];
+// ---------------------------------------------------------------------------
+// Mock chart data — demo values pending API wiring (AGENTS.md §13).
+// ---------------------------------------------------------------------------
 
+/** Hourly earnings across the business day (8 AM – 6 PM). */
 const hourlyEarnings = [
-  { hour: '6AM',  earnings: 800 },
-  { hour: '7AM',  earnings: 1200 },
-  { hour: '8AM',  earnings: 2400 },
-  { hour: '9AM',  earnings: 3800 },
-  { hour: '10AM', earnings: 5200 },
-  { hour: '11AM', earnings: 6100 },
-  { hour: '12PM', earnings: 5800 },
-  { hour: '1PM',  earnings: 4200 },
-  { hour: '2PM',  earnings: 3600 },
-  { hour: '3PM',  earnings: 5100 },
-  { hour: '4PM',  earnings: 5900 },
-  { hour: '5PM',  earnings: 4800 },
-  { hour: '6PM',  earnings: 3200 },
-  { hour: '7PM',  earnings: 2100 },
-  { hour: '8PM',  earnings: 900 },
+  { hour: '8 AM', earnings: 2400 },
+  { hour: '9 AM', earnings: 3800 },
+  { hour: '10 AM', earnings: 5200 },
+  { hour: '11 AM', earnings: 6100 },
+  { hour: '12 PM', earnings: 5800 },
+  { hour: '1 PM', earnings: 4200 },
+  { hour: '2 PM', earnings: 3600 },
+  { hour: '3 PM', earnings: 5100 },
+  { hour: '4 PM', earnings: 5900 },
+  { hour: '5 PM', earnings: 4800 },
+  { hour: '6 PM', earnings: 3200 },
 ];
 
-const dailyEarnings = [
-  { day: 1,  earnings: 8400 },
-  { day: 2,  earnings: 9100 },
-  { day: 3,  earnings: 10200 },
-  { day: 4,  earnings: 9600 },
-  { day: 5,  earnings: 11300 },
-  { day: 6,  earnings: 10800 },
-  { day: 7,  earnings: 12100 },
-  { day: 8,  earnings: 11500 },
-  { day: 9,  earnings: 10900 },
-  { day: 10, earnings: 13200 },
-  { day: 11, earnings: 12700 },
-  { day: 12, earnings: 11800 },
-  { day: 13, earnings: 13500 },
-  { day: 14, earnings: 14100 },
-  { day: 15, earnings: 13800 },
-  { day: 16, earnings: 12400 },
-  { day: 17, earnings: 14600 },
-  { day: 18, earnings: 15200 },
-  { day: 19, earnings: 13900 },
-  { day: 20, earnings: 15800 },
-  { day: 21, earnings: 16100 },
-  { day: 22, earnings: 14700 },
-  { day: 23, earnings: 15500 },
-  { day: 24, earnings: 16800 },
-  { day: 25, earnings: 17200 },
-  { day: 26, earnings: 15900 },
-  { day: 27, earnings: 16500 },
-  { day: 28, earnings: 17800 },
-  { day: 29, earnings: 18200 },
-  { day: 30, earnings: 17600 },
-  { day: 31, earnings: 18100 },
+/** Month-to-date earnings rolled up by week. */
+const weeklyEarnings = [
+  { week: 'Week 1', earnings: 52400 },
+  { week: 'Week 2', earnings: 61800 },
+  { week: 'Week 3', earnings: 58200 },
+  { week: 'Week 4', earnings: 67400 },
+  { week: 'Week 5', earnings: 44700 },
 ];
+
+/**
+ * Sales volume by cylinder size. Colors are a validated categorical trio
+ * (CVD-checked); identity is never color-alone — every row carries its label.
+ */
+const topSellingTanks = [
+  { size: '11 kg', orders: 147, color: '#EA580C' },
+  { size: '5 kg', orders: 89, color: '#16A34A' },
+  { size: '2.7 kg', orders: 48, color: '#9333EA' },
+];
+
+/** Overall order volume per month, scaled to the 75–300 axis window. */
+const orderVolumeTrend = [
+  { month: 'Jan', orders: 118 },
+  { month: 'Feb', orders: 142 },
+  { month: 'Mar', orders: 131 },
+  { month: 'Apr', orders: 176 },
+  { month: 'May', orders: 205 },
+  { month: 'Jun', orders: 248 },
+];
+
+// Alternating bar shades — two steps of the brand blue, dark → light.
+const BAR_BLUES = ['#007BC1', '#41A3E0'];
+
+const pesoTooltip = (v: number | string) => [`₱${Number(v).toLocaleString()}`, 'Earnings'];
+
+/** Shared axis look: no grid, no axis/tick lines — minimalist per the design. */
+const axisProps = {
+  axisLine: false as const,
+  tickLine: false as const,
+  stroke: '#9ca3af',
+};
 
 export function Dashboard() {
-  const { selectedBranch } = useBranch();
   const branchData = useBranchData();
+  const maxTankOrders = Math.max(...topSellingTanks.map((t) => t.orders));
 
   return (
     <div className="flex-1 overflow-y-auto">
-      <div style={{ position: 'static' }}>
-        <Header title="Dashboard" subtitle="Monitor today's operations and key metrics." />
-      </div>
+      <Header title="Dashboard" />
 
       <div className="p-8">
-        <div className="grid grid-cols-4 gap-6 mb-8">
+        {/* KPI row */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6 mb-6">
           <KPICard
-            title="Total Orders This Month"
-            value={branchData.totalOrders}
-            accentColor="#007BC1"
+            title="Orders Today"
+            value={branchData.ordersToday}
+            icon={<ShoppingCart className="w-4 h-4 text-[#007BC1]" />}
+            trend={branchData.trends.orders}
           />
           <KPICard
             title="Delivery Completion Rate"
             value={branchData.completionRate}
-            accentColor="#007BC1"
+            icon={<Truck className="w-4 h-4 text-[#16A34A]" />}
+            accentColor="#16A34A"
+            trend={branchData.trends.completion}
           />
           <KPICard
             title="Average CSAT Score"
             value={branchData.csatScore}
-            icon={<Star className="w-6 h-6 fill-[#f59e0b] text-[#f59e0b]" />}
-            subtitle="out of 5"
-            accentColor="#007BC1"
+            icon={<Star className="w-4 h-4 text-[#f59e0b]" />}
+            accentColor="#f59e0b"
+            trend={branchData.trends.csat}
           />
           <KPICard
-            title="Loyalty Redemptions This Month"
+            title="Loyalty Claims This Month"
             value={branchData.loyaltyRedemptions}
-            accentColor="#007BC1"
+            icon={<Gift className="w-4 h-4 text-[#9333EA]" />}
+            accentColor="#9333EA"
+            trend={branchData.trends.loyalty}
           />
         </div>
 
+        {/* Earnings row */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-          {/* Earnings for Today */}
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <div className="flex items-start justify-between mb-4">
-              <h3 className="font-semibold text-gray-900">Earnings for Today</h3>
-              <div className="text-right">
-                <div className="text-sm font-bold text-gray-900">Total: ₱55,100</div>
-                <div className="text-[11px] text-gray-400 mt-0.5">as of 8:00 PM</div>
-              </div>
-            </div>
+          {/* Earnings for Today — gridless bar chart, alternating blues */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+            <h3 className="font-semibold text-gray-900 mb-4">Earnings for Today</h3>
             <ResponsiveContainer width="100%" height={220}>
               <BarChart data={hourlyEarnings} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                <XAxis dataKey="hour" stroke="#9ca3af" style={{ fontSize: '11px' }} tick={{ dy: 4 }} />
-                <YAxis stroke="#9ca3af" style={{ fontSize: '11px' }} tickFormatter={v => `₱${(v / 1000).toFixed(1)}k`} width={52} />
-                <Tooltip formatter={(v) => [`₱${Number(v).toLocaleString()}`, 'Earnings']} />
-                <Bar dataKey="earnings" fill="#1e3a5f" radius={[3, 3, 0, 0]} />
+                <XAxis dataKey="hour" {...axisProps} style={{ fontSize: '11px' }} tick={{ dy: 4 }} interval="preserveStartEnd" />
+                <YAxis {...axisProps} style={{ fontSize: '11px' }} tickFormatter={(v) => `₱${(v / 1000).toFixed(1)}k`} width={52} />
+                <Tooltip cursor={{ fill: 'rgba(0, 123, 193, 0.06)' }} formatter={pesoTooltip} />
+                <Bar dataKey="earnings" radius={[4, 4, 0, 0]}>
+                  {hourlyEarnings.map((entry, index) => (
+                    <Cell key={entry.hour} fill={BAR_BLUES[index % 2]} />
+                  ))}
+                </Bar>
               </BarChart>
             </ResponsiveContainer>
           </div>
 
-          {/* Earnings for This Month */}
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <div className="flex items-start justify-between mb-4">
-              <h3 className="font-semibold text-gray-900">Earnings for This Month</h3>
-              <div className="text-right">
-                <div className="text-sm font-bold text-gray-900">Total: ₱284,500</div>
-                <div className="text-[11px] text-gray-400 mt-0.5">May 2026</div>
-              </div>
-            </div>
+          {/* Earnings for this Month — smooth area, no point markers */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+            <h3 className="font-semibold text-gray-900 mb-4">Earnings for this Month</h3>
             <ResponsiveContainer width="100%" height={220}>
-              <LineChart data={dailyEarnings} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                <XAxis
-                  dataKey="day"
-                  stroke="#9ca3af"
-                  style={{ fontSize: '11px' }}
-                  ticks={[1, 5, 10, 15, 20, 25, 31]}
-                  tick={{ dy: 4 }}
+              <AreaChart data={weeklyEarnings} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="earningsFill" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#007BC1" stopOpacity={0.25} />
+                    <stop offset="100%" stopColor="#007BC1" stopOpacity={0.02} />
+                  </linearGradient>
+                </defs>
+                <XAxis dataKey="week" {...axisProps} style={{ fontSize: '11px' }} tick={{ dy: 4 }} />
+                <YAxis {...axisProps} style={{ fontSize: '11px' }} tickFormatter={(v) => `₱${(v / 1000).toFixed(0)}k`} width={52} />
+                <Tooltip formatter={pesoTooltip} />
+                <Area
+                  type="monotone"
+                  dataKey="earnings"
+                  stroke="#007BC1"
+                  strokeWidth={2}
+                  fill="url(#earningsFill)"
+                  dot={false}
+                  activeDot={{ r: 4 }}
                 />
-                <YAxis stroke="#9ca3af" style={{ fontSize: '11px' }} tickFormatter={v => `₱${(v / 1000).toFixed(0)}k`} width={52} />
-                <Tooltip
-                  labelFormatter={d => `May ${d}, 2026`}
-                  formatter={(v) => [`₱${Number(v).toLocaleString()}`, 'Earnings']}
-                />
-                <Line type="monotone" dataKey="earnings" stroke="#1e3a5f" strokeWidth={2} dot={{ fill: '#1e3a5f', r: 3 }} activeDot={{ r: 5 }} />
-              </LineChart>
+              </AreaChart>
             </ResponsiveContainer>
           </div>
         </div>
 
-        {/* Operational Expenses — full-width */}
-        <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6 min-h-[220px]">
-          <div className="flex items-start justify-between mb-4">
-            <h3 className="font-semibold text-gray-900">Operational Expenses for This Month</h3>
-            <div className="text-right">
-              <div className="text-sm font-bold text-gray-900">Total: ₱81,000</div>
-              <div className="text-[11px] text-gray-400 mt-0.5">May 2026</div>
+        {/* Volume row */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Top Selling Tank — progress-bar list, not a chart */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+            <h3 className="font-semibold text-gray-900 mb-5">Top Selling Tank</h3>
+            <div className="flex flex-col gap-5">
+              {topSellingTanks.map((tank) => (
+                <div key={tank.size}>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-sm font-medium text-gray-700">{tank.size}</span>
+                    <span className="text-sm text-gray-500">{tank.orders} Orders</span>
+                  </div>
+                  <div className="h-2.5 bg-gray-100 rounded-full overflow-hidden">
+                    <div
+                      className="h-full rounded-full"
+                      style={{
+                        width: `${(tank.orders / maxTankOrders) * 100}%`,
+                        backgroundColor: tank.color,
+                      }}
+                    />
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
-          <ResponsiveContainer width="100%" height={180}>
-            <LineChart data={weeklyExpenses} margin={{ top: 4, right: 16, left: 0, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-              <XAxis dataKey="week" stroke="#9ca3af" style={{ fontSize: '12px' }} tick={{ dy: 4 }} />
-              <YAxis stroke="#9ca3af" style={{ fontSize: '11px' }} tickFormatter={v => `₱${(v / 1000).toFixed(0)}k`} width={52} />
-              <Tooltip formatter={(v) => [`₱${Number(v).toLocaleString()}`, 'Expenses']} />
-              <Line type="monotone" dataKey="amount" stroke="#CC1903" strokeWidth={2} dot={{ fill: '#CC1903', r: 4 }} activeDot={{ r: 6 }} />
-            </LineChart>
-          </ResponsiveContainer>
+
+          {/* Order Volume Trend — smooth line, fixed 75–300 scale */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+            <h3 className="font-semibold text-gray-900 mb-4">Order Volume Trend</h3>
+            <ResponsiveContainer width="100%" height={220}>
+              <LineChart data={orderVolumeTrend} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+                <XAxis dataKey="month" {...axisProps} style={{ fontSize: '11px' }} tick={{ dy: 4 }} />
+                <YAxis
+                  {...axisProps}
+                  style={{ fontSize: '11px' }}
+                  domain={[75, 300]}
+                  ticks={[75, 150, 225, 300]}
+                  width={40}
+                />
+                <Tooltip formatter={(v) => [Number(v).toLocaleString(), 'Orders']} />
+                <Line
+                  type="monotone"
+                  dataKey="orders"
+                  stroke="#007BC1"
+                  strokeWidth={2}
+                  dot={false}
+                  activeDot={{ r: 4 }}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
         </div>
-
-        <div className="grid grid-cols-2 gap-6 mb-8">
-          <OrderVolumeChart />
-          <CSATChart />
-        </div>
-
-        <SLATable />
-
       </div>
     </div>
   );

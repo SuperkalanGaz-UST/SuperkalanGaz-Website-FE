@@ -16,7 +16,7 @@ export function OrderAnalytics() {
   return (
     <div className="flex-1 overflow-y-auto">
       <div style={{ position: 'static' }}>
-        <Header title="Branch Accounts" subtitle="Franchise-wide order performance across all branches." />
+        <Header title="Branch Accounts" />
       </div>
 
       <div className="p-8">

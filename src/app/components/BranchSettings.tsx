@@ -43,7 +43,7 @@ export function BranchSettings() {
 
       <div className="flex-1 overflow-y-auto">
         <div style={{ position: 'static' }}>
-          <Header title="Franchise Registry" subtitle="Manage branch accounts and system-wide service policies." />
+          <Header title="Franchise Registry" />
         </div>
 
       <div className="p-8">

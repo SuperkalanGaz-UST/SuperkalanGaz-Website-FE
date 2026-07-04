@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Eye, EyeOff } from 'lucide-react';
-import { Account, authenticate, DEMO_ACCOUNTS, ROLE_LABELS } from '../lib/auth';
+import { Account, signIn, DEMO_ACCOUNTS, ROLE_LABELS } from '../lib/auth';
 
 interface LoginProps {
   onLogin: (account: Account) => void;
@@ -11,16 +11,20 @@ export function Login({ onLogin }: LoginProps) {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setLoading(true);
 
-    const account = authenticate(username, password);
+    const { account, error: signInError } = await signIn(username, password);
+    setLoading(false);
+
     if (account) {
       onLogin(account);
     } else {
-      setError('Invalid username or password');
+      setError(signInError ?? 'Invalid username or password');
     }
   };
 
@@ -104,9 +108,10 @@ export function Login({ onLogin }: LoginProps) {
 
             <button
               type="submit"
-              className="w-full bg-[#007BC1] text-white py-3.5 rounded-md font-medium hover:bg-[#006399] transition-colors text-base"
+              disabled={loading}
+              className="w-full bg-[#007BC1] text-white py-3.5 rounded-md font-medium hover:bg-[#006399] transition-colors text-base disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              Login
+              {loading ? 'Signing in…' : 'Login'}
             </button>
           </form>
 
@@ -116,10 +121,10 @@ export function Login({ onLogin }: LoginProps) {
               Demo accounts
             </p>
             <ul className="space-y-1">
-              {DEMO_ACCOUNTS.map((account) => (
-                <li key={account.username} className="text-xs text-gray-600 flex justify-between gap-2">
-                  <span className="font-mono">{account.username} / {account.password}</span>
-                  <span className="text-gray-400">{ROLE_LABELS[account.role]}</span>
+              {DEMO_ACCOUNTS.map((demo) => (
+                <li key={demo.username} className="text-xs text-gray-600 flex justify-between gap-2">
+                  <span className="font-mono">{demo.username} / {demo.password}</span>
+                  <span className="text-gray-400">{ROLE_LABELS[demo.role]}</span>
                 </li>
               ))}
             </ul>

@@ -22,7 +22,6 @@ import { CustomerRatingsFull } from './components/CustomerRatingsFull';
 import { SalesFull } from './components/SalesFull';
 import { ExpensesLogFull } from './components/ExpensesLogFull';
 import { BranchProvider } from './contexts/BranchContext';
-import { Toaster } from '../components/ui/sonner';
 
 export type Branch = 'Quezon City Branch' | 'Makati Branch' | 'Mandaluyong Branch';
 
@@ -46,7 +45,6 @@ export function BranchOwnerApp({ branches }: BranchOwnerAppProps) {
 
   return (
     <BranchProvider initialBranches={branches}>
-      <Toaster richColors position="top-right" />
       <div className="flex h-screen bg-gray-50">
         <Sidebar activeScreen={activeScreen} onNavigate={setActiveScreen} />
 

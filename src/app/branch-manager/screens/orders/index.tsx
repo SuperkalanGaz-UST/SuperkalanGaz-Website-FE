@@ -98,11 +98,8 @@ export default function Orders() {
 
     return (
         <>
-            <div className={styles.pageHeader}>
-                <div>
-                    <h1 className={styles.pageTitle}>Order Management</h1>
-                    <p className={styles.pageSubtitle}>Process incoming orders and track delivery statuses.</p>
-                </div>
+            {/* Title moved to the shared header; keep the primary action right-aligned */}
+            <div className={styles.pageHeader} style={{ justifyContent: 'flex-end' }}>
                 {!isCreateFormVisible && (
                     <Button variant="accent" onClick={() => setIsCreateFormVisible(true)}>Create New Order</Button>
                 )}

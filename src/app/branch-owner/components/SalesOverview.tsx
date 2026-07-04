@@ -64,10 +64,7 @@ export function SalesOverview() {
   return (
     <div className="flex-1 overflow-y-auto">
       <div style={{ position: 'static' }}>
-        <Header
-          title="Sales"
-          subtitle="Monitor branch sales performance based on completed orders."
-        />
+        <Header title="Sales" />
       </div>
 
       <div className="p-8">

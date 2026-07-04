@@ -33,10 +33,6 @@ export default function Customers() {
 
     return (
         <>
-            <div>
-                <h1 className={styles.pageTitle}>Customers &amp; Loyalty</h1>
-                <p className={styles.pageSubtitle}>Manage customer relationships, track loyalty progress, and review satisfaction scores.</p>
-            </div>
             <div className={styles.summaryGrid}>
                 <div className={styles.summaryCard}><div className={styles.summaryLabel}>Total Customers</div><div className={styles.summaryValue}>1,248</div></div>
                 <div className={styles.summaryCard}><div className={styles.summaryLabel}>Avg CSAT</div><div className={styles.summaryValueWithIcon}>4.6 <Star size={24} className={styles.starIcon} fill="currentColor" strokeWidth={0} /></div></div>

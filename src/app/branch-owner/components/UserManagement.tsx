@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Header } from './Header';
 import { Pencil, Trash2, X, Eye, EyeOff } from 'lucide-react';
 import { toast } from 'sonner';
 import { useBranch } from '../contexts/BranchContext';
+import { apiFetch, apiErrorMessage } from '../../lib/api';
 
 interface BranchManager {
   id: string;
@@ -10,83 +11,63 @@ interface BranchManager {
   email: string;
   phone: string;
   username: string;
-  password: string;
   status: 'Active' | 'Inactive';
   dateCreated: string;
   lastLogin: string;
 }
 
-const branchManagersData: Record<string, BranchManager[]> = {
-  'Quezon City Branch': [
-    {
-      id: '1',
-      name: 'Maria Santos',
-      email: 'maria.santos@superkalan.com',
-      phone: '+63 917 234 5678',
-      username: 'maria.santos',
-      password: 'password123',
-      status: 'Active',
-      dateCreated: 'Feb 10, 2026',
-      lastLogin: 'May 2, 2026 — 9:42 AM',
-    },
-    {
-      id: '2',
-      name: 'Jose Reyes',
-      email: 'jose.reyes@superkalan.com',
-      phone: '+63 917 345 6789',
-      username: 'jose.reyes',
-      password: 'password123',
-      status: 'Active',
-      dateCreated: 'Jan 15, 2026',
-      lastLogin: 'May 1, 2026 — 3:15 PM',
-    },
-  ],
-  'Makati Branch': [
-    {
-      id: '3',
-      name: 'Ana Cruz',
-      email: 'ana.cruz@superkalan.com',
-      phone: '+63 917 456 7890',
-      username: 'ana.cruz',
-      password: 'password123',
-      status: 'Active',
-      dateCreated: 'Mar 5, 2026',
-      lastLogin: 'May 2, 2026 — 10:30 AM',
-    },
-    {
-      id: '4',
-      name: 'Roberto Lim',
-      email: 'roberto.lim@superkalan.com',
-      phone: '+63 917 567 8901',
-      username: 'roberto.lim',
-      password: 'password123',
-      status: 'Active',
-      dateCreated: 'Apr 12, 2026',
-      lastLogin: 'May 1, 2026 — 2:45 PM',
-    },
-  ],
-  'Mandaluyong Branch': [
-    {
-      id: '5',
-      name: 'Carlo Bautista',
-      email: 'carlo.bautista@superkalan.com',
-      phone: '+63 917 678 9012',
-      username: 'carlo.bautista',
-      password: 'password123',
-      status: 'Active',
-      dateCreated: 'Feb 20, 2026',
-      lastLogin: 'May 2, 2026 — 11:15 AM',
-    },
-  ],
-};
+/** Shape returned by GET /users on the CRM API (a public.profiles row). */
+interface ProfileRow {
+  id: string;
+  email: string | null;
+  username: string | null;
+  display_name: string | null;
+  phone: string | null;
+  status: 'Active' | 'Inactive';
+  created_at: string;
+}
+
+function toManager(p: ProfileRow): BranchManager {
+  return {
+    id: p.id,
+    name: p.display_name ?? p.username ?? '—',
+    email: p.email ?? '—',
+    phone: p.phone ?? '',
+    username: p.username ?? '',
+    status: p.status,
+    dateCreated: p.created_at
+      ? new Date(p.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+      : '—',
+    lastLogin: '—',
+  };
+}
 
 export function UserManagement() {
   const { selectedBranch } = useBranch();
-  const [managers, setManagers] = useState<BranchManager[]>(branchManagersData[selectedBranch]);
+  const [managers, setManagers] = useState<BranchManager[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const loadManagers = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await apiFetch(
+        `/users?role=branch-manager&branch=${encodeURIComponent(selectedBranch)}`,
+      );
+      const data = await res.json();
+      if (!res.ok) throw new Error(apiErrorMessage(data, 'Failed to load users'));
+      setManagers((data.users as ProfileRow[]).map(toManager));
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to load users');
+      setManagers([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [selectedBranch]);
 
   useEffect(() => {
-    setManagers(branchManagersData[selectedBranch]);
-  }, [selectedBranch]);
+    loadManagers();
+  }, [loadManagers]);
+
   const [showModal, setShowModal] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [editingManager, setEditingManager] = useState<BranchManager | null>(null);
@@ -125,8 +106,9 @@ export function UserManagement() {
       email: manager.email,
       phone: manager.phone,
       username: manager.username,
-      password: manager.password,
-      confirmPassword: manager.password,
+      // Passwords are never returned by the API; leave blank and only send if changed.
+      password: '',
+      confirmPassword: '',
       status: manager.status,
     });
     setShowModal(true);
@@ -144,7 +126,9 @@ export function UserManagement() {
     setShowConfirmPassword(false);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (formData.password !== formData.confirmPassword) {
@@ -152,44 +136,70 @@ export function UserManagement() {
       return;
     }
 
-    if (editingManager) {
-      setManagers(managers.map(m =>
-        m.id === editingManager.id
-          ? {
-              ...m,
-              name: formData.name,
-              email: formData.email,
-              phone: formData.phone,
-              username: formData.username,
-              password: formData.password,
-              status: formData.status,
-            }
-          : m
-      ));
-      toast.success('Branch manager account updated successfully.');
-    } else {
-      const newManager: BranchManager = {
-        id: String(Date.now()),
-        name: formData.name,
-        email: formData.email,
-        phone: formData.phone,
-        username: formData.username,
-        password: formData.password,
-        status: formData.status,
-        dateCreated: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
-        lastLogin: 'Never',
-      };
-      setManagers([...managers, newManager]);
-      toast.success('Branch manager account created successfully.');
-    }
+    setSubmitting(true);
+    try {
+      if (editingManager) {
+        // Only send password when the owner actually entered a new one.
+        const payload: Record<string, unknown> = {
+          name: formData.name,
+          email: formData.email,
+          phone: formData.phone,
+          username: formData.username,
+          status: formData.status,
+        };
+        if (formData.password) payload.password = formData.password;
 
-    handleCloseModal();
+        const res = await apiFetch(`/users/${editingManager.id}`, {
+          method: 'PATCH',
+          body: JSON.stringify(payload),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(apiErrorMessage(data, 'Update failed'));
+        toast.success('Branch manager account updated successfully.');
+      } else {
+        if (!formData.password) {
+          toast.error('Password is required');
+          setSubmitting(false);
+          return;
+        }
+        const res = await apiFetch('/users', {
+          method: 'POST',
+          body: JSON.stringify({
+            name: formData.name,
+            email: formData.email,
+            phone: formData.phone,
+            username: formData.username,
+            password: formData.password,
+            status: formData.status,
+            role: 'branch-manager',
+            branches: [selectedBranch],
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(apiErrorMessage(data, 'Create failed'));
+        toast.success('Branch manager account created successfully.');
+      }
+
+      await loadManagers();
+      handleCloseModal();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Something went wrong');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
-  const handleConfirmDelete = () => {
-    if (deletingId) {
-      setManagers(managers.filter(m => m.id !== deletingId));
+  const handleConfirmDelete = async () => {
+    if (!deletingId) return;
+    try {
+      const res = await apiFetch(`/users/${deletingId}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(apiErrorMessage(data, 'Delete failed'));
       toast.success('Branch manager account deleted.');
+      await loadManagers();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Delete failed');
+    } finally {
       setShowDeleteDialog(false);
       setDeletingId(null);
     }
@@ -198,10 +208,7 @@ export function UserManagement() {
   return (
     <div className="flex-1 overflow-y-auto">
       <div style={{ position: 'static' }}>
-        <Header
-          title="User Management"
-          subtitle="Manage branch manager accounts for your branch."
-        />
+        <Header title="User Management" />
       </div>
 
       <div className="p-8">
@@ -229,7 +236,21 @@ export function UserManagement() {
                 </tr>
               </thead>
               <tbody>
-                {managers.map((manager, index) => (
+                {loading && (
+                  <tr>
+                    <td colSpan={6} className="py-6 text-center text-[13px] text-gray-500">
+                      Loading…
+                    </td>
+                  </tr>
+                )}
+                {!loading && managers.length === 0 && (
+                  <tr>
+                    <td colSpan={6} className="py-6 text-center text-[13px] text-gray-500">
+                      No branch managers yet for this branch.
+                    </td>
+                  </tr>
+                )}
+                {!loading && managers.map((manager, index) => (
                   <tr
                     key={manager.id}
                     className={`border-b border-gray-100 ${index % 2 === 1 ? 'bg-gray-50' : ''}`}
@@ -454,9 +475,10 @@ export function UserManagement() {
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-[#1e3a5f] text-white rounded-lg text-sm font-normal hover:bg-[#152942] transition-colors"
+                  disabled={submitting}
+                  className="px-4 py-2 bg-[#1e3a5f] text-white rounded-lg text-sm font-normal hover:bg-[#152942] transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                 >
-                  {editingManager ? 'Save Changes' : 'Create Account'}
+                  {submitting ? 'Saving…' : editingManager ? 'Save Changes' : 'Create Account'}
                 </button>
               </div>
             </form>

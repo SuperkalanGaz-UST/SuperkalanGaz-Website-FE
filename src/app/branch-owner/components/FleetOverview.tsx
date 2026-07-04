@@ -98,10 +98,7 @@ export function FleetOverview() {
   return (
     <div className="flex-1 overflow-y-auto">
       <div style={{ position: 'static' }}>
-        <Header
-          title="Fleet"
-          subtitle="Read-only tracking and fleet activity for your branch"
-        />
+        <Header title="Fleet" />
       </div>
 
       <div className="p-8">

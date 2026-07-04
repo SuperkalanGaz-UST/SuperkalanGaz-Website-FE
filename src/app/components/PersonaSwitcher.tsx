@@ -1,27 +1,27 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { ChevronUp, Check, LogOut, UserRound } from 'lucide-react';
-import { Role, ROLE_LABELS } from '../lib/auth';
+import { ChevronUp, Check, Loader2, LogOut, UserRound } from 'lucide-react';
+import { Account, DEMO_ACCOUNTS, ROLE_LABELS } from '../lib/auth';
 
 /*
- * DEMO-ONLY control. In production, role comes from the API-issued JWT and a
- * user can never switch personas: BO and BM are always separate people (§7,
- * AGENTS.md). This floating switcher exists so one demo session can present
- * all three web personas to the capstone panel without re-logging in.
- * Remove it together with lib/auth.ts when real authentication lands.
+ * DEMO-ONLY control. Switching here performs a REAL Supabase sign-in as the
+ * chosen seed user, so the session (and the JWT the API scopes by) always
+ * matches the persona being demoed. In production a user can never switch
+ * roles: BO and BM are always separate people (AGENTS.md §7). This floating
+ * switcher exists so one demo session can present all three web personas to
+ * the capstone panel without typing credentials each time. Remove it together
+ * with DEMO_ACCOUNTS in lib/auth.ts when the demo phase ends.
  */
 
-const PERSONAS: Role[] = ['franchise-admin', 'branch-owner', 'branch-manager'];
-
 interface PersonaSwitcherProps {
-  activePersona: Role;
-  loggedInAs: string;
-  onSwitch: (persona: Role) => void;
+  account: Account;
+  switching: boolean;
+  onSwitchUser: (username: string) => void;
   onLogout: () => void;
 }
 
-export function PersonaSwitcher({ activePersona, loggedInAs, onSwitch, onLogout }: PersonaSwitcherProps) {
+export function PersonaSwitcher({ account, switching, onSwitchUser, onLogout }: PersonaSwitcherProps) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -40,25 +40,34 @@ export function PersonaSwitcher({ activePersona, loggedInAs, onSwitch, onLogout 
       {open && (
         <div className="bg-white rounded-xl shadow-2xl border border-gray-200 overflow-hidden w-72">
           <div className="px-4 py-3 border-b border-gray-100">
-            <p className="text-xs text-gray-400 uppercase tracking-wide">Demo — view as</p>
-            <p className="text-sm text-gray-600 truncate mt-0.5">Logged in: {loggedInAs}</p>
+            <p className="text-xs text-gray-400 uppercase tracking-wide">Demo — switch user</p>
+            <p className="text-sm text-gray-600 truncate mt-0.5">
+              Signed in: {account.displayName}
+            </p>
           </div>
-          {PERSONAS.map((persona) => (
-            <button
-              key={persona}
-              type="button"
-              onClick={() => {
-                onSwitch(persona);
-                setOpen(false);
-              }}
-              className={`w-full flex items-center justify-between px-4 py-3 text-sm text-left hover:bg-gray-50 transition-colors ${
-                persona === activePersona ? 'text-[#007BC1] font-semibold' : 'text-gray-700'
-              }`}
-            >
-              {ROLE_LABELS[persona]}
-              {persona === activePersona && <Check className="w-4 h-4" />}
-            </button>
-          ))}
+          {DEMO_ACCOUNTS.map((demo) => {
+            const isActive = demo.username === account.username;
+            return (
+              <button
+                key={demo.username}
+                type="button"
+                disabled={switching}
+                onClick={() => {
+                  onSwitchUser(demo.username);
+                  setOpen(false);
+                }}
+                className={`w-full flex items-center justify-between px-4 py-3 text-sm text-left hover:bg-gray-50 transition-colors disabled:opacity-50 ${
+                  isActive ? 'text-[#007BC1] font-semibold' : 'text-gray-700'
+                }`}
+              >
+                <span>
+                  {ROLE_LABELS[demo.role]}
+                  <span className="block text-xs font-normal text-gray-400">@{demo.username}</span>
+                </span>
+                {isActive && <Check className="w-4 h-4" />}
+              </button>
+            );
+          })}
           <button
             type="button"
             onClick={onLogout}
@@ -73,10 +82,11 @@ export function PersonaSwitcher({ activePersona, loggedInAs, onSwitch, onLogout 
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className="flex items-center gap-2 bg-[#007BC1] text-white pl-4 pr-3 py-2.5 rounded-full shadow-lg hover:bg-[#006399] transition-colors text-sm font-medium"
+        disabled={switching}
+        className="flex items-center gap-2 bg-[#007BC1] text-white pl-4 pr-3 py-2.5 rounded-full shadow-lg hover:bg-[#006399] transition-colors text-sm font-medium disabled:opacity-70"
       >
-        <UserRound className="w-4 h-4" />
-        {ROLE_LABELS[activePersona]}
+        {switching ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserRound className="w-4 h-4" />}
+        {switching ? 'Switching…' : ROLE_LABELS[account.role]}
         <ChevronUp className={`w-4 h-4 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
     </div>

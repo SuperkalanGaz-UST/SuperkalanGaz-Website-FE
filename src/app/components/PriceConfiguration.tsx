@@ -23,10 +23,7 @@ export function PriceConfiguration() {
   return (
     <div className="flex-1 overflow-y-auto">
       <div style={{ position: 'static' }}>
-        <Header
-          title="Price Configuration"
-          subtitle="Manage system-wide pricing for LPG cylinders."
-        />
+        <Header title="Price Configuration" />
       </div>
 
       <div className="p-8">

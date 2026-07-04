@@ -43,7 +43,7 @@ export function BranchSettings() {
   return (
     <div className="flex-1 overflow-y-auto">
       <div style={{ position: 'static' }}>
-        <Header title="Settings" subtitle="Configure branch operations." />
+        <Header title="Settings" />
       </div>
 
       <div className="p-8">
