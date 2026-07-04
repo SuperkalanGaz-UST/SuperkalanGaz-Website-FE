@@ -29,10 +29,7 @@ export function ReportGeneration() {
   return (
     <div className="flex-1 overflow-y-auto">
       <div style={{ position: "static" }}>
-        <Header
-          title="Reports"
-          subtitle="Generate and export branch performance reports for internal review."
-        />
+        <Header title="Reports" />
       </div>
 
       <div className="p-8">

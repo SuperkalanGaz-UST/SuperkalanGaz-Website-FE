@@ -101,10 +101,7 @@ export function CustomerList({ onViewCustomer }: { onViewCustomer: () => void })
   return (
     <div className="flex-1 overflow-y-auto bg-[#F5F7FA]">
       <div style={{ position: 'static' }}>
-        <Header
-          title="Customers"
-          subtitle="Cross-branch customer directory — search, filter, and view individual profiles."
-        />
+        <Header title="Customers" />
       </div>
 
       <div className="p-8">

@@ -74,11 +74,6 @@ export default function Inventory() {
 
     return (
         <>
-            <div>
-                <h1 className={styles.pageTitle}>Supply Chain</h1>
-                <p className={styles.pageSubtitle}>Monitor real-time stock levels and manage reorder requests.</p>
-            </div>
-
             <div className={styles.stockCardsGrid}>
                 {inventory.map(item => {
                     const pct = Math.min((item.current / item.capacity) * 100, 100);

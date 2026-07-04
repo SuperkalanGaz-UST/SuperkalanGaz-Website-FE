@@ -51,7 +51,7 @@ export default function App() {
   }
 
   return (
-    <AccountProvider account={account}>
+    <AccountProvider account={account} onLogout={handleLogout}>
       {/* The rendered app always follows the REAL session's role — no view/JWT drift. */}
       {account.role === 'franchise-admin' && <FranchiseAdminApp />}
       {account.role === 'branch-owner' && (

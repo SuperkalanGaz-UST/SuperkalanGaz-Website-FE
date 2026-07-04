@@ -55,11 +55,6 @@ export default function Dashboard() {
 
     return (
         <>
-            <div>
-                <h1 className={styles.pageTitle}>Overview</h1>
-                <p className={styles.pageSubtitle}>Monitor today&apos;s operations and key metrics.</p>
-            </div>
-
             <div className={styles.kpiGrid}>
                 <div className={styles.kpiCard}>
                     <h3 className={styles.kpiTitle}>Total Orders Today</h3>

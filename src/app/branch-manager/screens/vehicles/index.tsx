@@ -87,11 +87,6 @@ export default function VehicleManagementPage() {
 
   return (
     <div className={styles.pageWrapper}>
-      <header className={styles.header}>
-        <h1 className={styles.pageTitle}>Vehicle Management</h1>
-        <p className={styles.pageDescription}>Monitor motorcycle fleet odometers and Preventive Maintenance Schedules (PMS).</p>
-      </header>
-
       <section className={styles.statsGrid}>
         <div className={styles.statCard}>
           <div className={styles.statHeader}><span className={styles.statLabel}>Total Fleet</span><Truck className={styles.statIcon} size={20} /></div>

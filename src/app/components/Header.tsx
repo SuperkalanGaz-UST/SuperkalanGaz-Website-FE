@@ -1,15 +1,25 @@
+'use client';
+
+import { AppHeader } from './AppHeader';
+
 interface HeaderProps {
   title: string;
-  subtitle?: string;
 }
 
-export function Header({ title, subtitle }: HeaderProps) {
+/**
+ * Franchise Administrator page header: the shared AppHeader with the FA
+ * context chip. FA is cross-branch (AGENTS.md §5), so the badge is a static
+ * "Main Office" pill rather than a branch selector.
+ */
+export function Header({ title }: HeaderProps) {
   return (
-    <div className="bg-white px-8 py-5">
-      <div className="pt-4">
-        <h1 className="text-2xl font-semibold text-gray-900">{title}</h1>
-        {subtitle && <p className="text-sm text-gray-600 mt-1">{subtitle}</p>}
-      </div>
-    </div>
+    <AppHeader
+      title={title}
+      badge={
+        <div className="bg-blue-50 text-[#00568A] text-xs px-3 py-1.5 rounded-full font-medium whitespace-nowrap">
+          Main Office
+        </div>
+      }
+    />
   );
 }

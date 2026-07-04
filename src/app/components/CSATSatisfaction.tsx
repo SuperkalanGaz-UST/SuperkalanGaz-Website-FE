@@ -21,10 +21,7 @@ export function CSATSatisfaction() {
   return (
     <div className="flex-1 overflow-y-auto">
       <div style={{ position: 'static' }}>
-        <Header
-          title="Ratings & Reviews"
-          subtitle="Monitor customer feedback and satisfaction scores."
-        />
+        <Header title="Ratings & Reviews" />
       </div>
 
       <div className="p-8">

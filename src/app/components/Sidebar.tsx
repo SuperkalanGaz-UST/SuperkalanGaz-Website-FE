@@ -1,5 +1,7 @@
+'use client';
+
 import { LayoutDashboard, TrendingUp, Star, Settings, Users } from 'lucide-react';
-import { AppSidebar, SidebarNavItem } from './AppSidebar';
+import { AppSidebar, SidebarNavEntry } from './AppSidebar';
 
 const PesoIcon = ({ className }: { className?: string }) => (
   <svg
@@ -23,7 +25,7 @@ const PesoIcon = ({ className }: { className?: string }) => (
  * two FA-only writes (SLA/branch-account config lives under these screens).
  * No operational screens — FA has no operational write actions (AGENTS.md §7).
  */
-const NAV_ITEMS: SidebarNavItem[] = [
+const NAV_ENTRIES: SidebarNavEntry[] = [
   { icon: LayoutDashboard, label: 'Dashboard',           id: 'dashboard' },
   { icon: TrendingUp,      label: 'Branch Accounts',     id: 'order-analytics' },
   { icon: Users,           label: 'Customers',           id: 'customers' },
@@ -38,16 +40,5 @@ interface SidebarProps {
 }
 
 export function Sidebar({ activeScreen, onNavigate }: SidebarProps) {
-  return (
-    <AppSidebar
-      navItems={NAV_ITEMS}
-      activeScreen={activeScreen}
-      onNavigate={onNavigate}
-      badge={
-        <div className="bg-[#1E3A5F] text-white text-xs px-3 py-1 rounded-full font-medium self-center">
-          Main Office
-        </div>
-      }
-    />
-  );
+  return <AppSidebar entries={NAV_ENTRIES} activeScreen={activeScreen} onNavigate={onNavigate} />;
 }

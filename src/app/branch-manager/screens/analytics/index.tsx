@@ -89,11 +89,8 @@ export default function AnalyticsPage() {
 
     return (
         <div className={styles.container}>
-            <header className={styles.header}>
-                <div className={styles.headerTitles}>
-                    <h1 className={styles.pageTitle}>Branch Performance</h1>
-                    <p className={styles.pageSubtitle}>Makati Branch — Owner Dashboard</p>
-                </div>
+            {/* Title moved to the shared header; keep the period filter right-aligned */}
+            <header className={styles.header} style={{ justifyContent: 'flex-end' }}>
                 <div className={styles.headerActions}>
                     <div className={styles.periodSelect}>
                         <Select value={period} onValueChange={setPeriod}>

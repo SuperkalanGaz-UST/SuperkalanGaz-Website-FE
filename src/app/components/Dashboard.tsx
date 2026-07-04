@@ -9,7 +9,7 @@ export function Dashboard() {
   return (
     <div className="flex-1 overflow-y-auto">
       <div style={{ position: 'static' }}>
-        <Header title="Dashboard" subtitle="Franchise-wide performance across all branch operations." />
+        <Header title="Dashboard" />
       </div>
 
       <div className="p-8">
