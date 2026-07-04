@@ -1,15 +1,28 @@
 import { useBranch } from '../contexts/BranchContext';
+import type { KPITrend } from '../components/KPICard';
 
+/**
+ * Mock branch-scoped dashboard data, keyed by the BO's selected branch.
+ * Placeholder until the API endpoints land — figures are demo values, not
+ * client-confirmed operational numbers (AGENTS.md §13).
+ */
 export function useBranchData() {
   const { selectedBranch } = useBranch();
 
   const branchData = {
     'Quezon City Branch': {
+      ordersToday: '61',
       totalOrders: '284',
       completionRate: '96.5%',
       csatScore: '4.3',
       loyaltyRedemptions: '7',
       stockLevel: 42,
+      trends: {
+        orders: { text: '+8.4% from yesterday', direction: 'up', positive: true } satisfies KPITrend,
+        completion: { text: '+1.8% this week', direction: 'up', positive: true } satisfies KPITrend,
+        csat: { text: '+0.2 from last month', direction: 'up', positive: true } satisfies KPITrend,
+        loyalty: { text: '+2.0 from last month', direction: 'up', positive: true } satisfies KPITrend,
+      },
       orderVolumeData: [
         { month: 'Jan', orders: 185 },
         { month: 'Feb', orders: 220 },
@@ -26,11 +39,18 @@ export function useBranchData() {
       ],
     },
     'Makati Branch': {
+      ordersToday: '53',
       totalOrders: '198',
       completionRate: '93.2%',
       csatScore: '4.1',
       loyaltyRedemptions: '4',
       stockLevel: 28,
+      trends: {
+        orders: { text: '+10.2% from yesterday', direction: 'up', positive: true } satisfies KPITrend,
+        completion: { text: '+3.1% this week', direction: 'up', positive: true } satisfies KPITrend,
+        csat: { text: '-0.2 from last month', direction: 'down', positive: false } satisfies KPITrend,
+        loyalty: { text: '+7.2 from last month', direction: 'up', positive: true } satisfies KPITrend,
+      },
       orderVolumeData: [
         { month: 'Jan', orders: 142 },
         { month: 'Feb', orders: 165 },
@@ -47,11 +67,18 @@ export function useBranchData() {
       ],
     },
     'Mandaluyong Branch': {
+      ordersToday: '78',
       totalOrders: '321',
       completionRate: '98.1%',
       csatScore: '4.5',
       loyaltyRedemptions: '11',
       stockLevel: 55,
+      trends: {
+        orders: { text: '+5.6% from yesterday', direction: 'up', positive: true } satisfies KPITrend,
+        completion: { text: '+0.9% this week', direction: 'up', positive: true } satisfies KPITrend,
+        csat: { text: '+0.1 from last month', direction: 'up', positive: true } satisfies KPITrend,
+        loyalty: { text: '+4.0 from last month', direction: 'up', positive: true } satisfies KPITrend,
+      },
       orderVolumeData: [
         { month: 'Jan', orders: 245 },
         { month: 'Feb', orders: 268 },

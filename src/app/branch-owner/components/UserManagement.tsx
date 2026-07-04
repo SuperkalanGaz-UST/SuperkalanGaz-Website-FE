@@ -208,10 +208,7 @@ export function UserManagement() {
   return (
     <div className="flex-1 overflow-y-auto">
       <div style={{ position: 'static' }}>
-        <Header
-          title="User Management"
-          subtitle="Manage branch manager accounts for your branch."
-        />
+        <Header title="User Management" />
       </div>
 
       <div className="p-8">

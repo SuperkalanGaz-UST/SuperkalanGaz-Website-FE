@@ -1,21 +1,30 @@
 'use client';
 
-import React from 'react';
-import { LayoutDashboard, ShoppingCart, Package, Users, Truck, BarChart3, Wrench } from 'lucide-react';
+import {
+  LayoutDashboard,
+  ShoppingCart,
+  Package,
+  Users,
+  Truck,
+  BarChart3,
+  Wrench,
+} from 'lucide-react';
+import { AppSidebar, SidebarNavItem } from '../../components/AppSidebar';
+import { useAccount } from '../../contexts/AccountContext';
 
-/*
- * Ported from the standalone BM app's SidebarLayout. Route links (next/link +
- * usePathname) became screen-state navigation so the BM view can live inside
- * the single-page persona shell like the FA and BO views.
+/**
+ * Branch Manager navigation: day-to-day operations for their own branch —
+ * service requests, dispatch, inventory, fleet (AGENTS.md §7). No settings
+ * or threshold screens: SLA config is FA-only, branch config is BO-only.
  */
-const NAV_ITEMS = [
-  { id: 'overview', label: 'Overview', icon: LayoutDashboard },
-  { id: 'orders', label: 'Orders', icon: ShoppingCart },
-  { id: 'inventory', label: 'Inventory', icon: Package },
-  { id: 'customers', label: 'Customers', icon: Users },
-  { id: 'fleet', label: 'Fleet', icon: Truck },
-  { id: 'vehicles', label: 'Vehicles', icon: Wrench },
-  { id: 'analytics', label: 'Analytics', icon: BarChart3 },
+const NAV_ITEMS: SidebarNavItem[] = [
+  { icon: LayoutDashboard, label: 'Overview',  id: 'overview' },
+  { icon: ShoppingCart,    label: 'Orders',    id: 'orders' },
+  { icon: Package,         label: 'Inventory', id: 'inventory' },
+  { icon: Users,           label: 'Customers', id: 'customers' },
+  { icon: Truck,           label: 'Fleet',     id: 'fleet' },
+  { icon: Wrench,          label: 'Vehicles',  id: 'vehicles' },
+  { icon: BarChart3,       label: 'Analytics', id: 'analytics' },
 ];
 
 interface BMSidebarProps {
@@ -24,59 +33,22 @@ interface BMSidebarProps {
 }
 
 export default function BMSidebar({ activeScreen, onNavigate }: BMSidebarProps) {
-  return (
-    <aside style={{
-      width: '280px',
-      backgroundColor: 'var(--primary)',
-      display: 'flex',
-      flexDirection: 'column',
-      padding: '1.5rem 1.25rem',
-      color: 'white',
-      flexShrink: 0,
-    }}>
-      <div style={{
-        marginBottom: '2.5rem',
-        display: 'flex',
-        justifyContent: 'center',
-        backgroundColor: 'white',
-        padding: '1rem',
-        borderRadius: '0.75rem',
-        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
-      }}>
-        <img src="/superkalan-gaz.png" alt="Superkalan Gaz Logo" style={{ width: '90%', height: 'auto' }} />
-      </div>
+  // BM is strictly single-branch (AGENTS.md §5) — show it as a static chip.
+  const account = useAccount();
+  const branch = account.branches[0];
 
-      <nav style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-        {NAV_ITEMS.map((item) => {
-          const isActive = activeScreen === item.id;
-          const Icon = item.icon;
-          return (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => onNavigate(item.id)}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.875rem',
-                padding: '0.875rem 1rem',
-                borderRadius: '0.5rem',
-                border: 'none',
-                cursor: 'pointer',
-                textAlign: 'left',
-                color: isActive ? 'var(--primary)' : 'rgba(255, 255, 255, 0.75)',
-                backgroundColor: isActive ? 'white' : 'transparent',
-                fontWeight: isActive ? 600 : 500,
-                fontSize: '1.05rem',
-                transition: 'all 0.2s',
-              }}
-            >
-              <Icon size={22} />
-              {item.label}
-            </button>
-          );
-        })}
-      </nav>
-    </aside>
+  return (
+    <AppSidebar
+      navItems={NAV_ITEMS}
+      activeScreen={activeScreen}
+      onNavigate={onNavigate}
+      badge={
+        branch ? (
+          <div className="w-full bg-[#CC1903] text-white text-xs px-3 py-1 rounded-full font-medium text-center">
+            {branch}
+          </div>
+        ) : undefined
+      }
+    />
   );
 }

@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { Toaster } from 'sonner';
 import BMSidebar from './components/BMSidebar';
 import Overview from './screens/overview';
 import Orders from './screens/orders';
@@ -17,7 +16,6 @@ export function BranchManagerApp() {
 
   return (
     <div className="bm-root" style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
-      <Toaster richColors position="top-right" />
       <BMSidebar activeScreen={activeScreen} onNavigate={setActiveScreen} />
 
       <main style={{ flex: 1, padding: '2rem', overflowY: 'auto' }}>

@@ -10,10 +10,7 @@ export function LoyaltyProgram() {
   return (
     <div className="flex-1 overflow-y-auto">
       <div style={{ position: 'static' }}>
-        <Header
-          title="Loyalty Program"
-          subtitle="Manage customer rewards and track purchase milestones."
-        />
+        <Header title="Loyalty Program" />
       </div>
 
       <div className="p-8">

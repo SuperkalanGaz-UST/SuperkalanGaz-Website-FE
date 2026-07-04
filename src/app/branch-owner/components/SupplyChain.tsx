@@ -66,10 +66,7 @@ export function SupplyChain() {
   return (
     <div className="flex-1 overflow-y-auto">
       <div style={{ position: 'static' }}>
-        <Header
-          title="Inventory"
-          subtitle="Monitor stock levels and manage reorder requests."
-        />
+        <Header title="Inventory" />
       </div>
 
       <div className="p-8">
