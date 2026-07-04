@@ -3,6 +3,7 @@ import { Header } from './Header';
 import { Pencil, Trash2, X, Eye, EyeOff } from 'lucide-react';
 import { toast } from 'sonner';
 import { useBranch } from '../contexts/BranchContext';
+import { apiFetch, apiErrorMessage } from '../../lib/api';
 
 interface BranchManager {
   id: string;
@@ -15,7 +16,7 @@ interface BranchManager {
   lastLogin: string;
 }
 
-/** Shape returned by GET /api/users (a public.profiles row). */
+/** Shape returned by GET /users on the CRM API (a public.profiles row). */
 interface ProfileRow {
   id: string;
   email: string | null;
@@ -49,11 +50,11 @@ export function UserManagement() {
   const loadManagers = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(
-        `/api/users?role=branch-manager&branch=${encodeURIComponent(selectedBranch)}`,
+      const res = await apiFetch(
+        `/users?role=branch-manager&branch=${encodeURIComponent(selectedBranch)}`,
       );
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? 'Failed to load users');
+      if (!res.ok) throw new Error(apiErrorMessage(data, 'Failed to load users'));
       setManagers((data.users as ProfileRow[]).map(toManager));
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to load users');
@@ -148,13 +149,12 @@ export function UserManagement() {
         };
         if (formData.password) payload.password = formData.password;
 
-        const res = await fetch(`/api/users/${editingManager.id}`, {
+        const res = await apiFetch(`/users/${editingManager.id}`, {
           method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
         });
         const data = await res.json();
-        if (!res.ok) throw new Error(data.error ?? 'Update failed');
+        if (!res.ok) throw new Error(apiErrorMessage(data, 'Update failed'));
         toast.success('Branch manager account updated successfully.');
       } else {
         if (!formData.password) {
@@ -162,9 +162,8 @@ export function UserManagement() {
           setSubmitting(false);
           return;
         }
-        const res = await fetch('/api/users', {
+        const res = await apiFetch('/users', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             name: formData.name,
             email: formData.email,
@@ -177,7 +176,7 @@ export function UserManagement() {
           }),
         });
         const data = await res.json();
-        if (!res.ok) throw new Error(data.error ?? 'Create failed');
+        if (!res.ok) throw new Error(apiErrorMessage(data, 'Create failed'));
         toast.success('Branch manager account created successfully.');
       }
 
@@ -193,9 +192,9 @@ export function UserManagement() {
   const handleConfirmDelete = async () => {
     if (!deletingId) return;
     try {
-      const res = await fetch(`/api/users/${deletingId}`, { method: 'DELETE' });
+      const res = await apiFetch(`/users/${deletingId}`, { method: 'DELETE' });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? 'Delete failed');
+      if (!res.ok) throw new Error(apiErrorMessage(data, 'Delete failed'));
       toast.success('Branch manager account deleted.');
       await loadManagers();
     } catch (err) {
