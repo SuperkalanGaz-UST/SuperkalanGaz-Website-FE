@@ -12,11 +12,38 @@ const RadiusMap = dynamic(
   { ssr: false },
 );
 import { X, Check, Info } from 'lucide-react';
+import { toast } from 'sonner';
+import { apiFetch, apiErrorMessage } from '../lib/api';
 import { BranchCreatedModal } from './BranchCreatedModal';
 
 interface RegisterBranchModalProps {
   isOpen: boolean;
   onClose: () => void;
+}
+
+/**
+ * Normalizes any Philippine mobile input to the canonical +63 country-code form.
+ *
+ * Accepts whatever the user (or a paste) throws at it — `0917…`, `917…`,
+ * `+63 917…`, `63917…` — strips everything down to the 10 national digits
+ * (which always start with 9), then re-emits it grouped as `+63 9XX XXX XXXX`.
+ * Typing `09` therefore becomes `+63 9…` live in the field. The stored value is
+ * just this string; strip the spaces at submit time if the API wants raw digits.
+ */
+function formatPHMobile(raw: string): string {
+  let digits = raw.replace(/\D/g, ''); // keep digits only
+
+  // Peel off a leading country code (63) or trunk prefix (0) so we're always
+  // left with the 10-digit national number.
+  if (digits.startsWith('63')) digits = digits.slice(2);
+  else if (digits.startsWith('0')) digits = digits.slice(1);
+
+  digits = digits.slice(0, 10); // PH mobile national numbers are exactly 10 digits
+  if (digits === '') return '';
+
+  // Group as +63 9XX XXX XXXX, dropping trailing empty groups while still typing.
+  const groups = [digits.slice(0, 3), digits.slice(3, 6), digits.slice(6, 10)].filter(Boolean);
+  return `+63 ${groups.join(' ')}`.trimEnd();
 }
 
 export function RegisterBranchModal({ isOpen, onClose }: RegisterBranchModalProps) {
@@ -25,13 +52,14 @@ export function RegisterBranchModal({ isOpen, onClose }: RegisterBranchModalProp
   const [geoMode, setGeoMode] = useState<'draw' | 'coordinates' | 'radius'>('draw');
   const [selectedOwner, setSelectedOwner] = useState('Maria Alvarez');
 
-  // Form state
-  const [branchName, setBranchName] = useState('Calamba Branch');
+  // Form state — all Step 1 fields start empty; the old sample values now live
+  // in each input's `placeholder` for visual reference only.
+  const [branchName, setBranchName] = useState('');
   const [contactNumber, setContactNumber] = useState('');
-  const [address, setAddress] = useState('National Hwy, Calamba, Laguna');
-  const [city, setCity] = useState('Calamba');
-  const [province, setProvince] = useState('Laguna');
-  const [stockThreshold, setStockThreshold] = useState('20');
+  const [address, setAddress] = useState('');
+  const [city, setCity] = useState('');
+  const [province, setProvince] = useState('');
+  const [stockThreshold, setStockThreshold] = useState('');
 
   // New owner fields
   const [firstName, setFirstName] = useState('');
@@ -109,6 +137,9 @@ export function RegisterBranchModal({ isOpen, onClose }: RegisterBranchModalProp
   const polygonClosed = polygonPoints.length >= 3;
 
   const [showSuccess, setShowSuccess] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  // One-time password returned when a brand-new owner login is provisioned.
+  const [ownerTempPassword, setOwnerTempPassword] = useState<string | null>(null);
 
   const handleNext = () => {
     if (currentStep < 4) setCurrentStep(currentStep + 1);
@@ -118,8 +149,64 @@ export function RegisterBranchModal({ isOpen, onClose }: RegisterBranchModalProp
     if (currentStep > 1) setCurrentStep(currentStep - 1);
   };
 
-  const handleSubmit = () => {
-    setShowSuccess(true);
+  /**
+   * Flattens the four wizard steps into the backend's CreateBranchDto and POSTs
+   * it. apiFetch attaches the caller's Supabase token; the API verifies FA role
+   * server-side. Only opens the success modal once the branch is persisted.
+   */
+  const handleSubmit = async () => {
+    if (submitting) return;
+    setSubmitting(true);
+
+    // Geofence shape varies by mode; the API stores it verbatim as JSON.
+    const geofence =
+      geoMode === 'draw'
+        ? { mode: 'polygon' as const, points: polygonPoints, areaKm2: polygonArea }
+        : geoMode === 'radius'
+        ? { mode: 'radius' as const, center: radiusCenter, radiusKm: radius }
+        : {
+            mode: 'barangays' as const,
+            region: selectedRegion,
+            city: selectedCity,
+            district: selectedDistrict,
+            barangays: selectedBarangays,
+          };
+
+    try {
+      const res = await apiFetch('/branches', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: branchName,
+          contactNumber,
+          address,
+          city,
+          province,
+          lowStockThreshold: Number(stockThreshold) || 20,
+          ownerType,
+          ownerName: resolvedOwnerName,
+          ownerEmail: resolvedOwnerEmail,
+          ownerMobile: ownerType === 'new' ? mobile : undefined,
+          geofence,
+          curfewStart,
+          curfewEnd,
+        }),
+      });
+
+      const data = await res.json().catch(() => null);
+
+      if (!res.ok) {
+        toast.error(apiErrorMessage(data, 'Could not create the branch. Please try again.'));
+        return;
+      }
+
+      // Present only when a new owner was provisioned (no email infra to send it).
+      setOwnerTempPassword(data?.owner?.tempPassword ?? null);
+      setShowSuccess(true);
+    } catch {
+      toast.error('Could not reach the server. Check your connection and try again.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const handleSuccessClose = () => {
@@ -130,13 +217,14 @@ export function RegisterBranchModal({ isOpen, onClose }: RegisterBranchModalProp
 
   const handleRegisterAnother = () => {
     setShowSuccess(false);
+    setOwnerTempPassword(null);
     setCurrentStep(1);
     setBranchName('');
     setContactNumber('');
     setAddress('');
     setCity('');
     setProvince('');
-    setStockThreshold('20');
+    setStockThreshold('');
     setFirstName('');
     setLastName('');
     setEmail('');
@@ -274,15 +362,19 @@ export function RegisterBranchModal({ isOpen, onClose }: RegisterBranchModalProp
                     type="text"
                     value={branchName}
                     onChange={(e) => setBranchName(e.target.value)}
+                    placeholder="Calamba Branch"
                     className="w-full h-[34px] px-3 text-[13px] border border-[#E4E4E0] rounded-lg bg-[#F7F7F6] outline-none focus:border-[#185FA5]"
                   />
                 </div>
                 <div>
                   <label className="block text-xs text-[#6B6B67] mb-1">Contact number</label>
                   <input
-                    type="text"
+                    type="tel"
+                    inputMode="tel"
                     value={contactNumber}
-                    onChange={(e) => setContactNumber(e.target.value)}
+                    // Re-normalize to +63 form on every keystroke (controlled + masked).
+                    onChange={(e) => setContactNumber(formatPHMobile(e.target.value))}
+                    placeholder="+63 9XX XXX XXXX"
                     className="w-full h-[34px] px-3 text-[13px] border border-[#E4E4E0] rounded-lg bg-[#F7F7F6] outline-none focus:border-[#185FA5]"
                   />
                 </div>
@@ -294,6 +386,7 @@ export function RegisterBranchModal({ isOpen, onClose }: RegisterBranchModalProp
                   type="text"
                   value={address}
                   onChange={(e) => setAddress(e.target.value)}
+                  placeholder="National Hwy, Calamba, Laguna"
                   className="w-full h-[34px] px-3 text-[13px] border border-[#E4E4E0] rounded-lg bg-[#F7F7F6] outline-none focus:border-[#185FA5]"
                 />
               </div>
@@ -305,6 +398,7 @@ export function RegisterBranchModal({ isOpen, onClose }: RegisterBranchModalProp
                     type="text"
                     value={city}
                     onChange={(e) => setCity(e.target.value)}
+                    placeholder="Calamba"
                     className="w-full h-[34px] px-3 text-[13px] border border-[#E4E4E0] rounded-lg bg-[#F7F7F6] outline-none focus:border-[#185FA5]"
                   />
                 </div>
@@ -314,6 +408,7 @@ export function RegisterBranchModal({ isOpen, onClose }: RegisterBranchModalProp
                     type="text"
                     value={province}
                     onChange={(e) => setProvince(e.target.value)}
+                    placeholder="Laguna"
                     className="w-full h-[34px] px-3 text-[13px] border border-[#E4E4E0] rounded-lg bg-[#F7F7F6] outline-none focus:border-[#185FA5]"
                   />
                 </div>
@@ -325,6 +420,7 @@ export function RegisterBranchModal({ isOpen, onClose }: RegisterBranchModalProp
                   type="number"
                   value={stockThreshold}
                   onChange={(e) => setStockThreshold(e.target.value)}
+                  placeholder="20"
                   className="w-full h-[34px] px-3 text-[13px] border border-[#E4E4E0] rounded-lg bg-[#F7F7F6] outline-none focus:border-[#185FA5]"
                 />
               </div>
@@ -839,14 +935,14 @@ export function RegisterBranchModal({ isOpen, onClose }: RegisterBranchModalProp
             </button>
             <button
               onClick={currentStep === 4 ? handleSubmit : handleNext}
-              disabled={!isStepValid}
+              disabled={!isStepValid || submitting}
               className={`px-4 h-[34px] text-[13px] rounded-lg font-medium transition-colors ${
-                isStepValid
+                isStepValid && !submitting
                   ? 'bg-[#185FA5] text-white cursor-pointer'
                   : 'bg-[#E4E4E0] text-[#A0A09C] cursor-not-allowed'
               }`}
             >
-              {currentStep === 4 ? 'Confirm & Create' : 'Continue →'}
+              {currentStep === 4 ? (submitting ? 'Creating…' : 'Confirm & Create') : 'Continue →'}
             </button>
           </div>
         </div>
@@ -859,6 +955,7 @@ export function RegisterBranchModal({ isOpen, onClose }: RegisterBranchModalProp
           address={address}
           ownerName={resolvedOwnerName}
           ownerEmail={resolvedOwnerEmail}
+          ownerTempPassword={ownerTempPassword}
           onClose={handleSuccessClose}
           onRegisterAnother={handleRegisterAnother}
         />

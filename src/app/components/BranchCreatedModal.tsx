@@ -6,6 +6,8 @@ interface BranchCreatedModalProps {
   address: string;
   ownerName: string;
   ownerEmail: string;
+  /** One-time password for a newly provisioned owner; null for existing owners. */
+  ownerTempPassword?: string | null;
   onClose: () => void;
   onRegisterAnother: () => void;
 }
@@ -19,16 +21,25 @@ export function BranchCreatedModal({
   address,
   ownerName,
   ownerEmail,
+  ownerTempPassword,
   onClose,
   onRegisterAnother,
 }: BranchCreatedModalProps) {
   const [branchId] = useState(generateBranchId);
   const [copied, setCopied] = useState(false);
+  const [pwCopied, setPwCopied] = useState(false);
 
   const handleCopy = () => {
     navigator.clipboard.writeText(branchId).catch(() => {});
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleCopyPassword = () => {
+    if (!ownerTempPassword) return;
+    navigator.clipboard.writeText(ownerTempPassword).catch(() => {});
+    setPwCopied(true);
+    setTimeout(() => setPwCopied(false), 2000);
   };
 
   const ownerInitials = ownerName
@@ -163,14 +174,45 @@ export function BranchCreatedModal({
           </div>
         </div>
 
-        {/* Email notification notice */}
-        <div className="mx-4 mt-3 flex items-start gap-2.5 bg-[#E6F1FB] border border-[#B5D4F4] rounded-xl px-3.5 py-3">
-          <User className="w-3.5 h-3.5 text-[#185FA5] flex-shrink-0 mt-0.5" />
-          <p className="text-[12px] text-[#185FA5] leading-relaxed">
-            An access notification and temporary credentials have been sent to{' '}
-            <span className="font-semibold">{ownerEmail}</span>. The owner must change their password on first login.
-          </p>
-        </div>
+        {/* New-owner credentials: no email infra, so the temp password is shown
+            here once and must be handed to the owner manually. */}
+        {ownerTempPassword ? (
+          <div className="mx-4 mt-3 bg-[#FFF8E6] border border-[#F0D488] rounded-xl px-3.5 py-3">
+            <div className="flex items-start gap-2.5">
+              <User className="w-3.5 h-3.5 text-[#B4820E] flex-shrink-0 mt-0.5" />
+              <p className="text-[12px] text-[#8A6608] leading-relaxed">
+                A Branch Owner login was created for{' '}
+                <span className="font-semibold">{ownerEmail}</span>. Share this
+                temporary password securely — it won&apos;t be shown again. The owner
+                must change it on first login.
+              </p>
+            </div>
+            <div className="mt-2.5 flex items-center gap-2 bg-white border border-[#F0D488] rounded-lg px-3 py-2">
+              <span className="flex-1 text-[13px] font-mono font-medium text-[#1A1A18] break-all">
+                {ownerTempPassword}
+              </span>
+              <button
+                onClick={handleCopyPassword}
+                className="flex-shrink-0 text-[#B4820E] hover:text-[#8A6608] transition-colors"
+                title="Copy temporary password"
+              >
+                {pwCopied ? (
+                  <CheckCircle className="w-4 h-4 text-[#1D9E75]" />
+                ) : (
+                  <Copy className="w-4 h-4" />
+                )}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="mx-4 mt-3 flex items-start gap-2.5 bg-[#E6F1FB] border border-[#B5D4F4] rounded-xl px-3.5 py-3">
+            <User className="w-3.5 h-3.5 text-[#185FA5] flex-shrink-0 mt-0.5" />
+            <p className="text-[12px] text-[#185FA5] leading-relaxed">
+              <span className="font-semibold">{ownerName}</span> now has Branch Owner
+              access to this branch using their existing account.
+            </p>
+          </div>
+        )}
 
         {/* Footer actions */}
         <div className="px-4 py-4 flex flex-col gap-2.5 mt-1">
