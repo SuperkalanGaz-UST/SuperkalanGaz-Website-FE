@@ -1,21 +1,24 @@
 'use client';
 
 import { useState, useEffect, ComponentType } from 'react';
-import { ChevronDown, LogOut } from 'lucide-react';
-import { useLogout } from '../contexts/AccountContext';
+import { ChevronDown } from 'lucide-react';
 
 /**
  * Unified sidebar shell for all three web personas (FA / BO / BM), in the
- * DESIGN.md format: solid dark-blue surface, full-width lighter-blue active
- * highlight, optional collapsible groups, and a prominent logout button
- * pinned to the bottom. One visual format everywhere; what differs per
- * persona is DATA, not styling — `entries` lists the screens that persona
- * may reach (RBAC per AGENTS.md §7: the UI must not render actions a role
- * can't perform). The user profile lives in the page header, not here.
+ * Branch Owner reference format (DESIGN.md): solid brand-blue rail, white-pill
+ * active state, optional collapsible groups. One visual format everywhere;
+ * what differs per persona is DATA, not styling — `entries` lists the screens
+ * that persona may reach (RBAC per AGENTS.md §7: the UI must not render actions
+ * a role can't perform).
+ *
+ * Logout is NOT here — it lives in the header account menu (AppHeader), and the
+ * user profile lives in the header too.
  */
 export interface SidebarNavLeaf {
   label: string;
   id: string;
+  /** Optional icon for a group child; group children render icons in the reference. */
+  icon?: ComponentType<{ className?: string }>;
 }
 
 export interface SidebarNavEntry {
@@ -38,7 +41,6 @@ function groupOf(entries: SidebarNavEntry[], screenId: string): string | undefin
 }
 
 export function AppSidebar({ entries, activeScreen, onNavigate }: AppSidebarProps) {
-  const logout = useLogout();
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() => {
     const group = groupOf(entries, activeScreen);
     return group ? { [group]: true } : {};
@@ -57,16 +59,20 @@ export function AppSidebar({ entries, activeScreen, onNavigate }: AppSidebarProp
     setOpenGroups((prev) => ({ ...prev, [label]: !prev[label] }));
 
   return (
-    <div className="w-[240px] bg-[#00568A] text-white h-screen flex flex-col flex-shrink-0">
-      {/* Logo */}
-      <div className="p-4">
-        <div className="bg-white rounded-lg p-3 flex items-center justify-center">
-          <img src="/superkalan-gaz.png" alt="Superkalan Gaz" className="w-full h-auto" />
-        </div>
+    <div className="w-[220px] bg-[#007BC1] text-white h-screen flex flex-col flex-shrink-0">
+      {/* Logo — card-less on the blue rail; the source art is blue, so we
+          invert it to white to stay legible (reference uses a white logo asset). */}
+      <div className="px-3 pt-8 pb-4 flex justify-center">
+        <img
+          src="/superkalan-gaz.png"
+          alt="Superkalan Gaz"
+          className="w-40 h-auto object-contain"
+          style={{ filter: 'brightness(0) invert(1)' }}
+        />
       </div>
 
-      {/* Navigation — active item is a full-width lighter-blue highlight */}
-      <nav className="flex-1 py-2 overflow-y-auto">
+      {/* Navigation — active item is a white pill with brand-blue text */}
+      <nav className="flex-1 px-3 overflow-y-auto mt-8">
         {entries.map((entry) => {
           if (!entry.children) {
             const isActive = activeScreen === entry.id;
@@ -75,12 +81,12 @@ export function AppSidebar({ entries, activeScreen, onNavigate }: AppSidebarProp
                 key={entry.label}
                 type="button"
                 onClick={() => onNavigate(entry.id!)}
-                className={`w-full flex items-center gap-3 px-6 py-2.5 transition-colors ${
-                  isActive ? 'bg-[#1D8DCB] text-white' : 'text-white/90 hover:bg-white/10'
+                className={`w-full flex items-center gap-2.5 px-3 py-[7px] rounded-lg mb-0.5 transition-colors ${
+                  isActive ? 'bg-white text-[#007BC1]' : 'text-white hover:bg-white/10'
                 }`}
               >
-                <entry.icon className="w-[18px] h-[18px] flex-shrink-0" />
-                <span className="text-sm font-medium">{entry.label}</span>
+                <entry.icon className="w-4 h-4 shrink-0" />
+                <span className="text-[12px] font-medium">{entry.label}</span>
               </button>
             );
           }
@@ -88,56 +94,46 @@ export function AppSidebar({ entries, activeScreen, onNavigate }: AppSidebarProp
           const isOpen = !!openGroups[entry.label];
           const hasActiveChild = entry.children.some((child) => child.id === activeScreen);
           return (
-            <div key={entry.label}>
+            <div key={entry.label} className="mb-0.5">
               <button
                 type="button"
                 onClick={() => toggleGroup(entry.label)}
                 aria-expanded={isOpen}
-                className={`w-full flex items-center gap-3 px-6 py-2.5 transition-colors ${
-                  hasActiveChild && !isOpen
-                    ? 'bg-[#1D8DCB]/40 text-white'
-                    : 'text-white/90 hover:bg-white/10'
+                className={`w-full flex items-center gap-2.5 px-3 py-[7px] rounded-lg transition-colors ${
+                  hasActiveChild && !isOpen ? 'bg-white/10 text-white' : 'text-white hover:bg-white/10'
                 }`}
               >
-                <entry.icon className="w-[18px] h-[18px] flex-shrink-0" />
-                <span className="text-sm font-medium flex-1 text-left">{entry.label}</span>
+                <entry.icon className="w-4 h-4 shrink-0" />
+                <span className="text-[12px] font-medium flex-1 text-left">{entry.label}</span>
                 <ChevronDown
-                  className={`w-4 h-4 flex-shrink-0 transition-transform ${isOpen ? 'rotate-180' : ''}`}
+                  className={`w-3.5 h-3.5 shrink-0 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
                 />
               </button>
 
-              {isOpen &&
-                entry.children.map((child) => {
-                  const isActive = activeScreen === child.id;
-                  return (
-                    <button
-                      key={child.id}
-                      type="button"
-                      onClick={() => onNavigate(child.id)}
-                      className={`w-full flex items-center pl-[3.25rem] pr-6 py-2 transition-colors ${
-                        isActive ? 'bg-[#1D8DCB] text-white' : 'text-white/75 hover:bg-white/10'
-                      }`}
-                    >
-                      <span className="text-sm">{child.label}</span>
-                    </button>
-                  );
-                })}
+              {isOpen && (
+                <div className="mt-0.5 ml-3 pl-3 border-l border-white/20">
+                  {entry.children.map((child) => {
+                    const isActive = activeScreen === child.id;
+                    return (
+                      <button
+                        key={child.id}
+                        type="button"
+                        onClick={() => onNavigate(child.id)}
+                        className={`w-full flex items-center gap-2.5 px-3 py-[6px] rounded-lg mb-0.5 transition-colors ${
+                          isActive ? 'bg-white text-[#007BC1]' : 'text-white hover:bg-white/10'
+                        }`}
+                      >
+                        {child.icon && <child.icon className="w-3.5 h-3.5 shrink-0" />}
+                        <span className="text-[11.5px] font-medium">{child.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           );
         })}
       </nav>
-
-      {/* Logout — ends the real Supabase session, back to the login screen */}
-      <div className="p-4 border-t border-white/20">
-        <button
-          type="button"
-          onClick={logout}
-          className="w-full flex items-center justify-center gap-2 bg-[#CC1903] hover:bg-[#b01602] text-white text-sm font-medium py-2.5 rounded-lg transition-colors"
-        >
-          <LogOut className="w-4 h-4" />
-          Log out
-        </button>
-      </div>
     </div>
   );
 }

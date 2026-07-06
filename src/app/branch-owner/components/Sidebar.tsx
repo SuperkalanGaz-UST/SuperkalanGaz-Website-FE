@@ -3,8 +3,14 @@
 import {
   LayoutDashboard,
   BarChart3,
+  BarChart2,
+  TrendingUp,
+  Wallet,
   HeartHandshake,
+  Star,
+  Gift,
   Package,
+  Bike,
   FileText,
   Users,
   Settings,
@@ -20,28 +26,28 @@ import { AppSidebar, SidebarNavEntry } from '../../components/AppSidebar';
 const NAV_ENTRIES: SidebarNavEntry[] = [
   { icon: LayoutDashboard, label: 'Dashboard', id: 'dashboard' },
   {
-    icon: BarChart3,
+    icon: BarChart2,
     label: 'Analytics',
     children: [
-      { label: 'Order Analytics', id: 'order-analytics' },
-      { label: 'Sales', id: 'sales-overview' },
-      { label: 'Operational Expenses', id: 'operational-expenses' },
+      { icon: TrendingUp, label: 'Order Analytics', id: 'order-analytics' },
+      { icon: BarChart3, label: 'Sales', id: 'sales-overview' },
+      { icon: Wallet, label: 'Operational Expenses', id: 'operational-expenses' },
     ],
   },
   {
     icon: HeartHandshake,
     label: 'Customer',
     children: [
-      { label: 'Ratings & Reviews', id: 'csat' },
-      { label: 'Loyalty Program', id: 'loyalty' },
+      { icon: Star, label: 'Ratings & Reviews', id: 'csat' },
+      { icon: Gift, label: 'Loyalty Program', id: 'loyalty' },
     ],
   },
   {
     icon: Package,
     label: 'Operations',
     children: [
-      { label: 'Inventory', id: 'supply-chain' },
-      { label: 'Fleet', id: 'fleet-overview' },
+      { icon: Package, label: 'Inventory', id: 'supply-chain' },
+      { icon: Bike, label: 'Fleet', id: 'fleet-overview' },
     ],
   },
   { icon: Users, label: 'User Management', id: 'user-management' },

@@ -31,7 +31,7 @@ function BranchBadge() {
 
   if (isSingleBranch) {
     return (
-      <div className="bg-blue-50 text-[#00568A] text-xs px-3 py-1.5 rounded-full font-medium whitespace-nowrap">
+      <div className="flex items-center px-3 py-1 rounded-full border border-gray-200 bg-white text-[#007BC1] text-xs font-bold whitespace-nowrap">
         {selectedBranch}
       </div>
     );
@@ -42,14 +42,14 @@ function BranchBadge() {
       <button
         type="button"
         onClick={() => setShowDropdown(!showDropdown)}
-        className="bg-blue-50 hover:bg-blue-100 text-[#00568A] text-xs px-3 py-1.5 rounded-full font-medium flex items-center gap-1 whitespace-nowrap transition-colors"
+        className="flex items-center gap-1.5 px-3 py-1 rounded-full border border-gray-200 bg-white hover:bg-gray-50 text-[#007BC1] text-xs font-bold whitespace-nowrap transition-colors"
       >
         <span>{selectedBranch}</span>
         <ChevronDown className="w-3 h-3" />
       </button>
 
       {showDropdown && (
-        <div className="absolute top-full mt-2 right-0 w-56 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
+        <div className="absolute top-full mt-2 right-0 min-w-full w-max bg-white rounded-xl shadow-lg border border-gray-200 py-1 z-50">
           {availableBranches.map((branch) => (
             <button
               key={branch}
@@ -58,10 +58,12 @@ function BranchBadge() {
                 setSelectedBranch(branch);
                 setShowDropdown(false);
               }}
-              className="w-full px-3 py-2 text-sm text-left text-gray-700 hover:bg-gray-100 flex items-center justify-between transition-colors"
+              className={`w-full px-4 py-2 text-sm text-left hover:bg-gray-50 flex items-center justify-between gap-4 transition-colors ${
+                selectedBranch === branch ? 'text-[#007BC1] font-semibold' : 'text-gray-700'
+              }`}
             >
               <span>{branch}</span>
-              {selectedBranch === branch && <Check className="w-4 h-4 text-[#00568A]" />}
+              {selectedBranch === branch && <Check className="w-4 h-4 text-[#007BC1]" />}
             </button>
           ))}
         </div>
