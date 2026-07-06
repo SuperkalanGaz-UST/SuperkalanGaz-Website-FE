@@ -15,6 +15,7 @@ import { X, Check, Info } from 'lucide-react';
 import { toast } from 'sonner';
 import { apiFetch, apiErrorMessage } from '../lib/api';
 import { BranchCreatedModal } from './BranchCreatedModal';
+import { StoreLocationCombobox, StoreLocation } from './StoreLocationCombobox';
 
 interface RegisterBranchModalProps {
   isOpen: boolean;
@@ -60,6 +61,33 @@ export function RegisterBranchModal({ isOpen, onClose }: RegisterBranchModalProp
   const [city, setCity] = useState('');
   const [province, setProvince] = useState('');
   const [stockThreshold, setStockThreshold] = useState('');
+
+  // The known_store_locations row this branch is being provisioned from. Set
+  // when an existing location is chosen from the combobox; null for a free-text
+  // ("create new") branch. Sent as source_store_location_id on submit and used
+  // by the backend to flag a reference as already registered.
+  const [selectedReferenceId, setSelectedReferenceId] = useState<string | null>(null);
+
+  // A known reference location was picked: adopt its address + province as
+  // editable DEFAULTS. City is intentionally left blank-but-editable (the seed
+  // never carries a reliable city; we never fabricate one from the address).
+  const handleSelectReference = (location: StoreLocation) => {
+    setBranchName(location.name);
+    setAddress(location.full_address);
+    setProvince(location.province ?? '');
+    setCity('');
+    setSelectedReferenceId(location.id);
+  };
+
+  // "Create new branch: '<typed>'": a brand-new branch with no autofill. Keep
+  // the typed name, clear the address fields, and record no reference.
+  const handleCreateNewBranch = (typed: string) => {
+    setBranchName(typed);
+    setAddress('');
+    setCity('');
+    setProvince('');
+    setSelectedReferenceId(null);
+  };
 
   // New owner fields
   const [firstName, setFirstName] = useState('');
@@ -158,20 +186,6 @@ export function RegisterBranchModal({ isOpen, onClose }: RegisterBranchModalProp
     if (submitting) return;
     setSubmitting(true);
 
-    // Geofence shape varies by mode; the API stores it verbatim as JSON.
-    const geofence =
-      geoMode === 'draw'
-        ? { mode: 'polygon' as const, points: polygonPoints, areaKm2: polygonArea }
-        : geoMode === 'radius'
-        ? { mode: 'radius' as const, center: radiusCenter, radiusKm: radius }
-        : {
-            mode: 'barangays' as const,
-            region: selectedRegion,
-            city: selectedCity,
-            district: selectedDistrict,
-            barangays: selectedBarangays,
-          };
-
     try {
       const res = await apiFetch('/branches', {
         method: 'POST',
@@ -181,14 +195,15 @@ export function RegisterBranchModal({ isOpen, onClose }: RegisterBranchModalProp
           address,
           city,
           province,
-          lowStockThreshold: Number(stockThreshold) || 20,
+          // Provenance: the reference this branch came from, or null for free-text.
+          sourceStoreLocationId: selectedReferenceId,
           ownerType,
           ownerName: resolvedOwnerName,
           ownerEmail: resolvedOwnerEmail,
           ownerMobile: ownerType === 'new' ? mobile : undefined,
-          geofence,
-          curfewStart,
-          curfewEnd,
+          // NOTE: low-stock threshold, geofence, and curfew are collected by the
+          // wizard UI but intentionally NOT sent — they have no home in
+          // core.branches yet (deferred). The API ignores them if sent.
         }),
       });
 
@@ -220,6 +235,7 @@ export function RegisterBranchModal({ isOpen, onClose }: RegisterBranchModalProp
     setOwnerTempPassword(null);
     setCurrentStep(1);
     setBranchName('');
+    setSelectedReferenceId(null);
     setContactNumber('');
     setAddress('');
     setCity('');
@@ -358,12 +374,18 @@ export function RegisterBranchModal({ isOpen, onClose }: RegisterBranchModalProp
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs text-[#6B6B67] mb-1">Branch name</label>
-                  <input
-                    type="text"
+                  {/* Creatable combobox seeded from known Superkalan store locations.
+                      Typing away from a selection clears the reference link so a
+                      hand-edited name is treated as a new branch, not the reference. */}
+                  <StoreLocationCombobox
                     value={branchName}
-                    onChange={(e) => setBranchName(e.target.value)}
-                    placeholder="Calamba Branch"
-                    className="w-full h-[34px] px-3 text-[13px] border border-[#E4E4E0] rounded-lg bg-[#F7F7F6] outline-none focus:border-[#185FA5]"
+                    onChange={(v) => {
+                      setBranchName(v);
+                      setSelectedReferenceId(null);
+                    }}
+                    onSelectReference={handleSelectReference}
+                    onCreateNew={handleCreateNewBranch}
+                    placeholder="Search known locations…"
                   />
                 </div>
                 <div>
