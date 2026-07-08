@@ -4,6 +4,8 @@ import { X } from "lucide-react";
 import { apiFetch, apiErrorMessage } from "../lib/api";
 import { toast } from "sonner";
 import type { BranchRow } from "./BranchSettings";
+import { ProvinceCombobox } from "./ProvinceCombobox";
+import { provinceFocus } from "../lib/phProvinces";
 
 // Leaflet touches `window` at module load, so load the map client-side only.
 const DrawableMap = dynamic(
@@ -201,7 +203,13 @@ export function EditBranchModal({ branch, onClose, onSaved }: EditBranchModalPro
               </div>
               <div>
                 <label className={label}>Province</label>
-                <input value={province} onChange={(e) => setProvince(e.target.value)} className={field} />
+                {/* Searchable province picker (Metro Manila included); the
+                    chosen province frames the geofence map below. */}
+                <ProvinceCombobox
+                  value={province}
+                  onChange={setProvince}
+                  placeholder="Search province…"
+                />
               </div>
             </div>
           </div>
@@ -219,7 +227,14 @@ export function EditBranchModal({ branch, onClose, onSaved }: EditBranchModalPro
               </span>
             </div>
             <div className="h-[230px] border border-gray-200 rounded-lg overflow-hidden relative">
-              <DrawableMap points={points} isDrawing={isDrawing} onAddPoint={addPoint} />
+              {/* Frame on this branch's province; a saved polygon still wins
+                  (FitToSavedPolygon frames to existing points on open). */}
+              <DrawableMap
+                points={points}
+                isDrawing={isDrawing}
+                onAddPoint={addPoint}
+                focus={provinceFocus(province)}
+              />
               {isDrawing && (
                 <div className="absolute top-2 left-1/2 -translate-x-1/2 z-[400] bg-[#007BC1] text-white text-[11px] px-3 py-1 rounded-full shadow pointer-events-none">
                   Click map to place points

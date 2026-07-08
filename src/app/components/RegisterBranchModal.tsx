@@ -12,6 +12,8 @@ import { toast } from 'sonner';
 import { apiFetch, apiErrorMessage } from '../lib/api';
 import { BranchCreatedModal } from './BranchCreatedModal';
 import { StoreLocationCombobox, StoreLocation } from './StoreLocationCombobox';
+import { ProvinceCombobox } from './ProvinceCombobox';
+import { provinceFocus } from '../lib/phProvinces';
 
 interface RegisterBranchModalProps {
   isOpen: boolean;
@@ -271,12 +273,18 @@ export function RegisterBranchModal({ isOpen, onClose }: RegisterBranchModalProp
           // Provenance: the reference this branch came from, or null for free-text.
           sourceStoreLocationId: selectedReferenceId,
           ownerType,
+          // For an existing owner, send their profile id so the API can link
+          // the new branch onto that owner (grants them access to it).
+          ownerId: ownerType === 'existing' ? selectedOwnerId : undefined,
           ownerName: resolvedOwnerName,
           ownerEmail: resolvedOwnerEmail,
           ownerMobile: ownerType === 'new' ? canonicalOwnerMobile : undefined,
-          // NOTE: low-stock threshold, geofence, and curfew are collected by the
-          // wizard UI but intentionally NOT sent — they have no home in
-          // core.branches yet (deferred). The API ignores them if sent.
+          // Persist the drawn coverage polygon (>= 3 points), or null if none was
+          // drawn. Stored on core.branches.geofence (jsonb).
+          geofence: polygonClosed ? { type: 'polygon', points: polygonPoints } : null,
+          // NOTE: low-stock threshold and curfew are collected by the wizard UI
+          // but intentionally NOT sent — they have no home in core.branches yet
+          // (deferred). The API ignores them if sent.
         }),
       });
 
@@ -524,12 +532,14 @@ export function RegisterBranchModal({ isOpen, onClose }: RegisterBranchModalProp
                 </div>
                 <div>
                   <label className="block text-xs text-[#6B6B67] mb-1">Province</label>
-                  <input
-                    type="text"
+                  {/* Searchable province picker (Metro Manila included), styled
+                      to match the Branch name combobox. The chosen value frames
+                      the geofence map in Step 3, so drawing starts already
+                      zoomed into this province. */}
+                  <ProvinceCombobox
                     value={province}
-                    onChange={(e) => setProvince(e.target.value)}
-                    placeholder="Laguna"
-                    className="w-full h-[34px] px-3 text-[13px] border border-[#E4E4E0] rounded-lg bg-[#F7F7F6] outline-none focus:border-[#185FA5]"
+                    onChange={setProvince}
+                    placeholder="Search province…"
                   />
                 </div>
               </div>
@@ -747,6 +757,9 @@ export function RegisterBranchModal({ isOpen, onClose }: RegisterBranchModalProp
                       points={polygonPoints}
                       isDrawing={isDrawingPolygon}
                       onAddPoint={handleAddPoint}
+                      // Frame the map on the province chosen in Step 1 so the
+                      // coverage area is already in view when drawing starts.
+                      focus={provinceFocus(province)}
                     />
                     {/* Drawing mode badge overlay */}
                     {isDrawingPolygon && (
