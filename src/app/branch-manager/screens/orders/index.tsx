@@ -107,6 +107,9 @@ export default function Orders() {
     const [assigningId, setAssigningId] = useState<string | null>(null);
     const [selectedRiderId, setSelectedRiderId] = useState('');
     const [dispatchingId, setDispatchingId] = useState<string | null>(null);
+    // Mark-delivered in-flight guard (Slice 3), mirroring dispatchingId: only one
+    // row's deliver request runs at a time, so a single id is enough.
+    const [deliveringId, setDeliveringId] = useState<string | null>(null);
 
     const form = useForm({
         defaultValues: {
@@ -213,6 +216,40 @@ export default function Orders() {
             toast.error(err instanceof Error ? err.message : 'Failed to dispatch request');
         } finally {
             setDispatchingId(null);
+        }
+    };
+
+    // Mark a Dispatched (or En Route) request as Delivered (BM-007). No body; the
+    // server sets delivered_at and returns the assigned rider to Available — hence
+    // both loaders refresh on success (loadRequests + loadRoster).
+    const handleDeliver = async (requestId: string) => {
+        setDeliveringId(requestId);
+        try {
+            const res = await apiFetch(`/service-requests/${requestId}/deliver`, { method: 'POST' });
+            const data = await res.json();
+            if (!res.ok) {
+                // 409: no longer out for delivery (already delivered / cancelled / lost
+                // race). Reconcile the queue so the row reflects its true state.
+                if (res.status === 409) {
+                    toast.error(apiErrorMessage(data, 'Service request is not out for delivery'));
+                    await loadRequests();
+                    return;
+                }
+                if (res.status === 404) {
+                    toast.error('Request not found');
+                    return;
+                }
+                // 400 malformed-uuid and any other error surfaced as-is from the API.
+                toast.error(apiErrorMessage(data, 'Failed to mark request delivered'));
+                return;
+            }
+            toast.success('Request marked as delivered.');
+            // Refresh the queue and the rider display map: the rider is now Available.
+            await Promise.all([loadRequests(), loadRoster()]);
+        } catch (err) {
+            toast.error(err instanceof Error ? err.message : 'Failed to mark request delivered');
+        } finally {
+            setDeliveringId(null);
         }
     };
 
@@ -426,6 +463,12 @@ export default function Orders() {
                                                     Dispatched {formatRequestedAt(req.dispatched_at)}
                                                 </div>
                                             )}
+                                            {/* delivered_at is the final SLA timestamp; show it once the request is Delivered */}
+                                            {req.delivered_at && (
+                                                <div className={styles.mutedText} style={{ marginTop: '0.35rem', fontSize: '0.75rem' }}>
+                                                    Delivered {formatRequestedAt(req.delivered_at)}
+                                                </div>
+                                            )}
                                         </td>
                                         <td className={styles.riderCell}>
                                             {assigningId === req.id ? (
@@ -456,24 +499,36 @@ export default function Orders() {
                                             )}
                                         </td>
                                         <td className={styles.actionsCell}>
-                                            {req.status !== 'Pending' ? (
-                                                <span className={styles.mutedText}>—</span>
-                                            ) : assigningId === req.id ? (
-                                                <div className={styles.assignActions}>
-                                                    {availableRiders !== null && availableRiders.length > 0 && (
-                                                        <Button
-                                                            size="sm"
-                                                            variant="accent"
-                                                            disabled={!selectedRiderId || dispatchingId === req.id}
-                                                            onClick={() => handleDispatch(req.id)}
-                                                        >
-                                                            {dispatchingId === req.id ? 'Dispatching…' : 'Dispatch'}
-                                                        </Button>
-                                                    )}
-                                                    <Button size="sm" variant="ghost" onClick={closeAssign}>Cancel</Button>
-                                                </div>
+                                            {req.status === 'Pending' ? (
+                                                assigningId === req.id ? (
+                                                    <div className={styles.assignActions}>
+                                                        {availableRiders !== null && availableRiders.length > 0 && (
+                                                            <Button
+                                                                size="sm"
+                                                                variant="accent"
+                                                                disabled={!selectedRiderId || dispatchingId === req.id}
+                                                                onClick={() => handleDispatch(req.id)}
+                                                            >
+                                                                {dispatchingId === req.id ? 'Dispatching…' : 'Dispatch'}
+                                                            </Button>
+                                                        )}
+                                                        <Button size="sm" variant="ghost" onClick={closeAssign}>Cancel</Button>
+                                                    </div>
+                                                ) : (
+                                                    <Button size="sm" variant="outline" onClick={() => openAssign(req.id)}>Assign &amp; Dispatch</Button>
+                                                )
+                                            ) : req.status === 'Dispatched' || req.status === 'En Route' ? (
+                                                // Out for delivery → let the BM close it out (BM-007).
+                                                <Button
+                                                    size="sm"
+                                                    variant="accent"
+                                                    disabled={deliveringId === req.id}
+                                                    onClick={() => handleDeliver(req.id)}
+                                                >
+                                                    {deliveringId === req.id ? 'Delivering…' : 'Mark Delivered'}
+                                                </Button>
                                             ) : (
-                                                <Button size="sm" variant="outline" onClick={() => openAssign(req.id)}>Assign &amp; Dispatch</Button>
+                                                <span className={styles.mutedText}>—</span>
                                             )}
                                         </td>
                                     </tr>
