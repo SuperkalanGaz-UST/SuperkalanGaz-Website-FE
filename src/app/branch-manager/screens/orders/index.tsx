@@ -29,10 +29,27 @@ interface SRRow {
     cylinder_size: string;
     quantity: number;
     special_instructions: string | null;
+    // Assigned rider (Fleet). null until the request is dispatched (SRD dispatch step).
+    rider_id: string | null;
     requested_at: string;
     dispatched_at: string | null;
     in_transit_at: string | null;
     delivered_at: string | null;
+    created_at: string;
+}
+
+/**
+ * Rider row from the Fleet module (GET /riders). snake_case like the SR rows.
+ * Only `Available` riders are assignable; the full roster is fetched once to
+ * resolve a dispatched rider_id → display label (a dispatched rider is no
+ * longer `Available`, so it won't appear in the assignable list).
+ */
+interface RiderRow {
+    id: string;
+    branch_id: string;
+    name: string;
+    plate: string;
+    status: 'Available' | 'On Delivery' | 'Maintenance Due' | 'Offline';
     created_at: string;
 }
 
@@ -82,6 +99,15 @@ export default function Orders() {
     const [isCreateFormVisible, setIsCreateFormVisible] = useState(false);
     const [submitting, setSubmitting] = useState(false);
 
+    // Rider assignment / dispatch (Slice 2). Only one row's assign panel is open
+    // at a time, so a single selection/dispatch state is enough.
+    const [rosterMap, setRosterMap] = useState<Record<string, string>>({});
+    const [availableRiders, setAvailableRiders] = useState<RiderRow[] | null>(null);
+    const [ridersLoading, setRidersLoading] = useState(false);
+    const [assigningId, setAssigningId] = useState<string | null>(null);
+    const [selectedRiderId, setSelectedRiderId] = useState('');
+    const [dispatchingId, setDispatchingId] = useState<string | null>(null);
+
     const form = useForm({
         defaultValues: {
             customerName: '', customerContact: '', deliveryAddress: '',
@@ -108,6 +134,87 @@ export default function Orders() {
     }, []);
 
     useEffect(() => { loadRequests(); }, [loadRequests]);
+
+    // Full rider roster → id → "name (plate)" display map. Best-effort: if it
+    // fails, dispatched rows fall back to showing the raw rider_id.
+    const loadRoster = useCallback(async () => {
+        try {
+            const res = await apiFetch('/riders');
+            const data = await res.json();
+            if (!res.ok) return;
+            const map: Record<string, string> = {};
+            for (const r of data.riders as RiderRow[]) map[r.id] = `${r.name} (${r.plate})`;
+            setRosterMap(map);
+        } catch {
+            // Non-fatal: the rider column just falls back to the raw id.
+        }
+    }, []);
+
+    useEffect(() => { loadRoster(); }, [loadRoster]);
+
+    // Fetch the assignable (Available) riders when a row's assign panel opens.
+    const loadAvailableRiders = useCallback(async () => {
+        setRidersLoading(true);
+        try {
+            const res = await apiFetch('/riders?status=Available');
+            const data = await res.json();
+            if (!res.ok) throw new Error(apiErrorMessage(data, 'Failed to load riders'));
+            setAvailableRiders(data.riders as RiderRow[]);
+        } catch (err) {
+            setAvailableRiders([]);
+            toast.error(err instanceof Error ? err.message : 'Failed to load riders');
+        } finally {
+            setRidersLoading(false);
+        }
+    }, []);
+
+    const openAssign = (id: string) => {
+        setAssigningId(id);
+        setSelectedRiderId('');
+        setAvailableRiders(null); // reset so the panel shows "Loading…" not a stale list
+        loadAvailableRiders();
+    };
+
+    const closeAssign = () => {
+        setAssigningId(null);
+        setSelectedRiderId('');
+    };
+
+    const handleDispatch = async (requestId: string) => {
+        if (!selectedRiderId) return;
+        setDispatchingId(requestId);
+        try {
+            const res = await apiFetch(`/service-requests/${requestId}/dispatch`, {
+                method: 'POST',
+                body: JSON.stringify({ riderId: selectedRiderId }),
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                // 409: another user already dispatched this — reconcile the queue.
+                if (res.status === 409) {
+                    toast.error('This request was already dispatched');
+                    closeAssign();
+                    await loadRequests();
+                    return;
+                }
+                if (res.status === 404) {
+                    toast.error('Request not found');
+                    return;
+                }
+                // 400 "Rider is not assignable" (rider no longer Available) and
+                // malformed-uuid errors are surfaced as-is from the API.
+                toast.error(apiErrorMessage(data, 'Failed to dispatch request'));
+                return;
+            }
+            toast.success('Rider assigned and request dispatched.');
+            closeAssign();
+            await loadRequests();
+        } catch (err) {
+            toast.error(err instanceof Error ? err.message : 'Failed to dispatch request');
+        } finally {
+            setDispatchingId(null);
+        }
+    };
 
     const onSubmit = async (values: NewRequestValues) => {
         setSubmitting(true);
@@ -277,20 +384,21 @@ export default function Orders() {
                             <tr>
                                 <th>Source</th><th>Customer Name</th><th>Contact</th>
                                 <th>Cylinder</th><th>Requested At</th><th>Status</th>
+                                <th className={styles.riderCol}>Rider</th><th className={styles.actionsCol}>Actions</th>
                             </tr>
                         </thead>
                         <tbody>
                             {loading ? (
-                                <tr><td colSpan={6} className={styles.emptyState}>Loading service requests…</td></tr>
+                                <tr><td colSpan={8} className={styles.emptyState}>Loading service requests…</td></tr>
                             ) : error ? (
                                 <tr>
-                                    <td colSpan={6} className={styles.emptyState}>
+                                    <td colSpan={8} className={styles.emptyState}>
                                         <div style={{ marginBottom: '0.75rem' }}>{error}</div>
                                         <Button variant="outline" size="sm" onClick={loadRequests}>Try again</Button>
                                     </td>
                                 </tr>
                             ) : filteredRequests.length === 0 ? (
-                                <tr><td colSpan={6} className={styles.emptyState}>No service requests found for this view.</td></tr>
+                                <tr><td colSpan={8} className={styles.emptyState}>No service requests found for this view.</td></tr>
                             ) : (
                                 filteredRequests.map(req => (
                                     <tr key={req.id}>
@@ -312,6 +420,61 @@ export default function Orders() {
                                         <td className={styles.mutedText}>{formatRequestedAt(req.requested_at)}</td>
                                         <td>
                                             <Badge variant={getStatusVariant(req.status)}>{req.status}</Badge>
+                                            {/* dispatched_at is the 2nd SLA timestamp; show it once the request leaves Pending */}
+                                            {req.dispatched_at && (
+                                                <div className={styles.mutedText} style={{ marginTop: '0.35rem', fontSize: '0.75rem' }}>
+                                                    Dispatched {formatRequestedAt(req.dispatched_at)}
+                                                </div>
+                                            )}
+                                        </td>
+                                        <td className={styles.riderCell}>
+                                            {assigningId === req.id ? (
+                                                ridersLoading || availableRiders === null ? (
+                                                    <span className={styles.mutedText}>Loading riders…</span>
+                                                ) : availableRiders.length === 0 ? (
+                                                    <span className={styles.mutedText}>No available riders</span>
+                                                ) : (
+                                                    // Native select: the browser renders its option list in a
+                                                    // top-level layer that ancestor overflow (the card / table
+                                                    // wrapper) can't clip, so all riders show without scrolling.
+                                                    <select
+                                                        className={styles.riderSelect}
+                                                        value={selectedRiderId}
+                                                        onChange={(e) => setSelectedRiderId(e.target.value)}
+                                                        aria-label="Select rider"
+                                                    >
+                                                        <option value="" disabled>Select rider…</option>
+                                                        {availableRiders.map(r => (
+                                                            <option key={r.id} value={r.id}>{r.name} ({r.plate})</option>
+                                                        ))}
+                                                    </select>
+                                                )
+                                            ) : req.rider_id ? (
+                                                rosterMap[req.rider_id] ?? req.rider_id
+                                            ) : (
+                                                <span className={styles.mutedText}>—</span>
+                                            )}
+                                        </td>
+                                        <td className={styles.actionsCell}>
+                                            {req.status !== 'Pending' ? (
+                                                <span className={styles.mutedText}>—</span>
+                                            ) : assigningId === req.id ? (
+                                                <div className={styles.assignActions}>
+                                                    {availableRiders !== null && availableRiders.length > 0 && (
+                                                        <Button
+                                                            size="sm"
+                                                            variant="accent"
+                                                            disabled={!selectedRiderId || dispatchingId === req.id}
+                                                            onClick={() => handleDispatch(req.id)}
+                                                        >
+                                                            {dispatchingId === req.id ? 'Dispatching…' : 'Dispatch'}
+                                                        </Button>
+                                                    )}
+                                                    <Button size="sm" variant="ghost" onClick={closeAssign}>Cancel</Button>
+                                                </div>
+                                            ) : (
+                                                <Button size="sm" variant="outline" onClick={() => openAssign(req.id)}>Assign &amp; Dispatch</Button>
+                                            )}
                                         </td>
                                     </tr>
                                 ))

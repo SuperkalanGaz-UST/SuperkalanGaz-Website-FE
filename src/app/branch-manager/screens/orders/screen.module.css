@@ -26,3 +26,12 @@
 .mutedText { color: var(--muted-foreground); }
 .emptyState { text-align: center; padding: 2rem; color: var(--muted-foreground); }
 .actionButtons { display: flex; gap: 0.4rem; align-items: center; }
+
+/* Reserve stable widths for the Rider + Actions columns so opening the inline
+   assign controls never grows a column and reflows the other columns' text.
+   The rider Select lives in the Rider column; Dispatch/Cancel in Actions. */
+.riderCol { width: 200px; }
+.actionsCol { width: 180px; }
+.riderCell, .actionsCell { vertical-align: top; white-space: nowrap; }
+.assignActions { display: flex; gap: 0.4rem; }
+.riderSelect { width: 100%; height: 2.5rem; padding: 0.4rem 0.6rem; border: 1px solid var(--border); border-radius: 0.375rem; background-color: var(--card); color: var(--foreground); font-size: 0.875rem; cursor: pointer; }
