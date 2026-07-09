@@ -11,6 +11,7 @@ import { Form, FormItem, FormLabel, FormControl, FormMessage, useForm } from '..
 import { Input } from '../../components/Input';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '../../components/Select';
 import { apiFetch, apiErrorMessage } from '../../../lib/api';
+import { formatPHMobile, normalizePhMobile, toE164PhMobile } from '../../../lib/phMobile';
 import styles from './screen.module.css';
 
 /**
@@ -21,6 +22,10 @@ import styles from './screen.module.css';
 interface SRRow {
     id: string;
     branch_id: string;
+    // Link to the CIM customer this request was raised for. null for legacy /
+    // pre-CIM walk-ins created before customer linking existed (customerId is
+    // optional server-side).
+    customer_id: string | null;
     order_source: 'Mobile App' | 'Walk-in/Phone';
     status: 'Pending' | 'Dispatched' | 'En Route' | 'Delivered' | 'Cancelled';
     customer_name: string;
@@ -35,6 +40,23 @@ interface SRRow {
     dispatched_at: string | null;
     in_transit_at: string | null;
     delivered_at: string | null;
+    created_at: string;
+}
+
+/**
+ * Customer row from the CIM module (GET /customers, POST /customers). Returned
+ * in snake_case; branch scope is token-derived server-side so we never send or
+ * read a branch id here. `last_order_date` is null for a customer with no orders
+ * yet (e.g. a freshly staff-created one).
+ */
+interface CustomerRow {
+    id: string;
+    branch_id: string;
+    name: string;
+    contact_number: string;
+    delivery_address: string;
+    registration_source: string;
+    last_order_date: string | null;
     created_at: string;
 }
 
@@ -55,11 +77,15 @@ interface RiderRow {
 
 // Walk-in/phone intake. The server sets order_source ("Walk-in/Phone"), branchId,
 // and status automatically, so those are never sent from the client.
-// NOTE: customer search / "create new customer" (CIM) is a later slice — for now
-// the intake takes plain customer name/contact/address text fields.
+// The customer is chosen via the CIM search / inline-registration block above the
+// grid (see selectedCustomer state); these fields hold the order snapshot — they
+// stay required and editable even after a customer is autopopulated (BM-025 lets
+// the BM override the delivery address without unlinking the customer).
 const newRequestSchema = z.object({
     customerName: z.string().min(2, 'Customer name must be at least 2 characters'),
-    customerContact: z.string().min(7, 'A valid contact number is required'),
+    // Masked to +63 9XX XXX XXXX in the field; valid only when it reduces to a
+    // canonical PH mobile. Converted to E.164 via toE164PhMobile on submit.
+    customerContact: z.string().refine((v) => normalizePhMobile(v) !== null, 'Enter a valid PH mobile number'),
     deliveryAddress: z.string().min(5, 'Delivery address is required'),
     cylinderSize: z.string().min(1, 'Cylinder size is required'),
     quantity: z.coerce.number().int().min(1, 'Quantity must be at least 1'),
@@ -99,6 +125,22 @@ export default function Orders() {
     const [isCreateFormVisible, setIsCreateFormVisible] = useState(false);
     const [submitting, setSubmitting] = useState(false);
 
+    // Customer search + inline registration (CIM: BM-024/025/029-032). The chosen
+    // customer's id is the only thing sent to link the order; name/contact/address
+    // are copied into the order snapshot fields (the zod form) on selection.
+    const [selectedCustomer, setSelectedCustomer] = useState<CustomerRow | null>(null);
+    const [customerSearch, setCustomerSearch] = useState('');
+    // null = no search run yet for the current term; [] = searched, no matches.
+    const [customerResults, setCustomerResults] = useState<CustomerRow[] | null>(null);
+    const [customerSearchLoading, setCustomerSearchLoading] = useState(false);
+    const [customerSearchError, setCustomerSearchError] = useState<string | null>(null);
+    // Inline "create new customer" sub-form (not a real <form> — it lives inside the
+    // order <form>, so submit is a button handler, not a nested form submit).
+    const [showCreateCustomer, setShowCreateCustomer] = useState(false);
+    const [newCustomer, setNewCustomer] = useState({ name: '', contactNumber: '', deliveryAddress: '' });
+    const [newCustomerErrors, setNewCustomerErrors] = useState<Partial<Record<'name' | 'contactNumber' | 'deliveryAddress', string>>>({});
+    const [creatingCustomer, setCreatingCustomer] = useState(false);
+
     // Rider assignment / dispatch (Slice 2). Only one row's assign panel is open
     // at a time, so a single selection/dispatch state is enough.
     const [rosterMap, setRosterMap] = useState<Record<string, string>>({});
@@ -118,6 +160,133 @@ export default function Orders() {
         },
         schema: newRequestSchema,
     });
+
+    // Debounced customer search (BM-024). Fires only when the trimmed term is >= 2
+    // chars (the API 400s below that) and never while a customer is already locked
+    // in. The 300ms timer is cleared on each keystroke so we issue at most one
+    // request per pause, not one per character.
+    useEffect(() => {
+        if (selectedCustomer) return;
+        const term = customerSearch.trim();
+        if (term.length < 2) {
+            setCustomerResults(null);
+            setCustomerSearchError(null);
+            setCustomerSearchLoading(false);
+            return;
+        }
+        setCustomerSearchLoading(true);
+        const handle = setTimeout(async () => {
+            try {
+                const res = await apiFetch(`/customers?search=${encodeURIComponent(term)}`);
+                const data = await res.json();
+                if (!res.ok) throw new Error(apiErrorMessage(data, 'Failed to search customers'));
+                setCustomerResults(data.customers as CustomerRow[]);
+                setCustomerSearchError(null);
+            } catch (err) {
+                const message = err instanceof Error ? err.message : 'Failed to search customers';
+                setCustomerSearchError(message);
+                setCustomerResults([]);
+                toast.error(message);
+            } finally {
+                setCustomerSearchLoading(false);
+            }
+        }, 300);
+        return () => clearTimeout(handle);
+    }, [customerSearch, selectedCustomer]);
+
+    // Copy a customer into the order snapshot fields + record the link (BM-025/032).
+    // Used by both "select existing result" and "create new → return pre-populated".
+    const selectCustomer = (customer: CustomerRow) => {
+        setSelectedCustomer(customer);
+        form.setValues(prev => ({
+            ...prev,
+            customerName: customer.name,
+            // API stores E.164 (+639XXXXXXXXX); mask it for the display field so it
+            // shows +63 9XX XXX XXXX (never dump raw E.164 into the masked input).
+            customerContact: formatPHMobile(customer.contact_number),
+            deliveryAddress: customer.delivery_address,
+        }));
+        setCustomerSearch('');
+        setCustomerResults(null);
+        setCustomerSearchError(null);
+        setShowCreateCustomer(false);
+    };
+
+    // Unlink the current customer so the BM can search again. The snapshot fields
+    // are left as-is (the BM may want to keep them) — they stay editable.
+    const clearSelectedCustomer = () => {
+        setSelectedCustomer(null);
+        setCustomerResults(null);
+        setCustomerSearch('');
+        setShowCreateCustomer(false);
+    };
+
+    // Open the inline create form, pre-filling the name with whatever was typed so
+    // the BM doesn't retype it (BM-029/030).
+    const openCreateCustomer = () => {
+        setNewCustomer({ name: customerSearch.trim(), contactNumber: '', deliveryAddress: '' });
+        setNewCustomerErrors({});
+        setShowCreateCustomer(true);
+    };
+
+    // Register a new customer (BM-031) then return to the intake pre-populated
+    // (BM-032). registration_source is server-set ("staff-created"), so not sent.
+    const handleCreateCustomer = async () => {
+        const errors: typeof newCustomerErrors = {};
+        if (!newCustomer.name.trim()) errors.name = 'Name is required';
+        if (normalizePhMobile(newCustomer.contactNumber) === null) errors.contactNumber = 'Enter a valid PH mobile number';
+        if (!newCustomer.deliveryAddress.trim()) errors.deliveryAddress = 'Delivery address is required';
+        setNewCustomerErrors(errors);
+        if (Object.keys(errors).length > 0) return;
+
+        // Send canonical E.164 (server validates ^\+639\d{9}$), not the masked
+        // display string. Guard is belt-and-suspenders: validation above already
+        // rejected anything toE164PhMobile can't convert.
+        const contactE164 = toE164PhMobile(newCustomer.contactNumber);
+        if (!contactE164) {
+            setNewCustomerErrors({ ...errors, contactNumber: 'Enter a valid PH mobile number' });
+            return;
+        }
+
+        setCreatingCustomer(true);
+        try {
+            const res = await apiFetch('/customers', {
+                method: 'POST',
+                body: JSON.stringify({
+                    name: newCustomer.name.trim(),
+                    contactNumber: contactE164,
+                    deliveryAddress: newCustomer.deliveryAddress.trim(),
+                }),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(apiErrorMessage(data, 'Failed to register customer'));
+            toast.success('Customer registered.');
+            // Close the create form, autopopulate the order, and link the id — the BM
+            // shouldn't have to re-enter anything to finish the order (BM-032).
+            selectCustomer(data.customer as CustomerRow);
+            setNewCustomer({ name: '', contactNumber: '', deliveryAddress: '' });
+            setNewCustomerErrors({});
+        } catch (err) {
+            toast.error(err instanceof Error ? err.message : 'Failed to register customer');
+        } finally {
+            setCreatingCustomer(false);
+        }
+    };
+
+    // Reset the whole intake (order form + customer flow) back to empty.
+    const resetIntake = () => {
+        form.setValues({
+            customerName: '', customerContact: '', deliveryAddress: '',
+            cylinderSize: '', quantity: 1, specialInstructions: '',
+        });
+        setSelectedCustomer(null);
+        setCustomerSearch('');
+        setCustomerResults(null);
+        setCustomerSearchError(null);
+        setShowCreateCustomer(false);
+        setNewCustomer({ name: '', contactNumber: '', deliveryAddress: '' });
+        setNewCustomerErrors({});
+    };
 
     const loadRequests = useCallback(async () => {
         setLoading(true);
@@ -254,16 +423,29 @@ export default function Orders() {
     };
 
     const onSubmit = async (values: NewRequestValues) => {
+        // Convert the masked display value (+63 9XX XXX XXXX, with spaces) to
+        // canonical E.164 before sending; the server validates ^\+639\d{9}$ and
+        // 400s on the spaced form. Guard is defensive — zod's refine already
+        // gated submit on the same normalizePhMobile check.
+        const contactE164 = toE164PhMobile(values.customerContact);
+        if (!contactE164) {
+            form.validateField('customerContact');
+            return;
+        }
         setSubmitting(true);
         try {
             const res = await apiFetch('/service-requests', {
                 method: 'POST',
                 body: JSON.stringify({
                     customerName: values.customerName,
-                    customerContact: values.customerContact,
+                    customerContact: contactE164,
                     deliveryAddress: values.deliveryAddress,
                     cylinderSize: values.cylinderSize,
                     quantity: values.quantity,
+                    // Link the order to the selected/created CIM customer. Optional
+                    // server-side: if the BM somehow has no customer selected, the
+                    // snapshot-only path still works (pre-CIM behaviour preserved).
+                    ...(selectedCustomer ? { customerId: selectedCustomer.id } : {}),
                     // Only send special instructions when the operator actually entered some.
                     ...(values.specialInstructions ? { specialInstructions: values.specialInstructions } : {}),
                 }),
@@ -271,10 +453,7 @@ export default function Orders() {
             const data = await res.json();
             if (!res.ok) throw new Error(apiErrorMessage(data, 'Failed to create service request'));
             toast.success('Walk-in/phone service request created.');
-            form.setValues({
-                customerName: '', customerContact: '', deliveryAddress: '',
-                cylinderSize: '', quantity: 1, specialInstructions: '',
-            });
+            resetIntake();
             setIsCreateFormVisible(false);
             await loadRequests();
         } catch (err) {
@@ -308,7 +487,7 @@ export default function Orders() {
             {/* Title lives in the shared header; keep the primary action right-aligned */}
             <div className={styles.pageHeader} style={{ justifyContent: 'flex-end' }}>
                 {!isCreateFormVisible && (
-                    <Button variant="accent" onClick={() => setIsCreateFormVisible(true)}>New Request</Button>
+                    <Button variant="accent" onClick={() => { resetIntake(); setIsCreateFormVisible(true); }}>New Request</Button>
                 )}
             </div>
 
@@ -316,11 +495,111 @@ export default function Orders() {
                 <div className={styles.card}>
                     <div className={styles.cardHeaderFlex}>
                         <h2 className={styles.cardTitle}>New Walk-in / Phone Request</h2>
-                        <Button variant="ghost" size="sm" onClick={() => setIsCreateFormVisible(false)}>Cancel</Button>
+                        <Button variant="ghost" size="sm" onClick={() => { resetIntake(); setIsCreateFormVisible(false); }}>Cancel</Button>
                     </div>
                     <div className={styles.cardBody}>
                         <Form {...form}>
                             <form onSubmit={form.handleSubmit(onSubmit)} className={styles.orderForm}>
+                                {/* Customer step (CIM): search + select an existing customer, or
+                                    register a new one inline, before filling the order snapshot below. */}
+                                <div className={styles.customerSection}>
+                                    <span className={styles.customerSectionTitle}>Customer</span>
+                                    {selectedCustomer ? (
+                                        <div className={styles.customerSelected}>
+                                            <div className={styles.customerSelectedInfo}>
+                                                <span className={styles.boldText}>{selectedCustomer.name}</span>
+                                                <span className={styles.customerResultMeta}>
+                                                    {selectedCustomer.contact_number} · {selectedCustomer.delivery_address}
+                                                </span>
+                                            </div>
+                                            <Button type="button" variant="ghost" size="sm" onClick={clearSelectedCustomer}>
+                                                Change
+                                            </Button>
+                                        </div>
+                                    ) : showCreateCustomer ? (
+                                        <div className={styles.createCustomerBox}>
+                                            <span className={styles.customerSectionTitle}>Register new customer</span>
+                                            <div className={styles.createCustomerGrid}>
+                                                <div>
+                                                    <label className={styles.fieldLabel} htmlFor="new-customer-name">Name</label>
+                                                    <Input id="new-customer-name" placeholder="Juan Dela Cruz"
+                                                        value={newCustomer.name}
+                                                        onChange={e => setNewCustomer(p => ({ ...p, name: e.target.value }))}
+                                                        onKeyDown={e => { if (e.key === 'Enter') e.preventDefault(); }} />
+                                                    {newCustomerErrors.name && <p className={styles.fieldError}>{newCustomerErrors.name}</p>}
+                                                </div>
+                                                <div>
+                                                    <label className={styles.fieldLabel} htmlFor="new-customer-contact">Contact Number</label>
+                                                    <Input id="new-customer-contact" placeholder="+63 9XX XXX XXXX"
+                                                        value={newCustomer.contactNumber}
+                                                        onChange={e => setNewCustomer(p => ({ ...p, contactNumber: formatPHMobile(e.target.value) }))}
+                                                        onKeyDown={e => { if (e.key === 'Enter') e.preventDefault(); }} />
+                                                    {newCustomerErrors.contactNumber && <p className={styles.fieldError}>{newCustomerErrors.contactNumber}</p>}
+                                                </div>
+                                                <div>
+                                                    <label className={styles.fieldLabel} htmlFor="new-customer-address">Delivery Address</label>
+                                                    <Input id="new-customer-address" placeholder="123 Mabini St, Makati"
+                                                        value={newCustomer.deliveryAddress}
+                                                        onChange={e => setNewCustomer(p => ({ ...p, deliveryAddress: e.target.value }))}
+                                                        onKeyDown={e => { if (e.key === 'Enter') e.preventDefault(); }} />
+                                                    {newCustomerErrors.deliveryAddress && <p className={styles.fieldError}>{newCustomerErrors.deliveryAddress}</p>}
+                                                </div>
+                                            </div>
+                                            <div className={styles.createCustomerActions}>
+                                                <Button type="button" variant="ghost" size="sm"
+                                                    onClick={() => setShowCreateCustomer(false)} disabled={creatingCustomer}>
+                                                    Cancel
+                                                </Button>
+                                                <Button type="button" variant="accent" size="sm"
+                                                    onClick={handleCreateCustomer} disabled={creatingCustomer}>
+                                                    {creatingCustomer ? 'Registering…' : 'Register & Continue'}
+                                                </Button>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <>
+                                            <Input
+                                                placeholder="Search customer by name or phone…"
+                                                aria-label="Search customer by name or phone"
+                                                value={customerSearch}
+                                                onChange={e => setCustomerSearch(e.target.value)}
+                                                onKeyDown={e => { if (e.key === 'Enter') e.preventDefault(); }}
+                                            />
+                                            {customerSearch.trim().length > 0 && customerSearch.trim().length < 2 ? (
+                                                <span className={styles.customerHint}>Type at least 2 characters to search.</span>
+                                            ) : customerSearchLoading ? (
+                                                <span className={styles.customerHint}>Searching…</span>
+                                            ) : customerSearchError ? (
+                                                <span className={styles.customerHint}>{customerSearchError}</span>
+                                            ) : customerResults === null ? (
+                                                <span className={styles.customerHint}>Search for an existing customer, or register a new one.</span>
+                                            ) : customerResults.length === 0 ? (
+                                                <div className={styles.customerEmpty}>
+                                                    <span className={styles.customerHint}>No customer found for “{customerSearch.trim()}”.</span>
+                                                    <Button type="button" variant="outline" size="sm" onClick={openCreateCustomer}>
+                                                        + Create new customer
+                                                    </Button>
+                                                </div>
+                                            ) : (
+                                                <div className={styles.customerResults}>
+                                                    {customerResults.map(c => (
+                                                        <button key={c.id} type="button" className={styles.customerResultItem}
+                                                            onClick={() => selectCustomer(c)}>
+                                                            <span className={styles.customerResultName}>{c.name}</span>
+                                                            <span className={styles.customerResultMeta}>
+                                                                {c.contact_number}
+                                                                {c.last_order_date ? ` · Last order ${formatRequestedAt(c.last_order_date)}` : ''}
+                                                            </span>
+                                                        </button>
+                                                    ))}
+                                                    <Button type="button" variant="ghost" size="sm" onClick={openCreateCustomer}>
+                                                        + Create new customer
+                                                    </Button>
+                                                </div>
+                                            )}
+                                        </>
+                                    )}
+                                </div>
                                 <div className={styles.formGrid}>
                                     <FormItem name="customerName">
                                         <FormLabel>Customer Name</FormLabel>
@@ -334,8 +613,8 @@ export default function Orders() {
                                     <FormItem name="customerContact">
                                         <FormLabel>Contact Number</FormLabel>
                                         <FormControl>
-                                            <Input placeholder="0917-000-0000" value={form.values.customerContact}
-                                                onChange={e => form.setValues(p => ({ ...p, customerContact: e.target.value }))}
+                                            <Input placeholder="+63 9XX XXX XXXX" value={form.values.customerContact}
+                                                onChange={e => form.setValues(p => ({ ...p, customerContact: formatPHMobile(e.target.value) }))}
                                                 onBlur={() => form.validateField('customerContact')} />
                                         </FormControl>
                                         <FormMessage />
