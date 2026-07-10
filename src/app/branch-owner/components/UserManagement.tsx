@@ -11,6 +11,7 @@ interface BranchManager {
   email: string;
   phone: string;
   username: string;
+  branches: string[];
   status: 'Active' | 'Inactive';
   dateCreated: string;
   lastLogin: string;
@@ -23,6 +24,7 @@ interface ProfileRow {
   username: string | null;
   display_name: string | null;
   phone: string | null;
+  branches: string[] | null;
   status: 'Active' | 'Inactive';
   created_at: string;
 }
@@ -34,6 +36,7 @@ function toManager(p: ProfileRow): BranchManager {
     email: p.email ?? '—',
     phone: p.phone ?? '',
     username: p.username ?? '',
+    branches: p.branches ?? [],
     status: p.status,
     dateCreated: p.created_at
       ? new Date(p.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
@@ -43,15 +46,23 @@ function toManager(p: ProfileRow): BranchManager {
 }
 
 export function UserManagement() {
-  const { selectedBranch } = useBranch();
+  const { selectedBranch, availableBranches } = useBranch();
+  // A multi-branch owner manages managers across ALL their branches at once; a
+  // single-branch owner stays scoped to their one branch.
+  const isMultiBranch = availableBranches.length > 1;
   const [managers, setManagers] = useState<BranchManager[]>([]);
   const [loading, setLoading] = useState(true);
 
   const loadManagers = useCallback(async () => {
     setLoading(true);
     try {
+      // Multi-branch owners see every manager across all their branches: the API
+      // scopes an unqualified list to the caller's own branches. Single-branch
+      // owners stay pinned to their one selected branch.
       const res = await apiFetch(
-        `/users?role=branch-manager&branch=${encodeURIComponent(selectedBranch)}`,
+        isMultiBranch
+          ? '/users?role=branch-manager'
+          : `/users?role=branch-manager&branch=${encodeURIComponent(selectedBranch)}`,
       );
       const data = await res.json();
       if (!res.ok) throw new Error(apiErrorMessage(data, 'Failed to load users'));
@@ -62,7 +73,7 @@ export function UserManagement() {
     } finally {
       setLoading(false);
     }
-  }, [selectedBranch]);
+  }, [selectedBranch, isMultiBranch]);
 
   useEffect(() => {
     loadManagers();
@@ -82,6 +93,9 @@ export function UserManagement() {
     username: '',
     password: '',
     confirmPassword: '',
+    // Which branch this manager account belongs to. Only editable by multi-branch
+    // owners (single-branch owners always target their one branch).
+    branch: selectedBranch as string,
     status: 'Active' as 'Active' | 'Inactive',
   });
 
@@ -94,6 +108,7 @@ export function UserManagement() {
       username: '',
       password: '',
       confirmPassword: '',
+      branch: selectedBranch,
       status: 'Active',
     });
     setShowModal(true);
@@ -109,6 +124,7 @@ export function UserManagement() {
       // Passwords are never returned by the API; leave blank and only send if changed.
       password: '',
       confirmPassword: '',
+      branch: manager.branches[0] ?? selectedBranch,
       status: manager.status,
     });
     setShowModal(true);
@@ -148,6 +164,9 @@ export function UserManagement() {
           status: formData.status,
         };
         if (formData.password) payload.password = formData.password;
+        // Only a multi-branch owner can reassign a manager's branch; leave the
+        // claim untouched for single-branch owners so we never collapse scope.
+        if (isMultiBranch) payload.branches = [formData.branch];
 
         const res = await apiFetch(`/users/${editingManager.id}`, {
           method: 'PATCH',
@@ -172,7 +191,7 @@ export function UserManagement() {
             password: formData.password,
             status: formData.status,
             role: 'branch-manager',
-            branches: [selectedBranch],
+            branches: [formData.branch],
           }),
         });
         const data = await res.json();
@@ -214,7 +233,9 @@ export function UserManagement() {
       <div className="p-8">
         <div className="bg-white rounded-lg border border-gray-200 p-6">
           <div className="flex items-center justify-between mb-6">
-            <h3 className="font-semibold text-gray-900">Branch Manager Accounts</h3>
+            <h3 className="font-semibold text-gray-900">
+              {isMultiBranch ? 'Branch Manager Accounts — All Branches' : 'Branch Manager Accounts'}
+            </h3>
             <button
               onClick={handleAddClick}
               className="px-4 py-2 bg-[#007BC1] text-white rounded-lg text-sm hover:bg-[#005a8f] transition-colors"
@@ -229,6 +250,9 @@ export function UserManagement() {
                 <tr className="border-b border-gray-200">
                   <th className="text-left text-[11px] font-medium text-gray-600 pb-3">Name</th>
                   <th className="text-left text-[11px] font-medium text-gray-600 pb-3">Email</th>
+                  {isMultiBranch && (
+                    <th className="text-left text-[11px] font-medium text-gray-600 pb-3">Branch</th>
+                  )}
                   <th className="text-left text-[11px] font-medium text-gray-600 pb-3">Status</th>
                   <th className="text-left text-[11px] font-medium text-gray-600 pb-3">Date Created</th>
                   <th className="text-left text-[11px] font-medium text-gray-600 pb-3">Last Login</th>
@@ -238,15 +262,17 @@ export function UserManagement() {
               <tbody>
                 {loading && (
                   <tr>
-                    <td colSpan={6} className="py-6 text-center text-[13px] text-gray-500">
+                    <td colSpan={isMultiBranch ? 7 : 6} className="py-6 text-center text-[13px] text-gray-500">
                       Loading…
                     </td>
                   </tr>
                 )}
                 {!loading && managers.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="py-6 text-center text-[13px] text-gray-500">
-                      No branch managers yet for this branch.
+                    <td colSpan={isMultiBranch ? 7 : 6} className="py-6 text-center text-[13px] text-gray-500">
+                      {isMultiBranch
+                        ? 'No branch managers yet across your branches.'
+                        : 'No branch managers yet for this branch.'}
                     </td>
                   </tr>
                 )}
@@ -257,6 +283,11 @@ export function UserManagement() {
                   >
                     <td className="py-3 text-[13px] text-gray-900 whitespace-nowrap">{manager.name}</td>
                     <td className="py-3 text-[13px] text-gray-600 whitespace-nowrap">{manager.email}</td>
+                    {isMultiBranch && (
+                      <td className="py-3 text-[13px] text-gray-600 whitespace-nowrap">
+                        {manager.branches.length ? manager.branches.join(', ') : '—'}
+                      </td>
+                    )}
                     <td className="py-3">
                       <span
                         className={`inline-block px-3 py-1 rounded-full text-[11px] font-medium ${
@@ -416,6 +447,23 @@ export function UserManagement() {
                   </div>
                 </div>
 
+                {isMultiBranch && (
+                  <div>
+                    <label className="block text-sm text-gray-700 mb-1.5">
+                      Branch <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={formData.branch}
+                      onChange={(e) => setFormData({ ...formData, branch: e.target.value })}
+                      className="w-full h-[44px] px-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#007BC1] focus:border-transparent outline-none text-sm bg-white"
+                    >
+                      {availableBranches.map((b) => (
+                        <option key={b} value={b}>{b}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
                 <div>
                   <label className="block text-sm text-gray-700 mb-2">
                     Status <span className="text-red-500">*</span>
@@ -460,7 +508,7 @@ export function UserManagement() {
               </div>
 
               <div className="mt-6 text-xs text-gray-500 px-6">
-                This account will have Branch Manager access for Quezon City Branch only.
+                This account will have Branch Manager access for {formData.branch} only.
               </div>
             </div>
 
