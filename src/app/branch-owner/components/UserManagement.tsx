@@ -16,7 +16,7 @@ interface BranchManager {
   lastLogin: string;
 }
 
-/** Shape returned by GET /users on the CRM API (a public.profiles row). */
+/** Shape returned by GET /users on the CRM API (projected from auth.users app_metadata). */
 interface ProfileRow {
   id: string;
   email: string | null;
