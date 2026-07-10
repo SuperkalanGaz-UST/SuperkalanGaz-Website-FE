@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { MapContainer, TileLayer, Polygon, Polyline, CircleMarker, useMapEvents, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -15,6 +15,12 @@ interface DrawableMapProps {
   points: [number, number][];
   isDrawing: boolean;
   onAddPoint: (lat: number, lng: number) => void;
+  /**
+   * Where to frame the map initially — typically the center of the selected
+   * province, so drawing starts already zoomed into the right area. Defaults to
+   * the national fallback when omitted (e.g. the edit modal that has no picker).
+   */
+  focus?: { center: [number, number]; zoom: number };
 }
 
 function ClickCapture({
@@ -42,20 +48,43 @@ function ClickCapture({
   return null;
 }
 
-export function DrawableMap({ points, isDrawing, onAddPoint }: DrawableMapProps) {
-  const center: [number, number] = [14.2115, 121.1653];
+/**
+ * On open, frame the map to the polygon that was seeded in (an existing branch's
+ * saved geofence). Captured once at mount so it never fights the user's view
+ * while they draw — a from-scratch map (no seeded points) keeps its default view.
+ */
+function FitToSavedPolygon({ points }: { points: [number, number][] }) {
+  const map = useMap();
+  const seeded = useRef(points);
+
+  useEffect(() => {
+    const pts = seeded.current;
+    if (pts.length >= 2) {
+      map.fitBounds(pts as L.LatLngBoundsExpression, { padding: [24, 24], maxZoom: 16 });
+    } else if (pts.length === 1) {
+      map.setView(pts[0], 15);
+    }
+  }, [map]);
+
+  return null;
+}
+
+export function DrawableMap({ points, isDrawing, onAddPoint, focus }: DrawableMapProps) {
+  const center: [number, number] = focus?.center ?? [14.2115, 121.1653];
+  const zoom = focus?.zoom ?? 13;
   const isClosed = points.length >= 3;
 
   return (
     <MapContainer
       center={center}
-      zoom={13}
+      zoom={zoom}
       style={{ width: '100%', height: '100%' }}
       zoomControl={true}
       attributionControl={false}
     >
       <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
       <ClickCapture isDrawing={isDrawing} onAddPoint={onAddPoint} />
+      <FitToSavedPolygon points={points} />
 
       {isClosed && (
         <Polygon

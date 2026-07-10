@@ -1,15 +1,28 @@
 'use client';
 
 import { useState } from 'react';
+import dynamic from 'next/dynamic';
 import { toast } from 'sonner';
 import { Toaster } from './components/ui/sonner';
 import { Login } from './components/Login';
 import { PersonaSwitcher } from './components/PersonaSwitcher';
-import { FranchiseAdminApp } from './franchise-admin/FranchiseAdminApp';
-import { BranchOwnerApp } from './branch-owner/BranchOwnerApp';
-import { BranchManagerApp } from './branch-manager/BranchManagerApp';
 import { AccountProvider } from './contexts/AccountContext';
 import { Account, DEMO_ACCOUNTS, signIn, signOut } from './lib/auth';
+
+// Lazy-load each persona app so a page load only compiles/downloads the one
+// that's actually shown, instead of all three (each pulls in charts, maps, etc.).
+const FranchiseAdminApp = dynamic(
+  () => import('./franchise-admin/FranchiseAdminApp').then((m) => m.FranchiseAdminApp),
+  { ssr: false },
+);
+const BranchOwnerApp = dynamic(
+  () => import('./branch-owner/BranchOwnerApp').then((m) => m.BranchOwnerApp),
+  { ssr: false },
+);
+const BranchManagerApp = dynamic(
+  () => import('./branch-manager/BranchManagerApp').then((m) => m.BranchManagerApp),
+  { ssr: false },
+);
 
 export default function App() {
   const [account, setAccount] = useState<Account | null>(null);

@@ -1,9 +1,11 @@
 /*
  * Authentication against Supabase Auth.
  *
- * Users live in Supabase (auth.users) with a matching row in public.profiles that
- * carries the CRM claims (role + branch scope). Supabase Auth is email-based, but the
- * UI logs in by username, so we map `<username>` -> `<username>@superkalan.com`. The
+ * Users live entirely in Supabase (auth.users); the CRM claims (role + branch scope)
+ * ride in each user's `app_metadata`, which is service-role-only so it can't be
+ * self-edited — the same claims the API reads from the JWT. There is no public.profiles
+ * table, and we never touch PostgREST (AGENTS.md §4). Supabase Auth is email-based, but
+ * the UI logs in by username, so we map `<username>` -> `<username>@superkalan.com`. The
  * four seed personas (admin / owner / owner.multi / manager) already exist there; any
  * user created via User Management is stored the same way.
  */
@@ -56,8 +58,10 @@ export interface SignInResult {
 }
 
 /**
- * Sign in against Supabase Auth and load the user's CRM profile. On success the session
- * is persisted by the Supabase client; returns the Account the app renders from.
+ * Sign in against Supabase Auth and read the user's CRM claims from the auth
+ * session. On success the session is persisted by the Supabase client; returns
+ * the Account the app renders from. The claims come straight off the signed-in
+ * user's `app_metadata` — no profiles table, no PostgREST read.
  */
 export async function signIn(username: string, password: string): Promise<SignInResult> {
   const email = usernameToEmail(username);
@@ -67,28 +71,30 @@ export async function signIn(username: string, password: string): Promise<SignIn
     return { account: null, error: 'Invalid username or password' };
   }
 
-  const { data: profile, error: profileError } = await supabase
-    .from('profiles')
-    .select('username, display_name, role, branches, status')
-    .eq('id', data.user.id)
-    .single();
+  const claims = (data.user.app_metadata ?? {}) as {
+    role?: Role;
+    branches?: Branch[];
+    username?: string;
+    display_name?: string;
+    status?: string;
+  };
 
-  if (profileError || !profile) {
+  if (!claims.role) {
     await supabase.auth.signOut();
-    return { account: null, error: 'Your account has no profile. Contact an administrator.' };
+    return { account: null, error: 'Your account has no role assigned. Contact an administrator.' };
   }
 
-  if (profile.status !== 'Active') {
+  if (claims.status && claims.status !== 'Active') {
     await supabase.auth.signOut();
     return { account: null, error: 'This account is inactive.' };
   }
 
   return {
     account: {
-      username: profile.username ?? username,
-      role: profile.role as Role,
-      displayName: profile.display_name ?? profile.username ?? username,
-      branches: (profile.branches ?? []) as Branch[],
+      username: claims.username ?? username,
+      role: claims.role,
+      displayName: claims.display_name ?? claims.username ?? username,
+      branches: (claims.branches ?? []) as Branch[],
     },
     error: null,
   };

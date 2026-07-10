@@ -39,7 +39,7 @@ export function BranchManagerApp() {
           title={SCREEN_TITLES[activeScreen] ?? 'Overview'}
           badge={
             branch ? (
-              <div className="bg-blue-50 text-[#00568A] text-xs px-3 py-1.5 rounded-full font-medium whitespace-nowrap">
+              <div className="flex items-center px-3 py-1 rounded-full border border-gray-200 bg-white text-[#007BC1] text-xs font-bold whitespace-nowrap">
                 {branch}
               </div>
             ) : undefined

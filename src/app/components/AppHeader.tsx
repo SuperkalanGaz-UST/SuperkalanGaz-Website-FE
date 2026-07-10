@@ -1,15 +1,16 @@
 'use client';
 
-import { ReactNode } from 'react';
-import { Search } from 'lucide-react';
-import { useAccount } from '../contexts/AccountContext';
-import { ROLE_LABELS } from '../lib/auth';
+import { ReactNode, useEffect, useRef, useState } from 'react';
+import { Search, ChevronDown, UserCircle, LogOut } from 'lucide-react';
+import { useAccount, useLogout } from '../contexts/AccountContext';
 
 /**
- * Unified page header for all three web personas (DESIGN.md §4): title on the
- * left; context badge, search, and the logged-in account on the right. The
- * profile always shows the REAL session user from AccountContext, never a
- * hardcoded persona. Logout lives in the sidebar, not here.
+ * Unified page header for all three web personas, in the Branch Owner reference
+ * format (DESIGN.md): a card-less bar over the gray canvas — bold title on the
+ * left; the persona context badge, a search pill, and an account menu on the
+ * right. The account menu is where logout lives (behind a confirm modal); the
+ * sidebar no longer carries it. The profile always shows the REAL session user
+ * from AccountContext, never a hardcoded persona.
  */
 interface AppHeaderProps {
   title: string;
@@ -17,50 +18,104 @@ interface AppHeaderProps {
   badge?: ReactNode;
 }
 
-function initialsOf(name: string): string {
-  return (
-    name
-      .split(/\s+/)
-      .filter(Boolean)
-      .slice(0, 2)
-      .map((part) => part[0]?.toUpperCase())
-      .join('') || '?'
-  );
-}
-
 export function AppHeader({ title, badge }: AppHeaderProps) {
   const account = useAccount();
+  const logout = useLogout();
+
+  const [showAccount, setShowAccount] = useState(false);
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const accountRef = useRef<HTMLDivElement>(null);
+
+  // Close the account dropdown on any outside click.
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (accountRef.current && !accountRef.current.contains(event.target as Node)) {
+        setShowAccount(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Display just the person's name, dropping any " — role" suffix seed data carries.
+  const name = account.displayName.split(' — ')[0].split(' - ')[0];
 
   return (
-    <div className="bg-white border-b border-gray-200 px-8 py-4">
-      <div className="flex items-center justify-between gap-4">
-        <h1 className="text-2xl font-semibold text-gray-900">{title}</h1>
+    <div className="px-8 pt-8 pb-4 flex items-center justify-between gap-4">
+      <h1 className="text-2xl font-bold text-gray-900">{title}</h1>
 
-        <div className="flex items-center gap-4">
-          {badge}
+      <div className="flex items-center gap-2">
+        {badge}
 
-          {/* Search — visual scaffold; wiring to API search is a separate story */}
-          <div className="relative hidden md:block">
-            <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-            <input
-              type="search"
-              placeholder="Search"
-              className="w-56 pl-9 pr-3 py-2 text-sm bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#007BC1]/40 focus:bg-white transition-colors"
-            />
-          </div>
+        {/* Search — visual scaffold; wiring to API search is a separate story */}
+        <div className="hidden md:flex items-center gap-1.5 px-3 py-1 rounded-full border border-gray-200 bg-white w-36">
+          <Search className="w-3 h-3 text-gray-400 shrink-0" />
+          <input
+            type="search"
+            placeholder="Search"
+            className="bg-transparent text-xs text-gray-700 placeholder-gray-400 outline-none w-full"
+          />
+        </div>
 
-          {/* Logged-in account */}
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 bg-[#007BC1] rounded-full flex items-center justify-center text-white font-semibold text-xs flex-shrink-0">
-              {initialsOf(account.displayName)}
+        {/* Account menu — the only place logout lives now */}
+        <div className="relative" ref={accountRef}>
+          <button
+            type="button"
+            onClick={() => setShowAccount((v) => !v)}
+            className="flex items-center gap-1.5 hover:opacity-80 transition-opacity"
+          >
+            <div className="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center">
+              <UserCircle className="w-6 h-6 text-gray-400" />
             </div>
-            <div className="hidden sm:block min-w-0">
-              <div className="text-sm font-medium text-gray-900 truncate">{account.displayName}</div>
-              <div className="text-xs text-gray-500 truncate">{ROLE_LABELS[account.role]}</div>
+            <span className="hidden sm:block text-xs font-medium text-gray-700">{name}</span>
+            <ChevronDown className="w-3 h-3 text-gray-400" />
+          </button>
+
+          {showAccount && (
+            <div className="absolute top-full right-0 mt-2 bg-white rounded-xl shadow-lg border border-gray-200 py-1 z-50 w-36">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowAccount(false);
+                  setShowLogoutModal(true);
+                }}
+                className="w-full px-4 py-2 text-sm text-left text-red-500 hover:bg-red-50 flex items-center gap-2 transition-colors"
+              >
+                <LogOut className="w-4 h-4" />
+                Logout
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Logout confirmation — ends the real Supabase session, back to login */}
+      {showLogoutModal && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[70] p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-[360px] p-6">
+            <h2 className="text-base font-semibold text-gray-900">Log out?</h2>
+            <p className="text-sm text-gray-500 mt-1">
+              You&apos;ll need to sign in again to access the dashboard.
+            </p>
+            <div className="flex justify-end gap-2 mt-5">
+              <button
+                type="button"
+                onClick={() => setShowLogoutModal(false)}
+                className="px-4 py-2 text-sm font-medium text-gray-700 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={logout}
+                className="px-4 py-2 text-sm font-medium text-white bg-red-500 hover:bg-red-600 rounded-lg transition-colors"
+              >
+                Log out
+              </button>
             </div>
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
