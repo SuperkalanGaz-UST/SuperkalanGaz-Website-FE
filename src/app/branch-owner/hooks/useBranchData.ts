@@ -96,5 +96,26 @@ export function useBranchData() {
     },
   };
 
-  return branchData[selectedBranch];
+  // Branches registered through the wizard have no mock entry above (the demo
+  // data only covers the three seed branches). Rather than crash every BO screen
+  // with `undefined`, fall back to a neutral empty state — a brand-new branch
+  // legitimately has no activity yet, and real figures await API wiring (§13).
+  const emptyBranchData = {
+    ordersToday: '—',
+    totalOrders: '—',
+    completionRate: '—',
+    csatScore: '—',
+    loyaltyRedemptions: '—',
+    stockLevel: 0,
+    trends: {
+      orders: undefined,
+      completion: undefined,
+      csat: undefined,
+      loyalty: undefined,
+    },
+    orderVolumeData: [] as { month: string; orders: number }[],
+    csatTrendData: [] as { month: string; score: number }[],
+  };
+
+  return branchData[selectedBranch] ?? emptyBranchData;
 }

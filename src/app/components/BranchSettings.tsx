@@ -1,10 +1,42 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Header } from "./Header";
 import { Select } from "./Select";
 import { RegisterBranchModal } from "./RegisterBranchModal";
+import { EditBranchModal } from "./EditBranchModal";
+import { apiFetch, apiErrorMessage } from "../lib/api";
+import { toast } from "sonner";
+
+/** Delivery coverage polygon stored on a branch (null = none set). */
+export interface BranchGeofence {
+  type: "polygon";
+  points: [number, number][];
+}
+
+/** A registered branch as returned by GET /branches. */
+export interface BranchRow {
+  id: string;
+  name: string;
+  code: string;
+  status: "active" | "inactive";
+  contact_number: string | null;
+  address: string | null;
+  city: string | null;
+  province: string | null;
+  geofence: BranchGeofence | null;
+  created_at: string;
+}
 
 export function BranchSettings() {
   const [isModalOpen, setIsModalOpen] = useState(false);
+
+  // Live Franchise Registry data (replaces the former hardcoded rows).
+  const [branches, setBranches] = useState<BranchRow[]>([]);
+  const [loadingBranches, setLoadingBranches] = useState(true);
+  const [branchesError, setBranchesError] = useState<string | null>(null);
+  // Edit modal target, and the branch pending a delete (deactivate) confirmation.
+  const [editingBranch, setEditingBranch] = useState<BranchRow | null>(null);
+  const [deletingBranch, setDeletingBranch] = useState<BranchRow | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
   const [rewardThreshold, setRewardThreshold] = useState("30");
   const [dualAuth, setDualAuth] = useState(true);
   const [stock11kg, setStock11kg] = useState("10");
@@ -29,17 +61,115 @@ export function BranchSettings() {
     setNotificationMethod("email-dashboard");
   };
 
-  const handleApprove = (branchName: string) => {
-    alert(`Branch "${branchName}" approved successfully!`);
+  const fetchBranches = useCallback(async () => {
+    setLoadingBranches(true);
+    setBranchesError(null);
+    try {
+      const res = await apiFetch("/branches");
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        setBranchesError(apiErrorMessage(data, "Could not load branches."));
+        setBranches([]);
+        return;
+      }
+      setBranches((data?.branches ?? []) as BranchRow[]);
+    } catch {
+      setBranchesError("Could not reach the server.");
+      setBranches([]);
+    } finally {
+      setLoadingBranches(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void fetchBranches();
+  }, [fetchBranches]);
+
+  // Refresh the registry after the registration modal closes (a branch may have
+  // just been created).
+  const handleModalClose = () => {
+    setIsModalOpen(false);
+    void fetchBranches();
   };
 
-  const handleReject = (branchName: string) => {
-    alert(`Branch "${branchName}" rejected.`);
+  // Reflect an edited branch in the table without a full refetch.
+  const handleEditSaved = (updated: BranchRow) => {
+    setBranches((prev) => prev.map((b) => (b.id === updated.id ? updated : b)));
+    setEditingBranch(null);
   };
+
+  // "Delete" is a soft-delete: it deactivates the branch (AGENTS.md §3.2 — never
+  // a hard delete). The row stays and flips to Inactive.
+  const handleConfirmDelete = async () => {
+    if (!deletingBranch) return;
+    setDeleteBusy(true);
+    try {
+      const res = await apiFetch(`/branches/${deletingBranch.id}`, { method: "DELETE" });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        toast.error(apiErrorMessage(data, "Could not deactivate the branch."));
+        return;
+      }
+      const updated = data?.branch as BranchRow | undefined;
+      if (updated) {
+        setBranches((prev) => prev.map((b) => (b.id === updated.id ? updated : b)));
+      }
+      toast.success(`Branch "${deletingBranch.name}" deactivated.`);
+      setDeletingBranch(null);
+    } catch {
+      toast.error("Could not reach the server.");
+    } finally {
+      setDeleteBusy(false);
+    }
+  };
+
+  const formatDate = (iso: string) =>
+    new Date(iso).toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    });
 
   return (
     <>
-      <RegisterBranchModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
+      <RegisterBranchModal isOpen={isModalOpen} onClose={handleModalClose} />
+
+      {editingBranch && (
+        <EditBranchModal
+          branch={editingBranch}
+          onClose={() => setEditingBranch(null)}
+          onSaved={handleEditSaved}
+        />
+      )}
+
+      {deletingBranch && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
+          <div className="bg-white rounded-xl w-[420px] shadow-xl p-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-1">Deactivate branch?</h2>
+            <p className="text-sm text-gray-500">
+              <span className="font-medium text-gray-700">{deletingBranch.name}</span> will be set
+              to <span className="font-medium text-gray-700">Inactive</span>. Its record is kept for
+              history and it can be reactivated later.
+            </p>
+            <div className="flex items-center justify-end gap-2 mt-6">
+              <button
+                onClick={() => setDeletingBranch(null)}
+                disabled={deleteBusy}
+                className="h-[36px] px-4 bg-white border border-gray-200 text-gray-700 text-sm rounded-lg hover:bg-gray-50 disabled:opacity-40 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmDelete}
+                disabled={deleteBusy}
+                className="h-[36px] px-4 bg-[#CC1903] text-white text-sm font-medium rounded-lg hover:bg-[#a81402] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                {deleteBusy ? "Deactivating…" : "Deactivate"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="flex-1 overflow-y-auto">
         <div style={{ position: 'static' }}>
@@ -73,39 +203,68 @@ export function BranchSettings() {
                     <th className="text-left text-xs font-medium text-gray-600 pb-3">Branch Name</th>
                     <th className="text-left text-xs font-medium text-gray-600 pb-3">Status</th>
                     <th className="text-left text-xs font-medium text-gray-600 pb-3">Date Registered</th>
+                    <th className="text-right text-xs font-medium text-gray-600 pb-3">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  <tr className="border-b border-gray-100">
-                    <td className="py-3 text-sm text-gray-900">Quezon City</td>
-                    <td className="py-3">
-                      <span className="inline-flex items-center gap-1.5 text-sm text-gray-600">
-                        <span className="w-2 h-2 rounded-full bg-green-500"></span>
-                        Active
-                      </span>
-                    </td>
-                    <td className="py-3 text-sm text-gray-600">Jan 12, 2025</td>
-                  </tr>
-                  <tr className="border-b border-gray-100">
-                    <td className="py-3 text-sm text-gray-900">Calamba</td>
-                    <td className="py-3">
-                      <span className="inline-flex items-center gap-1.5 text-sm text-gray-600">
-                        <span className="w-2 h-2 rounded-full bg-green-500"></span>
-                        Active
-                      </span>
-                    </td>
-                    <td className="py-3 text-sm text-gray-600">Feb 3, 2025</td>
-                  </tr>
-                  <tr className="border-b border-gray-100">
-                    <td className="py-3 text-sm text-gray-900">Sta. Rosa</td>
-                    <td className="py-3">
-                      <span className="inline-flex items-center gap-1.5 text-sm text-gray-600">
-                        <span className="w-2 h-2 rounded-full bg-green-500"></span>
-                        Active
-                      </span>
-                    </td>
-                    <td className="py-3 text-sm text-gray-600">Mar 18, 2025</td>
-                  </tr>
+                  {loadingBranches ? (
+                    <tr>
+                      <td colSpan={4} className="py-6 text-center text-sm text-gray-500">
+                        Loading branches…
+                      </td>
+                    </tr>
+                  ) : branchesError ? (
+                    <tr>
+                      <td colSpan={4} className="py-6 text-center text-sm text-red-600">
+                        {branchesError}
+                      </td>
+                    </tr>
+                  ) : branches.length === 0 ? (
+                    <tr>
+                      <td colSpan={4} className="py-6 text-center text-sm text-gray-500">
+                        No branches registered yet.
+                      </td>
+                    </tr>
+                  ) : (
+                    branches.map((branch) => (
+                      <tr key={branch.id} className="border-b border-gray-100">
+                        <td className="py-3 text-sm text-gray-900">
+                          <div>{branch.name}</div>
+                          <div className="text-xs text-gray-400">{branch.code}</div>
+                        </td>
+                        <td className="py-3">
+                          <span className="inline-flex items-center gap-1.5 text-sm text-gray-600">
+                            <span
+                              className={`w-2 h-2 rounded-full ${
+                                branch.status === "active" ? "bg-green-500" : "bg-gray-400"
+                              }`}
+                            ></span>
+                            {branch.status === "active" ? "Active" : "Inactive"}
+                          </span>
+                        </td>
+                        <td className="py-3 text-sm text-gray-600">
+                          {formatDate(branch.created_at)}
+                        </td>
+                        <td className="py-3">
+                          <div className="flex items-center justify-end gap-2">
+                            <button
+                              onClick={() => setEditingBranch(branch)}
+                              className="px-2.5 py-1 text-xs font-medium rounded-md border border-gray-200 text-gray-700 hover:bg-gray-50 transition-colors"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              onClick={() => setDeletingBranch(branch)}
+                              disabled={branch.status === "inactive"}
+                              className="px-2.5 py-1 text-xs font-medium rounded-md border border-[#CC1903]/30 text-[#CC1903] hover:bg-red-50 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent transition-colors"
+                            >
+                              Deactivate
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>
