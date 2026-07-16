@@ -10,6 +10,7 @@ import {
   Star,
   Gift,
   Package,
+  BadgePercent,
   Bike,
   FileText,
   Users,
@@ -47,6 +48,7 @@ const NAV_ENTRIES: SidebarNavEntry[] = [
     label: 'Operations',
     children: [
       { icon: Package, label: 'Inventory', id: 'supply-chain' },
+      { icon: BadgePercent, label: 'Pricing', id: 'branch-pricing' },
       { icon: Bike, label: 'Fleet', id: 'fleet-overview' },
     ],
   },

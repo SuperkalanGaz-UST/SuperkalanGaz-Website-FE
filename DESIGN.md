@@ -113,7 +113,7 @@ One shared implementation for all three personas; each persona's `Sidebar` /
 | Dashboard | leaf | `dashboard` |
 | Analytics | group | Order Analytics (`order-analytics`), Sales (`sales-overview`), Operational Expenses (`operational-expenses`) |
 | Customer | group | Ratings & Reviews (`csat`), Loyalty Program (`loyalty`) |
-| Operations | group | Inventory (`supply-chain`), Fleet (`fleet-overview`) |
+| Operations | group | Inventory (`supply-chain`), Pricing (`branch-pricing`), Fleet (`fleet-overview`) |
 | User Management | leaf | `user-management` |
 | Reports | leaf | `reports` |
 | Settings | leaf | `settings` |
