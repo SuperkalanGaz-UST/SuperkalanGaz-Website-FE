@@ -1,98 +1,364 @@
+import { useMemo, useState } from 'react';
+import Image from 'next/image';
+import {
+  Package,
+  TrendingUp,
+  Trophy,
+  type LucideIcon,
+} from 'lucide-react';
 import { Header } from './Header';
-import { ReorderRequestLog } from './ReorderRequestLog';
-import { useBranchData } from '../hooks/useBranchData';
-import { useBranch } from '../contexts/BranchContext';
 
-interface InventoryCardProps {
-  title: string;
-  current: number;
-  total: number;
-  threshold: number;
+type CatalogCategory = 'lpg' | 'rewards';
+
+interface CatalogItem {
+  id: string;
+  name: string;
+  detail: string;
+  image: string;
+  category: CatalogCategory;
+  metricLabel: 'Orders' | 'Redeemed';
+  metricValue: number;
+  stockUnits: number;
+  performance: number;
+  badge: 'Excellent' | 'Good' | 'Low Activity';
 }
 
-function InventoryCard({ title, current, total, threshold }: InventoryCardProps) {
-  const percentage = (current / total) * 100;
-  const isLowStock = current <= threshold && current > threshold / 2;
-  const isCritical = current <= threshold / 2;
+// Branch-scoped mock catalog metrics until the real inventory/loyalty APIs are wired in.
+const CATALOG_ITEMS: CatalogItem[] = [
+  {
+    id: 'lpg-2-7kg',
+    name: '2.7 KG LPG Cylinder',
+    detail: 'PHP 350 mobile catalog price',
+    image: '/catalog/2.7kg.png',
+    category: 'lpg',
+    metricLabel: 'Orders',
+    metricValue: 842,
+    stockUnits: 68,
+    performance: 70,
+    badge: 'Good',
+  },
+  {
+    id: 'lpg-5kg',
+    name: '5 KG LPG Cylinder',
+    detail: 'PHP 620 mobile catalog price',
+    image: '/catalog/5kg.png',
+    category: 'lpg',
+    metricLabel: 'Orders',
+    metricValue: 936,
+    stockUnits: 52,
+    performance: 78,
+    badge: 'Good',
+  },
+  {
+    id: 'lpg-11kg',
+    name: '11 KG LPG Cylinder',
+    detail: 'PHP 1,000 mobile catalog price',
+    image: '/catalog/11kg.png',
+    category: 'lpg',
+    metricLabel: 'Orders',
+    metricValue: 1204,
+    stockUnits: 44,
+    performance: 96,
+    badge: 'Excellent',
+  },
+  {
+    id: 'lpg-22kg',
+    name: '22 KG LPG Cylinder',
+    detail: 'PHP 1,800 mobile catalog price',
+    image: '/catalog/22kg.png',
+    category: 'lpg',
+    metricLabel: 'Orders',
+    metricValue: 527,
+    stockUnits: 31,
+    performance: 44,
+    badge: 'Good',
+  },
+  {
+    id: 'lpg-50kg',
+    name: '50 KG LPG Cylinder',
+    detail: 'PHP 3,500 mobile catalog price',
+    image: '/catalog/50kg.png',
+    category: 'lpg',
+    metricLabel: 'Orders',
+    metricValue: 184,
+    stockUnits: 18,
+    performance: 15,
+    badge: 'Low Activity',
+  },
+  {
+    id: 'reward-notebook',
+    name: 'Free Notebook and Pen',
+    detail: '10 points',
+    image: '/catalog/reward-notebook.png',
+    category: 'rewards',
+    metricLabel: 'Redeemed',
+    metricValue: 734,
+    stockUnits: 96,
+    performance: 92,
+    badge: 'Excellent',
+  },
+  {
+    id: 'reward-calendar',
+    name: 'Free Desk Calendar',
+    detail: '20 points',
+    image: '/catalog/reward-calendar.png',
+    category: 'rewards',
+    metricLabel: 'Redeemed',
+    metricValue: 523,
+    stockUnits: 64,
+    performance: 75,
+    badge: 'Good',
+  },
+  {
+    id: 'reward-umbrella',
+    name: 'Free Umbrella',
+    detail: '30 points',
+    image: '/catalog/reward-umbrella.png',
+    category: 'rewards',
+    metricLabel: 'Redeemed',
+    metricValue: 682,
+    stockUnits: 37,
+    performance: 88,
+    badge: 'Excellent',
+  },
+  {
+    id: 'reward-mug',
+    name: 'Free Mug',
+    detail: '40 points',
+    image: '/catalog/reward-mug.png',
+    category: 'rewards',
+    metricLabel: 'Redeemed',
+    metricValue: 416,
+    stockUnits: 81,
+    performance: 64,
+    badge: 'Good',
+  },
+];
 
-  let barColor = '#22c55e'; // green
-  let statusLabel = null;
-  let statusColor = '';
+const FILTERS: { value: CatalogCategory; label: string }[] = [
+  { value: 'lpg', label: 'LPG Products' },
+  { value: 'rewards', label: 'Household Rewards' },
+];
 
-  if (isCritical) {
-    barColor = '#ef4444'; // red
-    statusLabel = 'Critical';
-    statusColor = 'text-red-600';
-  } else if (isLowStock) {
-    barColor = '#f59e0b'; // orange
-    statusLabel = 'Low Stock';
-    statusColor = 'text-orange-500';
+function formatNumber(value: number) {
+  return new Intl.NumberFormat('en-US').format(value);
+}
+
+function getBadgeClasses(badge: CatalogItem['badge']) {
+  if (badge === 'Excellent') {
+    return 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200';
   }
 
+  if (badge === 'Good') {
+    return 'bg-[#E8F5FC] text-[#005F95] ring-1 ring-[#BFE4F7]';
+  }
+
+  return 'bg-amber-50 text-amber-700 ring-1 ring-amber-200';
+}
+
+function StatCard({
+  title,
+  value,
+  helper,
+  icon: Icon,
+  emphasized = false,
+}: {
+  title: string;
+  value: string;
+  helper: string;
+  icon: LucideIcon;
+  emphasized?: boolean;
+}) {
   return (
-    <div className="bg-white rounded-2xl border border-gray-200 p-6" style={{ borderLeft: `4px solid ${barColor}` }}>
-      <div className="flex items-start justify-between mb-4">
-        <h4 className="text-sm font-medium text-gray-900">{title}</h4>
-        <div className="text-right">
-          <span className="text-3xl font-semibold text-gray-900">{current}</span>
-          <span className="text-xl text-gray-400"> / {total}</span>
+    <div
+      className={`rounded-2xl border p-6 shadow-sm ${
+        emphasized
+          ? 'border-[#007BC1] bg-[#007BC1] text-white'
+          : 'border-gray-100 bg-white text-gray-950'
+      }`}
+    >
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className={`text-sm font-medium ${emphasized ? 'text-white/80' : 'text-gray-500'}`}>{title}</p>
+          <p className="mt-3 text-3xl font-semibold tracking-normal">{value}</p>
+        </div>
+        <div
+          className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${
+            emphasized ? 'bg-white/15 text-white' : 'bg-[#E8F5FC] text-[#007BC1]'
+          }`}
+        >
+          <Icon className="h-5 w-5" />
+        </div>
+      </div>
+      <p className={`mt-4 text-sm ${emphasized ? 'text-white/80' : 'text-gray-500'}`}>{helper}</p>
+    </div>
+  );
+}
+
+function CategoryFilter({
+  activeCategory,
+  onChange,
+}: {
+  activeCategory: CatalogCategory;
+  onChange: (category: CatalogCategory) => void;
+}) {
+  return (
+    <div className="inline-flex rounded-full border border-gray-200 bg-gray-50 p-1">
+      {FILTERS.map((filter) => {
+        const isActive = activeCategory === filter.value;
+
+        return (
+          <button
+            key={filter.value}
+            type="button"
+            onClick={() => onChange(filter.value)}
+            className={`rounded-full px-4 py-2 text-sm font-semibold transition-colors ${
+              isActive ? 'bg-[#007BC1] text-white shadow-sm' : 'text-gray-600 hover:text-[#007BC1]'
+            }`}
+            aria-pressed={isActive}
+          >
+            {filter.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function PerformanceBar({ value }: { value: number }) {
+  return (
+    <div className="flex min-w-[160px] items-center gap-3">
+      <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-gray-100">
+        <div
+          className="h-full rounded-full bg-[#007BC1] transition-all"
+          style={{ width: `${value}%` }}
+        />
+      </div>
+      <span className="w-10 text-right text-sm font-semibold text-gray-700">{value}%</span>
+    </div>
+  );
+}
+
+function CatalogRow({ item }: { item: CatalogItem }) {
+  return (
+    // Rows are read-only analytics: no reorder, stock intake, or transaction controls.
+    <div className="grid grid-cols-1 gap-4 border-b border-gray-100 px-5 py-5 last:border-b-0 md:grid-cols-[minmax(220px,1.4fr)_minmax(190px,1fr)_minmax(220px,1fr)_120px] md:items-center md:px-6">
+      <div className="flex items-center gap-4">
+        <div className="relative flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-gray-100 bg-white p-1.5">
+          <Image
+            src={item.image}
+            alt={item.name}
+            width={64}
+            height={64}
+            className="h-full w-full object-contain"
+          />
+        </div>
+        <div>
+          <p className="font-semibold text-gray-950">{item.name}</p>
+          <p className="mt-1 text-sm text-gray-500">{item.detail}</p>
         </div>
       </div>
 
-      <div className="mb-3">
-        <div className="bg-gray-200 rounded-full h-2 overflow-hidden">
-          <div
-            className="h-full rounded-full transition-all"
-            style={{ width: `${percentage}%`, backgroundColor: barColor }}
-          ></div>
-        </div>
+      <div>
+        <p className="text-sm font-semibold text-gray-950">
+          {formatNumber(item.metricValue)} {item.metricLabel}
+        </p>
+        <span className={`mt-2 inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${getBadgeClasses(item.badge)}`}>
+          {item.badge}
+        </span>
       </div>
 
-      <div className="flex items-center justify-between">
-        <span className="text-xs text-gray-500">Threshold: {threshold}</span>
-        {statusLabel && (
-          <span className={`text-xs font-medium ${statusColor}`}>{statusLabel}</span>
-        )}
+      <PerformanceBar value={item.performance} />
+
+      <div className="md:text-right">
+        <p className="text-sm text-gray-500">Stock Status</p>
+        <p className="mt-1 font-semibold text-gray-950">{formatNumber(item.stockUnits)} Units</p>
       </div>
     </div>
   );
 }
 
-export function SupplyChain() {
-  const { selectedBranch } = useBranch();
-  const branchData = useBranchData();
-  const stockLevel = branchData.stockLevel;
-
+function CatalogList({
+  items,
+  activeCategory,
+  onChangeCategory,
+}: {
+  items: CatalogItem[];
+  activeCategory: CatalogCategory;
+  onChangeCategory: (category: CatalogCategory) => void;
+}) {
   return (
-    <div className="flex-1 overflow-y-auto">
-      <div style={{ position: 'static' }}>
-        <Header title="Inventory" />
+    <section className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
+      <div className="flex flex-col gap-4 border-b border-gray-100 px-5 py-5 md:flex-row md:items-center md:justify-between md:px-6">
+        <div>
+          <h2 className="text-lg font-semibold text-gray-950">Product & Merchandise List</h2>
+          <p className="mt-1 text-sm text-gray-500">Read-only popularity, redemption, and physical availability signals.</p>
+        </div>
+        <CategoryFilter activeCategory={activeCategory} onChange={onChangeCategory} />
       </div>
 
-      <div className="p-8">
-        <div className="grid grid-cols-3 gap-6 mb-8">
-          <InventoryCard
-            title="2.7kg LPG Tank"
-            current={Math.floor(stockLevel * 1.07)}
-            total={100}
-            threshold={20}
+      <div className="hidden grid-cols-[minmax(220px,1.4fr)_minmax(190px,1fr)_minmax(220px,1fr)_120px] gap-4 bg-gray-50 px-6 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500 md:grid">
+        <span>Item</span>
+        <span>Performance Metric</span>
+        <span>Popularity Rate</span>
+        <span className="text-right">Availability</span>
+      </div>
+
+      <div>
+        {items.map((item) => (
+          <CatalogRow key={item.id} item={item} />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+export function SupplyChain() {
+  const [activeCategory, setActiveCategory] = useState<CatalogCategory>('lpg');
+
+  const winningProduct = useMemo(
+    () => CATALOG_ITEMS.reduce((winner, item) => (item.metricValue > winner.metricValue ? item : winner)),
+    [],
+  );
+
+  const visibleItems = CATALOG_ITEMS.filter((item) => item.category === activeCategory);
+  const totalActivity = CATALOG_ITEMS.reduce((sum, item) => sum + item.metricValue, 0);
+
+  return (
+    <div className="flex-1 overflow-y-auto bg-gray-50">
+      <div className="sticky top-0 z-10">
+        <Header title="Catalog & Rewards Performance" />
+      </div>
+
+      <main className="p-5 md:p-8">
+        <div className="mb-8 grid grid-cols-1 gap-4 lg:grid-cols-3">
+          <StatCard
+            title="Active Catalog Items"
+            value={formatNumber(CATALOG_ITEMS.length)}
+            helper="LPG variants and household rewards"
+            icon={Package}
           />
-          <InventoryCard
-            title="5kg LPG Tank"
-            current={Math.floor(stockLevel * 0.43)}
-            total={50}
-            threshold={15}
+          <StatCard
+            title="Winning Product"
+            value={winningProduct.name}
+            helper={`${formatNumber(winningProduct.metricValue)} ${winningProduct.metricLabel.toLowerCase()} this period`}
+            icon={TrendingUp}
+            emphasized
           />
-          <InventoryCard
-            title="11kg LPG Tank"
-            current={Math.floor(stockLevel * 0.1)}
-            total={20}
-            threshold={5}
+          <StatCard
+            title="Total Items Redeemed/Sold"
+            value={formatNumber(totalActivity)}
+            helper="Aggregated LPG orders and reward redemptions"
+            icon={Trophy}
           />
         </div>
 
-        <ReorderRequestLog />
-      </div>
+        <CatalogList
+          items={visibleItems}
+          activeCategory={activeCategory}
+          onChangeCategory={setActiveCategory}
+        />
+      </main>
     </div>
   );
 }

@@ -32,7 +32,7 @@ const NAV_ENTRIES: SidebarNavEntry[] = [
     children: [
       { icon: TrendingUp, label: 'Order Analytics', id: 'order-analytics' },
       { icon: BarChart3, label: 'Sales', id: 'sales-overview' },
-      { icon: Wallet, label: 'Operational Expenses', id: 'operational-expenses' },
+      { icon: Wallet, label: 'Running Costs', id: 'operational-expenses' },
     ],
   },
   {
@@ -47,7 +47,7 @@ const NAV_ENTRIES: SidebarNavEntry[] = [
     icon: Package,
     label: 'Operations',
     children: [
-      { icon: Package, label: 'Inventory', id: 'supply-chain' },
+      { icon: Package, label: 'Products', id: 'supply-chain' },
       { icon: BadgePercent, label: 'Pricing', id: 'branch-pricing' },
       { icon: Bike, label: 'Fleet', id: 'fleet-overview' },
     ],
