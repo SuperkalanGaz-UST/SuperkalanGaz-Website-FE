@@ -108,7 +108,7 @@ export function EditBranchModal({ branch, onClose, onSaved }: EditBranchModalPro
     if (!canSave) return;
     setSubmitting(true);
     try {
-      // 1) Branch details + geofence. A rename cascades to profiles server-side.
+      // 1) Branch details + geofence. A rename cascades to Auth app_metadata server-side.
       const res = await apiFetch(`/branches/${branch.id}`, {
         method: "PATCH",
         body: JSON.stringify({

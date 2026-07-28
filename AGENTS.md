@@ -26,7 +26,7 @@ constraints must never be violated.
 | ---------------------- | ------------------------- | -------------------------------- |
 | `superkalan-crm-api`   | NestJS + TypeScript       | Backend, business logic, data    |
 | `superkalan-crm-web`   | Next.js (React)           | Internal staff dashboard (FA/BO/BM) |
-| `superkalan-crm-mobile`| React Native + Expo       | **Customer-only** mobile app     |
+| `SuperkalanGaz-Mobile` | React Native + Expo      | **Customer-only** mobile app     |
 
 Sections below are tagged `[api]`, `[web]`, `[mobile]`, or `[all]` where they apply.
 
@@ -46,6 +46,9 @@ Sections below are tagged `[api]`, `[web]`, `[mobile]`, or `[all]` where they ap
 6. **Don't invent resolutions to open questions.** See §13. If a needed decision is
    unresolved, ask rather than assume.
 7. **No hallucinated ITIL practices.** Only the four in §9 are implemented.
+8. **Respect repository boundaries.** The parent workspace is only a container—never create
+   application code in a root-level `src/`, `app/`, `pages/`, or `api/` directory. Backend,
+   web, and mobile files belong only in the repositories listed in §2.
 
 ---
 
@@ -216,6 +219,10 @@ propose an in-scope alternative.
 - App Router (Next.js). Server components for data fetch where sensible.
 - Role-gate every screen against §7; the UI must not render actions a role can't perform.
 - Talk to the API only; no direct DB access from the web app.
+- **No backend lives in this repo.** All backend logic, API endpoints, database access, and
+  Supabase Auth administration belong in **`superkalan-crm-api`**. Do not create Next.js API
+  routes (`app/api/**` or `pages/api/**`) or use a service-role key here. Add the NestJS
+  endpoint in the API repo and call it through `src/app/lib/api.ts`.
 
 ### `[mobile]`
 - Expo, customer-only flows. No staff/admin screens.
