@@ -153,6 +153,21 @@ export default function Orders() {
     // row's deliver request runs at a time, so a single id is enough.
     const [deliveringId, setDeliveringId] = useState<string | null>(null);
 
+    // Pre-dispatch Edit / Cancel (BM-US-07, stories BM-033–037). Only Pending
+    // rows expose these; once a request leaves Pending the controls disappear
+    // (gated in the Actions cell). Like the assign panel, only one row's editor
+    // or cancel panel is open at a time, so single ids/values are enough.
+    const [editingId, setEditingId] = useState<string | null>(null);
+    const [editValues, setEditValues] = useState({ deliveryAddress: '', cylinderSize: '', quantity: 1, specialInstructions: '' });
+    const [editError, setEditError] = useState<string | null>(null);
+    const [savingEditId, setSavingEditId] = useState<string | null>(null);
+    // Cancel-with-mandatory-reason (BM-036). cancelConfirmId = which row's confirm
+    // panel is open; cancellingId = the in-flight POST guard (mirrors dispatchingId).
+    const [cancelConfirmId, setCancelConfirmId] = useState<string | null>(null);
+    const [cancelReason, setCancelReason] = useState('');
+    const [cancelError, setCancelError] = useState<string | null>(null);
+    const [cancellingId, setCancellingId] = useState<string | null>(null);
+
     const form = useForm({
         defaultValues: {
             customerName: '', customerContact: '', deliveryAddress: '',
@@ -419,6 +434,153 @@ export default function Orders() {
             toast.error(err instanceof Error ? err.message : 'Failed to mark request delivered');
         } finally {
             setDeliveringId(null);
+        }
+    };
+
+    // --- Pre-dispatch Edit (BM-035) -------------------------------------------
+    // Open the inline editor for a Pending row, pre-filled from its current
+    // snapshot. Editable fields are order details only — never customer identity
+    // /contact. Opening the editor closes any assign/cancel panel on the same row.
+    const openEdit = (req: SRRow) => {
+        setEditingId(req.id);
+        setCancelConfirmId(null);
+        closeAssign();
+        setEditValues({
+            deliveryAddress: req.delivery_address,
+            cylinderSize: req.cylinder_size,
+            quantity: req.quantity,
+            specialInstructions: req.special_instructions ?? '',
+        });
+        setEditError(null);
+    };
+
+    const closeEdit = () => {
+        setEditingId(null);
+        setEditError(null);
+    };
+
+    const handleSaveEdit = async (req: SRRow) => {
+        // Build a diff of only the changed fields — the API requires ≥1 field and
+        // we must not resend unchanged values. Trim text before comparing/sending.
+        const nextAddress = editValues.deliveryAddress.trim();
+        const nextInstructions = editValues.specialInstructions.trim();
+        const currentInstructions = req.special_instructions ?? '';
+
+        const changes: {
+            deliveryAddress?: string;
+            cylinderSize?: string;
+            quantity?: number;
+            specialInstructions?: string;
+        } = {};
+        if (nextAddress !== req.delivery_address) changes.deliveryAddress = nextAddress;
+        if (editValues.cylinderSize !== req.cylinder_size) changes.cylinderSize = editValues.cylinderSize;
+        if (editValues.quantity !== req.quantity) changes.quantity = editValues.quantity;
+        // Empty string is an allowed value here (clears the note); only include it
+        // when it actually differs from the current value.
+        if (nextInstructions !== currentInstructions) changes.specialInstructions = nextInstructions;
+
+        // Client-side validation before hitting the API.
+        if (!Number.isInteger(editValues.quantity) || editValues.quantity < 1) {
+            setEditError('Quantity must be at least 1.');
+            return;
+        }
+        if ('deliveryAddress' in changes && changes.deliveryAddress === '') {
+            setEditError('Delivery address is required.');
+            return;
+        }
+        if (Object.keys(changes).length === 0) {
+            setEditError('Change at least one field before saving.');
+            return;
+        }
+
+        setEditError(null);
+        setSavingEditId(req.id);
+        try {
+            const res = await apiFetch(`/service-requests/${req.id}`, {
+                method: 'PATCH',
+                body: JSON.stringify(changes),
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                // 409: someone dispatched this request first (BM-034/037 race) — the
+                // edit is no longer allowed, so surface the message AND reconcile.
+                if (res.status === 409) {
+                    toast.error(apiErrorMessage(data, 'Cannot edit: request already dispatched'));
+                    closeEdit();
+                    await loadRequests();
+                    return;
+                }
+                if (res.status === 404) {
+                    toast.error('Request not found');
+                    return;
+                }
+                // 400 (invalid field / quantity<1 / non-uuid) and others surfaced as-is.
+                toast.error(apiErrorMessage(data, 'Failed to update request'));
+                return;
+            }
+            toast.success('Service request updated.');
+            closeEdit();
+            await loadRequests();
+        } catch (err) {
+            toast.error(err instanceof Error ? err.message : 'Failed to update request');
+        } finally {
+            setSavingEditId(null);
+        }
+    };
+
+    // --- Pre-dispatch Cancel (BM-036) -----------------------------------------
+    const openCancel = (id: string) => {
+        setCancelConfirmId(id);
+        setEditingId(null);
+        closeAssign();
+        setCancelReason('');
+        setCancelError(null);
+    };
+
+    const closeCancel = () => {
+        setCancelConfirmId(null);
+        setCancelReason('');
+        setCancelError(null);
+    };
+
+    const handleCancelOrder = async (id: string) => {
+        // A reason is mandatory (BM-036); block submit client-side when empty.
+        const reason = cancelReason.trim();
+        if (!reason) {
+            setCancelError('A cancellation reason is required.');
+            return;
+        }
+        setCancelError(null);
+        setCancellingId(id);
+        try {
+            const res = await apiFetch(`/service-requests/${id}/cancel`, {
+                method: 'POST',
+                body: JSON.stringify({ reason }),
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                // 409: already dispatched first (race) — surface + reconcile the queue.
+                if (res.status === 409) {
+                    toast.error(apiErrorMessage(data, 'Cannot cancel: request already dispatched'));
+                    closeCancel();
+                    await loadRequests();
+                    return;
+                }
+                if (res.status === 404) {
+                    toast.error('Request not found');
+                    return;
+                }
+                // 400 (missing reason / non-uuid) and others surfaced as-is.
+                toast.error(apiErrorMessage(data, 'Failed to cancel request'));
+                return;
+            }
+            toast.success('Service request cancelled.');
+            closeCancel();
+            await loadRequests();
+        } catch (err) {
+            toast.error(err instanceof Error ? err.message : 'Failed to cancel request');
+        } finally {
+            setCancellingId(null);
         }
     };
 
@@ -717,7 +879,8 @@ export default function Orders() {
                                 <tr><td colSpan={8} className={styles.emptyState}>No service requests found for this view.</td></tr>
                             ) : (
                                 filteredRequests.map(req => (
-                                    <tr key={req.id}>
+                                    <React.Fragment key={req.id}>
+                                    <tr>
                                         {/* order_source is a mandatory tag on every row (SRD channel-level SLA reporting) */}
                                         <td>
                                             {req.order_source === 'Mobile App' ? (
@@ -794,7 +957,15 @@ export default function Orders() {
                                                         <Button size="sm" variant="ghost" onClick={closeAssign}>Cancel</Button>
                                                     </div>
                                                 ) : (
-                                                    <Button size="sm" variant="outline" onClick={() => openAssign(req.id)}>Assign &amp; Dispatch</Button>
+                                                    // Pre-dispatch controls (BM-US-07). Only rendered inside this
+                                                    // Pending branch, so Edit/Cancel vanish once the request is
+                                                    // Dispatched/Delivered/Cancelled (BM-037). Editor + cancel-confirm
+                                                    // panels open as an expanded row beneath this one.
+                                                    <div className={styles.actionButtons}>
+                                                        <Button size="sm" variant="outline" onClick={() => openAssign(req.id)}>Assign &amp; Dispatch</Button>
+                                                        <Button size="sm" variant="ghost" onClick={() => openEdit(req)}>Edit</Button>
+                                                        <Button size="sm" variant="ghost" onClick={() => openCancel(req.id)}>Cancel</Button>
+                                                    </div>
                                                 )
                                             ) : req.status === 'Dispatched' || req.status === 'En Route' ? (
                                                 // Out for delivery → let the BM close it out (BM-007).
@@ -811,6 +982,93 @@ export default function Orders() {
                                             )}
                                         </td>
                                     </tr>
+                                    {/* Inline Edit editor (BM-035). Full-width expanded row so the
+                                        order-detail fields aren't cramped in the Actions cell. Customer
+                                        identity/contact are intentionally NOT editable here. */}
+                                    {editingId === req.id && (
+                                        <tr className={styles.editorRow}>
+                                            <td colSpan={8}>
+                                                <div className={styles.editorPanel}>
+                                                    <span className={styles.editorTitle}>Edit request — {req.customer_name}</span>
+                                                    <div className={styles.editorGrid}>
+                                                        <div className={styles.editorField}>
+                                                            <label className={styles.fieldLabel} htmlFor={`edit-address-${req.id}`}>Delivery Address</label>
+                                                            <Input
+                                                                id={`edit-address-${req.id}`}
+                                                                value={editValues.deliveryAddress}
+                                                                onChange={e => setEditValues(p => ({ ...p, deliveryAddress: e.target.value }))}
+                                                            />
+                                                        </div>
+                                                        <div className={styles.editorField}>
+                                                            <label className={styles.fieldLabel} htmlFor={`edit-cylinder-${req.id}`}>Cylinder Size</label>
+                                                            <select
+                                                                id={`edit-cylinder-${req.id}`}
+                                                                className={styles.riderSelect}
+                                                                value={editValues.cylinderSize}
+                                                                onChange={e => setEditValues(p => ({ ...p, cylinderSize: e.target.value }))}
+                                                            >
+                                                                <option value="11kg">11kg</option>
+                                                                <option value="22kg">22kg</option>
+                                                                <option value="50kg">50kg</option>
+                                                            </select>
+                                                        </div>
+                                                        <div className={styles.editorField}>
+                                                            <label className={styles.fieldLabel} htmlFor={`edit-quantity-${req.id}`}>Quantity</label>
+                                                            <Input
+                                                                id={`edit-quantity-${req.id}`}
+                                                                type="number"
+                                                                min="1"
+                                                                value={editValues.quantity}
+                                                                onChange={e => setEditValues(p => ({ ...p, quantity: Number(e.target.value) }))}
+                                                            />
+                                                        </div>
+                                                        <div className={styles.editorField}>
+                                                            <label className={styles.fieldLabel} htmlFor={`edit-instructions-${req.id}`}>Special Instructions</label>
+                                                            <Input
+                                                                id={`edit-instructions-${req.id}`}
+                                                                placeholder="e.g. Leave at guardhouse"
+                                                                value={editValues.specialInstructions}
+                                                                onChange={e => setEditValues(p => ({ ...p, specialInstructions: e.target.value }))}
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                    {editError && <p className={styles.fieldError}>{editError}</p>}
+                                                    <div className={styles.editorActions}>
+                                                        <Button size="sm" variant="ghost" onClick={closeEdit} disabled={savingEditId === req.id}>Cancel</Button>
+                                                        <Button size="sm" variant="accent" onClick={() => handleSaveEdit(req)} disabled={savingEditId === req.id}>
+                                                            {savingEditId === req.id ? 'Saving…' : 'Save Changes'}
+                                                        </Button>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    )}
+                                    {/* Cancel-with-mandatory-reason panel (BM-036). No browser prompt():
+                                        the reason is a required BM Input, blocked client-side when empty. */}
+                                    {cancelConfirmId === req.id && (
+                                        <tr className={styles.editorRow}>
+                                            <td colSpan={8}>
+                                                <div className={styles.cancelPanel}>
+                                                    <span className={styles.editorTitle}>Cancel request — {req.customer_name}</span>
+                                                    <label className={styles.fieldLabel} htmlFor={`cancel-reason-${req.id}`}>Reason for cancellation (required)</label>
+                                                    <Input
+                                                        id={`cancel-reason-${req.id}`}
+                                                        placeholder="e.g. Customer no longer needs the delivery"
+                                                        value={cancelReason}
+                                                        onChange={e => setCancelReason(e.target.value)}
+                                                    />
+                                                    {cancelError && <p className={styles.fieldError}>{cancelError}</p>}
+                                                    <div className={styles.editorActions}>
+                                                        <Button size="sm" variant="ghost" onClick={closeCancel} disabled={cancellingId === req.id}>Keep Request</Button>
+                                                        <Button size="sm" variant="accent" onClick={() => handleCancelOrder(req.id)} disabled={cancellingId === req.id}>
+                                                            {cancellingId === req.id ? 'Cancelling…' : 'Confirm Cancel'}
+                                                        </Button>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    )}
+                                    </React.Fragment>
                                 ))
                             )}
                         </tbody>

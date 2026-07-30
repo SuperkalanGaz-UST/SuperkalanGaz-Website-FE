@@ -54,3 +54,14 @@
 .createCustomerActions { display: flex; gap: 0.5rem; justify-content: flex-end; }
 .fieldLabel { display: block; font-size: 0.8125rem; font-weight: 500; color: var(--foreground); margin-bottom: 0.25rem; }
 .fieldError { font-size: 0.75rem; color: var(--error, #ef4444); margin-top: 0.25rem; }
+
+/* Inline pre-dispatch Edit / Cancel panels (BM-US-07). These render as a
+   full-width expanded row beneath the Pending request being edited/cancelled,
+   so the multi-field form isn't cramped into the narrow Actions cell. */
+.editorRow td { background-color: var(--muted); }
+.editorPanel { display: flex; flex-direction: column; gap: 0.75rem; padding: 0.75rem 0.25rem; }
+.editorTitle { font-size: 0.8125rem; font-weight: 600; color: var(--foreground); }
+.editorGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.75rem; }
+.editorField { display: flex; flex-direction: column; }
+.editorActions { display: flex; gap: 0.5rem; justify-content: flex-end; align-items: center; }
+.cancelPanel { display: flex; flex-direction: column; gap: 0.5rem; padding: 0.75rem 0.25rem; max-width: 480px; }
