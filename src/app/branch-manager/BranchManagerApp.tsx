@@ -8,6 +8,7 @@ import Overview from './screens/overview';
 import Orders from './screens/orders';
 import Inventory from './screens/inventory';
 import Customers from './screens/customers';
+import Rewards from './screens/rewards';
 import Fleet from './screens/fleet';
 import Vehicles from './screens/vehicles';
 import Analytics from './screens/analytics';
@@ -19,6 +20,7 @@ const SCREEN_TITLES: Record<string, string> = {
   orders: 'Order Management',
   inventory: 'Inventory',
   customers: 'Customers & Loyalty',
+  rewards: 'Reward Redemptions',
   fleet: 'Fleet Management',
   vehicles: 'Vehicle Management',
   analytics: 'Branch Performance',
@@ -51,6 +53,7 @@ export function BranchManagerApp() {
           {activeScreen === 'orders' && <Orders />}
           {activeScreen === 'inventory' && <Inventory />}
           {activeScreen === 'customers' && <Customers />}
+          {activeScreen === 'rewards' && <Rewards />}
           {activeScreen === 'fleet' && <Fleet />}
           {activeScreen === 'vehicles' && <Vehicles />}
           {activeScreen === 'analytics' && <Analytics />}

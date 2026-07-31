@@ -8,6 +8,7 @@ import {
   Truck,
   BarChart3,
   Wrench,
+  Gift,
 } from 'lucide-react';
 import { AppSidebar, SidebarNavEntry } from '../../components/AppSidebar';
 
@@ -21,6 +22,7 @@ const NAV_ENTRIES: SidebarNavEntry[] = [
   { icon: ShoppingCart,    label: 'Orders',    id: 'orders' },
   { icon: Package,         label: 'Inventory', id: 'inventory' },
   { icon: Users,           label: 'Customers', id: 'customers' },
+  { icon: Gift,            label: 'Rewards',   id: 'rewards' },
   { icon: Truck,           label: 'Fleet',     id: 'fleet' },
   { icon: Wrench,          label: 'Vehicles',  id: 'vehicles' },
   { icon: BarChart3,       label: 'Analytics', id: 'analytics' },
