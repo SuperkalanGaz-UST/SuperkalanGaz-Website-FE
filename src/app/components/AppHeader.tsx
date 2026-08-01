@@ -1,24 +1,26 @@
 'use client';
 
 import { ReactNode, useEffect, useRef, useState } from 'react';
-import { Search, ChevronDown, UserCircle, LogOut } from 'lucide-react';
+import { ChevronDown, UserCircle, LogOut } from 'lucide-react';
 import { useAccount, useLogout } from '../contexts/AccountContext';
+import { NotificationCenter } from './NotificationCenter';
 
 /**
  * Unified page header for all three web personas, in the Branch Owner reference
  * format (DESIGN.md): a card-less bar over the gray canvas — bold title on the
- * left; the persona context badge, a search pill, and an account menu on the
+ * left; the persona context badge, notification control, and account menu on the
  * right. The account menu is where logout lives (behind a confirm modal); the
  * sidebar no longer carries it. The profile always shows the REAL session user
  * from AccountContext, never a hardcoded persona.
  */
 interface AppHeaderProps {
   title: string;
+  description?: string;
   /** Persona context chip: FA "Main Office", BO branch selector, BM branch. */
   badge?: ReactNode;
 }
 
-export function AppHeader({ title, badge }: AppHeaderProps) {
+export function AppHeader({ title, description, badge }: AppHeaderProps) {
   const account = useAccount();
   const logout = useLogout();
 
@@ -41,21 +43,32 @@ export function AppHeader({ title, badge }: AppHeaderProps) {
   const name = account.displayName.split(' — ')[0].split(' - ')[0];
 
   return (
-    <div className="px-8 pt-8 pb-4 flex items-center justify-between gap-4">
-      <h1 className="text-2xl font-bold text-gray-900">{title}</h1>
+    <div
+      className={`flex justify-between gap-4 px-8 pt-8 ${
+        description ? 'items-start pb-10' : 'items-center pb-4'
+      }`}
+    >
+      <div className="min-w-0">
+        <h1
+          className={
+            description
+              ? 'text-[30px] font-semibold leading-[1.2] tracking-[-0.02em] text-gray-900'
+              : 'text-2xl font-bold text-gray-900'
+          }
+        >
+          {title}
+        </h1>
+        {description && (
+          <p className="mt-2.5 max-w-3xl text-[15px] font-normal leading-6 text-gray-500">
+            {description}
+          </p>
+        )}
+      </div>
 
-      <div className="flex items-center gap-2">
+      <div className={`flex shrink-0 items-center gap-3 ${description ? 'mt-1' : ''}`}>
         {badge}
 
-        {/* Search — visual scaffold; wiring to API search is a separate story */}
-        <div className="hidden md:flex items-center gap-1.5 px-3 py-1 rounded-full border border-gray-200 bg-white w-36">
-          <Search className="w-3 h-3 text-gray-400 shrink-0" />
-          <input
-            type="search"
-            placeholder="Search"
-            className="bg-transparent text-xs text-gray-700 placeholder-gray-400 outline-none w-full"
-          />
-        </div>
+        <NotificationCenter />
 
         {/* Account menu — the only place logout lives now */}
         <div className="relative" ref={accountRef}>

@@ -11,6 +11,7 @@ import { Form, FormItem, FormLabel, FormControl, FormMessage, useForm } from '..
 import { Input } from '../../components/Input';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '../../components/Select';
 import { apiFetch, apiErrorMessage } from '../../../lib/api';
+import { fetchLpgPrices, formatPeso, LpgPrice } from '../../../lib/pricing';
 import { formatPHMobile, normalizePhMobile, toE164PhMobile } from '../../../lib/phMobile';
 import styles from './screen.module.css';
 
@@ -33,6 +34,8 @@ interface SRRow {
     delivery_address: string;
     cylinder_size: string;
     quantity: number;
+    unit_price: number | null;
+    total_amount: number | null;
     special_instructions: string | null;
     // Assigned rider (Fleet). null until the request is dispatched (SRD dispatch step).
     rider_id: string | null;
@@ -124,6 +127,8 @@ export default function Orders() {
     const [error, setError] = useState<string | null>(null);
     const [isCreateFormVisible, setIsCreateFormVisible] = useState(false);
     const [submitting, setSubmitting] = useState(false);
+    const [catalogPrices, setCatalogPrices] = useState<LpgPrice[]>([]);
+    const [pricesLoading, setPricesLoading] = useState(true);
 
     // Customer search + inline registration (CIM: BM-024/025/029-032). The chosen
     // customer's id is the only thing sent to link the order; name/contact/address
@@ -306,6 +311,21 @@ export default function Orders() {
     }, []);
 
     useEffect(() => { loadRequests(); }, [loadRequests]);
+
+    useEffect(() => {
+        let active = true;
+        fetchLpgPrices()
+            .then(prices => {
+                if (active) setCatalogPrices(prices);
+            })
+            .catch(err => {
+                if (active) toast.error(err instanceof Error ? err.message : 'Failed to load LPG prices');
+            })
+            .finally(() => {
+                if (active) setPricesLoading(false);
+            });
+        return () => { active = false; };
+    }, []);
 
     // Full rider roster → id → "name (plate)" display map. Best-effort: if it
     // fails, dispatched rows fall back to showing the raw rider_id.
@@ -635,9 +655,14 @@ export default function Orders() {
                                                 <SelectTrigger><SelectValue placeholder="Select size..." /></SelectTrigger>
                                             </FormControl>
                                             <SelectContent>
-                                                <SelectItem value="11kg">11kg</SelectItem>
-                                                <SelectItem value="22kg">22kg</SelectItem>
-                                                <SelectItem value="50kg">50kg</SelectItem>
+                                                {catalogPrices.map(price => (
+                                                    <SelectItem key={price.id} value={price.cylinder_size}>
+                                                        {price.cylinder_size} — {formatPeso(price.unit_price)}
+                                                    </SelectItem>
+                                                ))}
+                                                {!pricesLoading && catalogPrices.length === 0 && (
+                                                    <SelectItem value="unavailable" disabled>Prices unavailable</SelectItem>
+                                                )}
                                             </SelectContent>
                                         </Select>
                                         <FormMessage />
@@ -661,7 +686,7 @@ export default function Orders() {
                                     </FormItem>
                                 </div>
                                 <div className={styles.formFooter}>
-                                    <Button type="submit" size="lg" variant="accent" disabled={submitting}>
+                                    <Button type="submit" size="lg" variant="accent" disabled={submitting || pricesLoading || catalogPrices.length === 0}>
                                         {submitting ? 'Creating…' : 'Create Request'}
                                     </Button>
                                 </div>
@@ -732,7 +757,14 @@ export default function Orders() {
                                         </td>
                                         <td className={styles.boldText}>{req.customer_name}</td>
                                         <td>{req.customer_contact}</td>
-                                        <td>{req.quantity}× {req.cylinder_size}</td>
+                                        <td>
+                                            <div>{req.quantity}× {req.cylinder_size}</div>
+                                            {req.total_amount !== null && (
+                                                <div className={styles.mutedText} style={{ marginTop: '0.25rem', fontSize: '0.75rem' }}>
+                                                    {formatPeso(Number(req.total_amount))}
+                                                </div>
+                                            )}
+                                        </td>
                                         <td className={styles.mutedText}>{formatRequestedAt(req.requested_at)}</td>
                                         <td>
                                             <Badge variant={getStatusVariant(req.status)}>{req.status}</Badge>
