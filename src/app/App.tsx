@@ -58,7 +58,7 @@ export default function App() {
     return (
       <>
         <Login onLogin={setAccount} />
-        <Toaster richColors position="top-right" />
+        <Toaster />
       </>
     );
   }
@@ -79,7 +79,7 @@ export default function App() {
         onSwitchUser={handleSwitchUser}
         onLogout={handleLogout}
       />
-      <Toaster richColors position="top-right" />
+      <Toaster className="dashboard-toaster" />
     </AccountProvider>
   );
 }

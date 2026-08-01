@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Image from 'next/image';
 import {
   Package,
@@ -7,6 +7,13 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { Header } from './Header';
+import {
+  CylinderSize,
+  fetchLpgPrices,
+  formatPeso,
+  LpgPriceMap,
+  toPriceMap,
+} from '../../lib/pricing';
 
 type CatalogCategory = 'lpg' | 'rewards';
 
@@ -16,6 +23,7 @@ interface CatalogItem {
   detail: string;
   image: string;
   category: CatalogCategory;
+  cylinderSize?: CylinderSize;
   metricLabel: 'Orders' | 'Redeemed';
   metricValue: number;
   stockUnits: number;
@@ -23,7 +31,8 @@ interface CatalogItem {
   badge: 'Excellent' | 'Good' | 'Low Activity';
 }
 
-// Branch-scoped mock catalog metrics until the real inventory/loyalty APIs are wired in.
+// Popularity and stock remain demo metrics; LPG prices are replaced from the
+// shared database catalog before these rows render.
 const CATALOG_ITEMS: CatalogItem[] = [
   {
     id: 'lpg-2-7kg',
@@ -31,6 +40,7 @@ const CATALOG_ITEMS: CatalogItem[] = [
     detail: 'PHP 350 mobile catalog price',
     image: '/catalog/2.7kg.png',
     category: 'lpg',
+    cylinderSize: '2.7kg',
     metricLabel: 'Orders',
     metricValue: 842,
     stockUnits: 68,
@@ -43,6 +53,7 @@ const CATALOG_ITEMS: CatalogItem[] = [
     detail: 'PHP 620 mobile catalog price',
     image: '/catalog/5kg.png',
     category: 'lpg',
+    cylinderSize: '5kg',
     metricLabel: 'Orders',
     metricValue: 936,
     stockUnits: 52,
@@ -55,6 +66,7 @@ const CATALOG_ITEMS: CatalogItem[] = [
     detail: 'PHP 1,000 mobile catalog price',
     image: '/catalog/11kg.png',
     category: 'lpg',
+    cylinderSize: '11kg',
     metricLabel: 'Orders',
     metricValue: 1204,
     stockUnits: 44,
@@ -67,6 +79,7 @@ const CATALOG_ITEMS: CatalogItem[] = [
     detail: 'PHP 1,800 mobile catalog price',
     image: '/catalog/22kg.png',
     category: 'lpg',
+    cylinderSize: '22kg',
     metricLabel: 'Orders',
     metricValue: 527,
     stockUnits: 31,
@@ -79,6 +92,7 @@ const CATALOG_ITEMS: CatalogItem[] = [
     detail: 'PHP 3,500 mobile catalog price',
     image: '/catalog/50kg.png',
     category: 'lpg',
+    cylinderSize: '50kg',
     metricLabel: 'Orders',
     metricValue: 184,
     stockUnits: 18,
@@ -315,14 +329,40 @@ function CatalogList({
 
 export function SupplyChain() {
   const [activeCategory, setActiveCategory] = useState<CatalogCategory>('lpg');
+  const [priceMap, setPriceMap] = useState<LpgPriceMap>({});
 
-  const winningProduct = useMemo(
-    () => CATALOG_ITEMS.reduce((winner, item) => (item.metricValue > winner.metricValue ? item : winner)),
-    [],
+  useEffect(() => {
+    let active = true;
+    fetchLpgPrices()
+      .then((prices) => {
+        if (active) setPriceMap(toPriceMap(prices));
+      })
+      .catch(() => {
+        // This read-only analytics screen keeps its other metrics available if
+        // pricing is temporarily unreachable; missing prices render as unavailable.
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const catalogItems = useMemo(
+    () =>
+      CATALOG_ITEMS.map((item) => {
+        if (!item.cylinderSize) return item;
+        const price = priceMap[item.cylinderSize];
+        return { ...item, detail: price === undefined ? 'Price unavailable' : `${formatPeso(price)} retail price` };
+      }),
+    [priceMap],
   );
 
-  const visibleItems = CATALOG_ITEMS.filter((item) => item.category === activeCategory);
-  const totalActivity = CATALOG_ITEMS.reduce((sum, item) => sum + item.metricValue, 0);
+  const winningProduct = useMemo(
+    () => catalogItems.reduce((winner, item) => (item.metricValue > winner.metricValue ? item : winner)),
+    [catalogItems],
+  );
+
+  const visibleItems = catalogItems.filter((item) => item.category === activeCategory);
+  const totalActivity = catalogItems.reduce((sum, item) => sum + item.metricValue, 0);
 
   return (
     <div className="flex-1 overflow-y-auto bg-gray-50">
@@ -334,7 +374,7 @@ export function SupplyChain() {
         <div className="mb-8 grid grid-cols-1 gap-4 lg:grid-cols-3">
           <StatCard
             title="Active Catalog Items"
-            value={formatNumber(CATALOG_ITEMS.length)}
+            value={formatNumber(catalogItems.length)}
             helper="LPG variants and household rewards"
             icon={Package}
           />

@@ -9,7 +9,6 @@ import { OperationalExpenses } from './components/OperationalExpenses';
 import { CSATSatisfaction } from './components/CSATSatisfaction';
 import { LoyaltyProgram } from './components/LoyaltyProgram';
 import { SupplyChain } from './components/SupplyChain';
-import { BranchPricing } from './components/BranchPricing';
 import { ReportGeneration } from './components/ReportGeneration';
 import { FleetOverview } from './components/FleetOverview';
 import { UserManagement } from './components/UserManagement';
@@ -57,7 +56,6 @@ export function BranchOwnerApp({ branches }: BranchOwnerAppProps) {
           {activeScreen === 'csat' && <CSATSatisfaction />}
           {activeScreen === 'loyalty' && <LoyaltyProgram />}
           {activeScreen === 'supply-chain' && <SupplyChain />}
-          {activeScreen === 'branch-pricing' && <BranchPricing />}
           {activeScreen === 'reports' && <ReportGeneration />}
           {activeScreen === 'fleet-overview' && <FleetOverview />}
           {activeScreen === 'user-management' && <UserManagement />}
