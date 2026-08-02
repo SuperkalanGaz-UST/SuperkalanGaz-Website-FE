@@ -9,9 +9,9 @@ import { NotificationCenter } from './NotificationCenter';
  * Unified page header for all three web personas, in the Branch Owner reference
  * format (DESIGN.md): a card-less bar over the gray canvas — bold title on the
  * left; the persona context badge, notification control, and account menu on the
- * right. The account menu is where logout lives (behind a confirm modal); the
- * sidebar no longer carries it. The profile always shows the REAL session user
- * from AccountContext, never a hardcoded persona.
+ * right. The account menu provides a confirmed logout path in addition to the
+ * shared sidebar shortcut. The profile always shows the REAL session user from
+ * AccountContext, never a hardcoded persona.
  */
 interface AppHeaderProps {
   title: string;
@@ -70,7 +70,7 @@ export function AppHeader({ title, description, badge }: AppHeaderProps) {
 
         <NotificationCenter />
 
-        {/* Account menu — the only place logout lives now */}
+        {/* Account menu — keeps the confirmed logout path available in the header. */}
         <div className="relative" ref={accountRef}>
           <button
             type="button"

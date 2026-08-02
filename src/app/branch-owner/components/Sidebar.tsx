@@ -18,10 +18,9 @@ import {
 import { AppSidebar, SidebarNavEntry } from '../../components/AppSidebar';
 
 /**
- * Branch Owner navigation: branch-scoped configuration and analytics
- * (loyalty catalog, thresholds, BM accounts) — no daily order processing,
- * which is Branch Manager territory (AGENTS.md §7). Every leaf id maps to
- * an existing screen in BranchOwnerApp.
+ * Branch Owner navigation: branch-scoped configuration and analytics only.
+ * The shared shell supplies the same expanded/minimized presentation used by
+ * Franchise Administrator and Branch Manager without changing this RBAC list.
  */
 const NAV_ENTRIES: SidebarNavEntry[] = [
   { icon: LayoutDashboard, label: 'Dashboard', id: 'dashboard' },
