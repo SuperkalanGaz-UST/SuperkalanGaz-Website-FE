@@ -33,6 +33,7 @@ interface RedemptionRow {
     approved_at: string | null;
     rejected_reason: string | null;
     fulfilled_at: string | null;
+    redemption_code: string | null;
     created_at: string;
     updated_at: string;
     // Enrichments appended by GET /loyalty/redemptions.
@@ -41,6 +42,39 @@ interface RedemptionRow {
     points_balance: number | null;
     completed_cycles: number | null;
     current_cycle_count: number | null;
+}
+
+/** One entry of the household points ledger (GET /loyalty/redemptions/:id/ledger). */
+interface HouseholdTxnRow {
+    id: string;
+    type: string;
+    points_delta: number;
+    source_service_request_id: string | null;
+    redemption_id: string | null;
+    earned_at: string | null;
+    expires_at: string | null;
+    created_at: string;
+}
+
+/** One counted purchase in the commercial 30+1 ledger. */
+interface CommercialPurchaseRow {
+    id: string;
+    service_request_id: string;
+    cycle_number: number;
+    counted_at: string;
+    created_at: string;
+}
+
+/** The customer loyalty ledger shown on redemption review (BM-014). Only the array
+ * for the redemption's own track is populated. */
+interface LedgerView {
+    track: string;
+    customer_name: string | null;
+    points_balance: number | null;
+    completed_cycles: number | null;
+    current_cycle_count: number | null;
+    household_transactions: HouseholdTxnRow[];
+    commercial_purchases: CommercialPurchaseRow[];
 }
 
 /** Active household reward from GET /loyalty/catalog. Used to build a household
@@ -141,6 +175,15 @@ export default function Rewards() {
     const [customerSearchLoading, setCustomerSearchLoading] = useState(false);
     const [creating, setCreating] = useState(false);
 
+    // Dual Authorization branch setting (BM-013). null while loading.
+    const [dualAuth, setDualAuth] = useState<boolean | null>(null);
+    const [togglingDualAuth, setTogglingDualAuth] = useState(false);
+
+    // Ledger review panel (BM-014): ledgerId = which row's ledger is open.
+    const [ledgerId, setLedgerId] = useState<string | null>(null);
+    const [ledger, setLedger] = useState<LedgerView | null>(null);
+    const [ledgerLoading, setLedgerLoading] = useState(false);
+
     const isCommercial = track === COMMERCIAL;
 
     const loadRedemptions = useCallback(async (t: Track, status: string) => {
@@ -175,6 +218,68 @@ export default function Rewards() {
     }, []);
 
     useEffect(() => { loadCatalog(); }, [loadCatalog]);
+
+    // Branch Dual Authorization setting (BM-013). Loaded once.
+    const loadSettings = useCallback(async () => {
+        try {
+            const res = await apiFetch('/loyalty/settings');
+            const data = await res.json();
+            if (!res.ok) return;
+            setDualAuth(Boolean(data.settings.dual_auth));
+        } catch {
+            // Non-fatal: the toggle simply stays in a loading state.
+        }
+    }, []);
+
+    useEffect(() => { loadSettings(); }, [loadSettings]);
+
+    const handleToggleDualAuth = async (next: boolean) => {
+        setTogglingDualAuth(true);
+        try {
+            const res = await apiFetch('/loyalty/settings', {
+                method: 'PATCH',
+                body: JSON.stringify({ dualAuth: next }),
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                toast.error(apiErrorMessage(data, 'Failed to update setting'));
+                return;
+            }
+            setDualAuth(Boolean(data.settings.dual_auth));
+            toast.success(
+                next
+                    ? 'Dual authorization ON — requests require your approval.'
+                    : 'Dual authorization OFF — requests auto-issue a code.',
+            );
+        } catch (err) {
+            toast.error(err instanceof Error ? err.message : 'Failed to update setting');
+        } finally {
+            setTogglingDualAuth(false);
+        }
+    };
+
+    // Open (or close) the ledger review panel for a row (BM-014).
+    const toggleLedger = async (id: string) => {
+        if (ledgerId === id) { setLedgerId(null); setLedger(null); return; }
+        setLedgerId(id);
+        setLedger(null);
+        setLedgerLoading(true);
+        try {
+            const res = await apiFetch(`/loyalty/redemptions/${id}/ledger`);
+            const data = await res.json();
+            if (!res.ok) {
+                toast.error(apiErrorMessage(data, 'Failed to load ledger'));
+                setLedgerId(null);
+                return;
+            }
+            setLedger(data.ledger as LedgerView);
+        } catch (err) {
+            toast.error(err instanceof Error ? err.message : 'Failed to load ledger');
+            setLedgerId(null);
+        } finally {
+            setLedgerLoading(false);
+        }
+    };
 
     // Debounced customer search (reuses the CIM endpoint / 2-char minimum, exactly
     // as the Orders intake does). Never runs while a customer is already locked in.
@@ -240,7 +345,14 @@ export default function Rewards() {
                 toast.error(apiErrorMessage(data, 'Failed to create redemption request'));
                 return;
             }
-            toast.success('Redemption request logged.');
+            // When Dual Auth is OFF the request comes back already approved with a
+            // code (auto-issued) instead of pending — reflect that in the toast.
+            const created = data.redemption as RedemptionRow;
+            if (created.status === 'approved' && created.redemption_code) {
+                toast.success(`Auto-issued — code ${created.redemption_code}`);
+            } else {
+                toast.success('Redemption request logged.');
+            }
             resetCreate();
             await loadRedemptions(track, activeTab);
         } catch (err) {
@@ -272,7 +384,11 @@ export default function Rewards() {
                 toast.error(apiErrorMessage(data, 'Failed to approve redemption'));
                 return;
             }
-            toast.success(isCommercial ? 'Free cylinder approved.' : 'Redemption approved — points debited.');
+            const approved = data.redemption as RedemptionRow;
+            const codeMsg = approved.redemption_code ? ` — code ${approved.redemption_code}` : '';
+            toast.success((isCommercial ? 'Free cylinder approved' : 'Redemption approved') + codeMsg);
+            // Close the ledger panel for this row if it was open; state changed.
+            if (ledgerId === id) { setLedgerId(null); setLedger(null); }
             await Promise.all([loadRedemptions(track, activeTab), loadCatalog()]);
         } catch (err) {
             toast.error(err instanceof Error ? err.message : 'Failed to approve redemption');
@@ -347,15 +463,37 @@ export default function Rewards() {
     return (
         <div>
             {/* Track switcher — the two loyalty mechanics are independent views. */}
-            <div className={styles.trackSwitcher}>
-                <Tabs value={track} onValueChange={(v: string) => switchTrack(v as Track)}>
-                    <TabsList>
-                        {TRACK_TABS.map((t) => (
-                            <TabsTrigger key={t.value} value={t.value}>{t.label}</TabsTrigger>
-                        ))}
-                    </TabsList>
-                </Tabs>
+            <div className={styles.headerRow}>
+                <div className={styles.trackSwitcher}>
+                    <Tabs value={track} onValueChange={(v: string) => switchTrack(v as Track)}>
+                        <TabsList>
+                            {TRACK_TABS.map((t) => (
+                                <TabsTrigger key={t.value} value={t.value}>{t.label}</TabsTrigger>
+                            ))}
+                        </TabsList>
+                    </Tabs>
+                </div>
+
+                {/* Dual Authorization branch setting (BM-013). */}
+                <label className={styles.dualAuthToggle} title="When off, redemption requests auto-issue a code and bypass this approval queue.">
+                    <span className={styles.mutedText}>Dual authorization</span>
+                    <input
+                        type="checkbox"
+                        checked={dualAuth === true}
+                        disabled={dualAuth === null || togglingDualAuth}
+                        onChange={(e) => handleToggleDualAuth(e.target.checked)}
+                    />
+                    <span className={styles.boldText}>{dualAuth === null ? '…' : dualAuth ? 'On' : 'Off'}</span>
+                </label>
             </div>
+
+            {/* When dual auth is OFF, approvals are delegated — the queue stays empty. */}
+            {dualAuth === false && (
+                <div className={styles.dualAuthBanner}>
+                    Dual authorization is <strong>off</strong> — new requests are auto-approved and a code is issued
+                    immediately, so they never appear in this queue.
+                </div>
+            )}
 
             {/* New redemption request. */}
             <div className={styles.card}>
@@ -528,12 +666,24 @@ export default function Rewards() {
                                             <td className={styles.mutedText}>{formatDateTime(r.requested_at)}</td>
                                             <td>
                                                 <Badge variant={getStatusVariant(r.status)}>{r.status}</Badge>
+                                                {r.redemption_code && (
+                                                    <div className={styles.codeBadge} title="System-issued redemption code">{r.redemption_code}</div>
+                                                )}
                                                 {r.status === 'rejected' && r.rejected_reason && (
                                                     <div className={styles.mutedText} title={r.rejected_reason}>{r.rejected_reason}</div>
                                                 )}
                                             </td>
                                             <td className={styles.actionsCell}>
                                                 <div className={styles.actionButtons}>
+                                                    {/* Review the customer's ledger before deciding (BM-014). */}
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        onClick={() => toggleLedger(r.id)}
+                                                        disabled={ledgerLoading && ledgerId === r.id}
+                                                    >
+                                                        {ledgerId === r.id ? 'Hide' : 'Review'}
+                                                    </Button>
                                                     {r.status === 'pending' && (
                                                         <>
                                                             <Button
@@ -554,9 +704,6 @@ export default function Rewards() {
                                                         <Button variant="secondary" size="sm" onClick={() => handleFulfill(r.id)} disabled={fulfillingId === r.id}>
                                                             {fulfillingId === r.id ? 'Saving…' : 'Mark Fulfilled'}
                                                         </Button>
-                                                    )}
-                                                    {(r.status === 'rejected' || r.status === 'fulfilled' || r.status === 'cancelled') && (
-                                                        <span className={styles.mutedText}>—</span>
                                                     )}
                                                 </div>
                                             </td>
@@ -582,6 +729,66 @@ export default function Rewards() {
                                                             </Button>
                                                         </div>
                                                     </div>
+                                                </td>
+                                            </tr>
+                                        )}
+                                        {ledgerId === r.id && (
+                                            <tr className={styles.editorRow}>
+                                                <td colSpan={7}>
+                                                    {ledgerLoading || !ledger ? (
+                                                        <div className={styles.ledgerPanel}>Loading ledger…</div>
+                                                    ) : ledger.track === COMMERCIAL ? (
+                                                        <div className={styles.ledgerPanel}>
+                                                            <div className={styles.ledgerHead}>
+                                                                <span className={styles.boldText}>{ledger.customer_name ?? '—'}</span>
+                                                                <span className={styles.mutedText}>
+                                                                    Commercial 30+1 · {ledger.completed_cycles ?? 0} free cylinder(s) earned · cycle {ledger.current_cycle_count ?? 0}/30
+                                                                </span>
+                                                            </div>
+                                                            {ledger.commercial_purchases.length === 0 ? (
+                                                                <div className={styles.mutedText}>No counted purchases yet.</div>
+                                                            ) : (
+                                                                <table className={styles.ledgerTable}>
+                                                                    <thead><tr><th>Counted</th><th>Cycle #</th><th>Service Request</th></tr></thead>
+                                                                    <tbody>
+                                                                        {ledger.commercial_purchases.map((p) => (
+                                                                            <tr key={p.id}>
+                                                                                <td className={styles.mutedText}>{formatDateTime(p.counted_at)}</td>
+                                                                                <td className={styles.monoText}>{p.cycle_number}</td>
+                                                                                <td className={styles.monoText}>{p.service_request_id.slice(0, 8)}</td>
+                                                                            </tr>
+                                                                        ))}
+                                                                    </tbody>
+                                                                </table>
+                                                            )}
+                                                        </div>
+                                                    ) : (
+                                                        <div className={styles.ledgerPanel}>
+                                                            <div className={styles.ledgerHead}>
+                                                                <span className={styles.boldText}>{ledger.customer_name ?? '—'}</span>
+                                                                <span className={styles.mutedText}>Household · balance {ledger.points_balance ?? 0} pts</span>
+                                                            </div>
+                                                            {ledger.household_transactions.length === 0 ? (
+                                                                <div className={styles.mutedText}>No points transactions yet.</div>
+                                                            ) : (
+                                                                <table className={styles.ledgerTable}>
+                                                                    <thead><tr><th>Date</th><th>Type</th><th>Points</th><th>Expires</th></tr></thead>
+                                                                    <tbody>
+                                                                        {ledger.household_transactions.map((t) => (
+                                                                            <tr key={t.id}>
+                                                                                <td className={styles.mutedText}>{formatDateTime(t.created_at)}</td>
+                                                                                <td>{t.type}</td>
+                                                                                <td className={styles.monoText} style={{ color: t.points_delta < 0 ? 'var(--error, #ef4444)' : undefined }}>
+                                                                                    {t.points_delta > 0 ? `+${t.points_delta}` : t.points_delta}
+                                                                                </td>
+                                                                                <td className={styles.mutedText}>{formatDateTime(t.expires_at)}</td>
+                                                                            </tr>
+                                                                        ))}
+                                                                    </tbody>
+                                                                </table>
+                                                            )}
+                                                        </div>
+                                                    )}
                                                 </td>
                                             </tr>
                                         )}
