@@ -12,11 +12,12 @@ import { formatPHMobile } from '../../../lib/phMobile';
 import styles from './screen.module.css';
 
 /**
- * A loyalty redemption as returned by the LPM API (household track only). Snake_case
- * like every other CRM response; branch scope is token-derived server-side so no
- * branch_id is ever sent from here (AGENTS.md §5). The list endpoint enriches each
- * row with customer_name, catalog_item_name, and the household's current
- * points_balance for the queue — these are derived server-side, not columns.
+ * A loyalty redemption as returned by the LPM API. Snake_case like every other CRM
+ * response; branch scope is token-derived server-side so no branch_id is ever sent
+ * from here (AGENTS.md §5). The list endpoint enriches each row per track:
+ * household rows carry catalog_item_name + points_balance; commercial rows carry
+ * completed_cycles + current_cycle_count. Fields not relevant to the row's track
+ * come back null.
  */
 interface RedemptionRow {
     id: string;
@@ -38,9 +39,12 @@ interface RedemptionRow {
     customer_name: string | null;
     catalog_item_name: string | null;
     points_balance: number | null;
+    completed_cycles: number | null;
+    current_cycle_count: number | null;
 }
 
-/** Active household reward from GET /loyalty/catalog. Used to build a request. */
+/** Active household reward from GET /loyalty/catalog. Used to build a household
+ * request (the commercial track has no catalog — the reward is a free cylinder). */
 interface CatalogItemRow {
     id: string;
     branch_id: string;
@@ -62,6 +66,17 @@ interface CustomerRow {
     delivery_address: string;
     created_at: string;
 }
+
+/** The two loyalty tracks, matching the API's ?track values. A view shows exactly
+ * one at a time — the two mechanics (points vs 30+1 cycles) never mix. */
+const HOUSEHOLD = 'household_points';
+const COMMERCIAL = 'commercial_30plus1';
+type Track = typeof HOUSEHOLD | typeof COMMERCIAL;
+
+const TRACK_TABS: { value: Track; label: string }[] = [
+    { value: HOUSEHOLD, label: 'Household Points' },
+    { value: COMMERCIAL, label: 'Commercial 30+1' },
+];
 
 /** Queue filter tabs → the API's ?status values. 'all' drops the status filter. */
 const STATUS_TABS: { value: string; label: string }[] = [
@@ -96,6 +111,7 @@ export default function Rewards() {
     const [mounted, setMounted] = useState(false);
     useEffect(() => { setMounted(true); }, []);
 
+    const [track, setTrack] = useState<Track>(HOUSEHOLD);
     const [activeTab, setActiveTab] = useState('pending');
     const [redemptions, setRedemptions] = useState<RedemptionRow[]>([]);
     const [loading, setLoading] = useState(true);
@@ -112,8 +128,10 @@ export default function Rewards() {
     const [rejectError, setRejectError] = useState<string | null>(null);
     const [rejectingId, setRejectingId] = useState<string | null>(null);
 
-    // New redemption request (BM logs a household request into the queue). Collapsed
-    // by default; customer is chosen via the same CIM search the Orders screen uses.
+    // New redemption request (BM logs a request into the queue). Collapsed by
+    // default; customer is chosen via the same CIM search the Orders screen uses.
+    // The household form also needs a reward; the commercial form does not (the
+    // reward is always one free cylinder).
     const [showCreate, setShowCreate] = useState(false);
     const [catalog, setCatalog] = useState<CatalogItemRow[]>([]);
     const [selectedItemId, setSelectedItemId] = useState('');
@@ -123,11 +141,13 @@ export default function Rewards() {
     const [customerSearchLoading, setCustomerSearchLoading] = useState(false);
     const [creating, setCreating] = useState(false);
 
-    const loadRedemptions = useCallback(async (status: string) => {
+    const isCommercial = track === COMMERCIAL;
+
+    const loadRedemptions = useCallback(async (t: Track, status: string) => {
         setLoading(true);
         setError(null);
         try {
-            const res = await apiFetch(`/loyalty/redemptions?status=${encodeURIComponent(status)}`);
+            const res = await apiFetch(`/loyalty/redemptions?track=${t}&status=${encodeURIComponent(status)}`);
             const data = await res.json();
             if (!res.ok) throw new Error(apiErrorMessage(data, 'Failed to load redemptions'));
             setRedemptions(data.redemptions as RedemptionRow[]);
@@ -140,9 +160,9 @@ export default function Rewards() {
         }
     }, []);
 
-    useEffect(() => { loadRedemptions(activeTab); }, [activeTab, loadRedemptions]);
+    useEffect(() => { loadRedemptions(track, activeTab); }, [track, activeTab, loadRedemptions]);
 
-    // Active reward catalog — loaded once for the create form and to render names.
+    // Active household reward catalog — loaded once for the household create form.
     const loadCatalog = useCallback(async () => {
         try {
             const res = await apiFetch('/loyalty/catalog');
@@ -191,25 +211,38 @@ export default function Rewards() {
         setCustomerResults(null);
     };
 
+    // Switching track resets the queue filter to the actionable one and clears any
+    // open create/reject panels — the two tracks are independent views.
+    const switchTrack = (t: Track) => {
+        if (t === track) return;
+        setTrack(t);
+        setActiveTab('pending');
+        setRejectId(null);
+        resetCreate();
+    };
+
     const handleCreate = async () => {
         if (!selectedCustomer) { toast.error('Select a customer first'); return; }
-        if (!selectedItemId) { toast.error('Select a reward'); return; }
+        if (!isCommercial && !selectedItemId) { toast.error('Select a reward'); return; }
         setCreating(true);
         try {
-            const res = await apiFetch('/loyalty/redemptions', {
-                method: 'POST',
-                body: JSON.stringify({ customerId: selectedCustomer.id, catalogItemId: selectedItemId }),
-            });
+            // Household: POST /loyalty/redemptions { customerId, catalogItemId }.
+            // Commercial: POST /loyalty/commercial/redemptions { customerId } (no reward).
+            const path = isCommercial ? '/loyalty/commercial/redemptions' : '/loyalty/redemptions';
+            const body = isCommercial
+                ? { customerId: selectedCustomer.id }
+                : { customerId: selectedCustomer.id, catalogItemId: selectedItemId };
+            const res = await apiFetch(path, { method: 'POST', body: JSON.stringify(body) });
             const data = await res.json();
             if (!res.ok) {
-                // 400 (no account / inactive / out of stock) and 404 (unknown item)
-                // surface the API's message as-is.
+                // 400 (no account / inactive / out of stock / no completed cycle) and
+                // 404 (unknown item) surface the API's message as-is.
                 toast.error(apiErrorMessage(data, 'Failed to create redemption request'));
                 return;
             }
             toast.success('Redemption request logged.');
             resetCreate();
-            await loadRedemptions(activeTab);
+            await loadRedemptions(track, activeTab);
         } catch (err) {
             toast.error(err instanceof Error ? err.message : 'Failed to create redemption request');
         } finally {
@@ -220,22 +253,27 @@ export default function Rewards() {
     const handleApprove = async (id: string) => {
         setApprovingId(id);
         try {
-            const res = await apiFetch(`/loyalty/redemptions/${id}/approve`, { method: 'POST' });
+            // Track-specific business action: household debits points + stock; commercial
+            // decrements a completed cycle. Distinct endpoints, same 409 semantics.
+            const path = isCommercial
+                ? `/loyalty/commercial/redemptions/${id}/approve`
+                : `/loyalty/redemptions/${id}/approve`;
+            const res = await apiFetch(path, { method: 'POST' });
             const data = await res.json();
             if (!res.ok) {
-                // 409: no longer pending, insufficient points, or out of stock — the
-                // API's message says which. Reconcile the queue either way.
+                // 409: no longer pending, insufficient points/stock (household), or no
+                // completed cycle (commercial) — the API's message says which.
                 if (res.status === 409) {
                     toast.error(apiErrorMessage(data, 'Could not approve this redemption'));
-                    await loadRedemptions(activeTab);
+                    await loadRedemptions(track, activeTab);
                     return;
                 }
                 if (res.status === 404) { toast.error('Redemption not found'); return; }
                 toast.error(apiErrorMessage(data, 'Failed to approve redemption'));
                 return;
             }
-            toast.success('Redemption approved — points debited.');
-            await Promise.all([loadRedemptions(activeTab), loadCatalog()]);
+            toast.success(isCommercial ? 'Free cylinder approved.' : 'Redemption approved — points debited.');
+            await Promise.all([loadRedemptions(track, activeTab), loadCatalog()]);
         } catch (err) {
             toast.error(err instanceof Error ? err.message : 'Failed to approve redemption');
         } finally {
@@ -249,6 +287,7 @@ export default function Rewards() {
         setRejectError(null);
     };
 
+    // Reject + fulfill are track-agnostic on the API (shared endpoints).
     const handleReject = async (id: string) => {
         if (!rejectReason.trim()) { setRejectError('A reason is required'); return; }
         setRejectingId(id);
@@ -262,7 +301,7 @@ export default function Rewards() {
                 if (res.status === 409) {
                     toast.error(apiErrorMessage(data, 'This redemption is no longer pending'));
                     setRejectId(null);
-                    await loadRedemptions(activeTab);
+                    await loadRedemptions(track, activeTab);
                     return;
                 }
                 toast.error(apiErrorMessage(data, 'Failed to reject redemption'));
@@ -270,7 +309,7 @@ export default function Rewards() {
             }
             toast.success('Redemption rejected.');
             setRejectId(null);
-            await loadRedemptions(activeTab);
+            await loadRedemptions(track, activeTab);
         } catch (err) {
             toast.error(err instanceof Error ? err.message : 'Failed to reject redemption');
         } finally {
@@ -286,7 +325,7 @@ export default function Rewards() {
             if (!res.ok) {
                 if (res.status === 409) {
                     toast.error(apiErrorMessage(data, 'This redemption is not approved'));
-                    await loadRedemptions(activeTab);
+                    await loadRedemptions(track, activeTab);
                     return;
                 }
                 if (res.status === 404) { toast.error('Redemption not found'); return; }
@@ -294,7 +333,7 @@ export default function Rewards() {
                 return;
             }
             toast.success('Reward marked as handed over.');
-            await loadRedemptions(activeTab);
+            await loadRedemptions(track, activeTab);
         } catch (err) {
             toast.error(err instanceof Error ? err.message : 'Failed to mark fulfilled');
         } finally {
@@ -307,10 +346,23 @@ export default function Rewards() {
 
     return (
         <div>
-            {/* New redemption request (BM logs a household request into the queue). */}
+            {/* Track switcher — the two loyalty mechanics are independent views. */}
+            <div className={styles.trackSwitcher}>
+                <Tabs value={track} onValueChange={(v: string) => switchTrack(v as Track)}>
+                    <TabsList>
+                        {TRACK_TABS.map((t) => (
+                            <TabsTrigger key={t.value} value={t.value}>{t.label}</TabsTrigger>
+                        ))}
+                    </TabsList>
+                </Tabs>
+            </div>
+
+            {/* New redemption request. */}
             <div className={styles.card}>
                 <div className={styles.cardHeaderFlex}>
-                    <div className={styles.cardTitle}>Reward Redemptions</div>
+                    <div className={styles.cardTitle}>
+                        {isCommercial ? 'Commercial Free-Cylinder Redemptions' : 'Household Reward Redemptions'}
+                    </div>
                     <Button
                         variant={showCreate ? 'outline' : 'accent'}
                         size="sm"
@@ -367,26 +419,40 @@ export default function Rewards() {
                                 )}
                             </div>
 
-                            {/* Reward picker (active catalog) */}
-                            <div>
-                                <label className={styles.fieldLabel}>Reward</label>
-                                <Select value={selectedItemId} onValueChange={setSelectedItemId}>
-                                    <SelectTrigger>
-                                        <SelectValue placeholder="Select a reward…" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {catalog.map((c) => (
-                                            <SelectItem key={c.id} value={c.id}>
-                                                {c.name} — {c.points_cost} pts{c.stock_qty <= 0 ? ' (out of stock)' : ''}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                            </div>
+                            {/* Reward picker — household only (commercial reward is a free cylinder). */}
+                            {isCommercial ? (
+                                <div>
+                                    <label className={styles.fieldLabel}>Reward</label>
+                                    <div className={styles.freeCylinderNote}>
+                                        <Gift size={16} /> Free cylinder (30+1) — requires a completed cycle.
+                                    </div>
+                                </div>
+                            ) : (
+                                <div>
+                                    <label className={styles.fieldLabel}>Reward</label>
+                                    <Select value={selectedItemId} onValueChange={setSelectedItemId}>
+                                        <SelectTrigger>
+                                            <SelectValue placeholder="Select a reward…" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {catalog.map((c) => (
+                                                <SelectItem key={c.id} value={c.id}>
+                                                    {c.name} — {c.points_cost} pts{c.stock_qty <= 0 ? ' (out of stock)' : ''}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                            )}
                         </div>
 
                         <div className={styles.createActions}>
-                            <Button variant="accent" size="sm" onClick={handleCreate} disabled={creating || !selectedCustomer || !selectedItemId}>
+                            <Button
+                                variant="accent"
+                                size="sm"
+                                onClick={handleCreate}
+                                disabled={creating || !selectedCustomer || (!isCommercial && !selectedItemId)}
+                            >
                                 {creating ? 'Logging…' : 'Log Request'}
                             </Button>
                         </div>
@@ -404,7 +470,7 @@ export default function Rewards() {
                             ))}
                         </TabsList>
                     </Tabs>
-                    <Button variant="ghost" size="sm" onClick={() => loadRedemptions(activeTab)} disabled={loading}>
+                    <Button variant="ghost" size="sm" onClick={() => loadRedemptions(track, activeTab)} disabled={loading}>
                         <RefreshCw size={16} /> Refresh
                     </Button>
                 </div>
@@ -415,8 +481,8 @@ export default function Rewards() {
                             <tr>
                                 <th>Customer</th>
                                 <th>Reward</th>
-                                <th>Cost</th>
-                                <th>Balance</th>
+                                <th>{isCommercial ? 'Free Cylinders' : 'Cost'}</th>
+                                <th>{isCommercial ? 'Cycle Progress' : 'Balance'}</th>
                                 <th>Requested</th>
                                 <th>Status</th>
                                 <th className={styles.actionsCol}>Actions</th>
@@ -435,18 +501,30 @@ export default function Rewards() {
                                 </td></tr>
                             )}
                             {!loading && !error && redemptions.map((r) => {
-                                const reward = r.catalog_item_name ?? r.reward_description ?? '—';
-                                const cost = r.points_spent ?? 0;
-                                const balance = r.points_balance;
-                                const cannotAfford = balance != null && balance < cost;
+                                const reward = isCommercial
+                                    ? (r.reward_description ?? 'Free cylinder (30+1)')
+                                    : (r.catalog_item_name ?? r.reward_description ?? '—');
+                                // Household: can't afford if balance < cost. Commercial: can't
+                                // redeem without a completed cycle.
+                                const cannotAct = isCommercial
+                                    ? (r.completed_cycles != null && r.completed_cycles < 1)
+                                    : (r.points_balance != null && r.points_balance < (r.points_spent ?? 0));
                                 const isRejecting = rejectId === r.id;
                                 return (
                                     <React.Fragment key={r.id}>
                                         <tr>
                                             <td className={styles.boldText}>{r.customer_name ?? '—'}</td>
                                             <td>{reward}</td>
-                                            <td className={styles.monoText}>{cost} pts</td>
-                                            <td className={styles.monoText}>{balance == null ? '—' : `${balance} pts`}</td>
+                                            <td className={styles.monoText}>
+                                                {isCommercial
+                                                    ? (r.completed_cycles == null ? '—' : `${r.completed_cycles}`)
+                                                    : `${r.points_spent ?? 0} pts`}
+                                            </td>
+                                            <td className={styles.monoText}>
+                                                {isCommercial
+                                                    ? (r.current_cycle_count == null ? '—' : `${r.current_cycle_count}/30`)
+                                                    : (r.points_balance == null ? '—' : `${r.points_balance} pts`)}
+                                            </td>
                                             <td className={styles.mutedText}>{formatDateTime(r.requested_at)}</td>
                                             <td>
                                                 <Badge variant={getStatusVariant(r.status)}>{r.status}</Badge>
@@ -462,8 +540,8 @@ export default function Rewards() {
                                                                 variant="accent"
                                                                 size="sm"
                                                                 onClick={() => handleApprove(r.id)}
-                                                                disabled={approvingId === r.id || isRejecting || cannotAfford}
-                                                                title={cannotAfford ? 'Insufficient points balance' : undefined}
+                                                                disabled={approvingId === r.id || isRejecting || cannotAct}
+                                                                title={cannotAct ? (isCommercial ? 'No completed cycle to redeem' : 'Insufficient points balance') : undefined}
                                                             >
                                                                 {approvingId === r.id ? 'Approving…' : 'Approve'}
                                                             </Button>
