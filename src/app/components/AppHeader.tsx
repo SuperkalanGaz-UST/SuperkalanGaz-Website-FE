@@ -25,7 +25,6 @@ export function AppHeader({ title, description, badge }: AppHeaderProps) {
   const logout = useLogout();
 
   const [showAccount, setShowAccount] = useState(false);
-  const [showLogoutModal, setShowLogoutModal] = useState(false);
   const accountRef = useRef<HTMLDivElement>(null);
 
   // Close the account dropdown on any outside click.
@@ -90,7 +89,7 @@ export function AppHeader({ title, description, badge }: AppHeaderProps) {
                 type="button"
                 onClick={() => {
                   setShowAccount(false);
-                  setShowLogoutModal(true);
+                  logout();
                 }}
                 className="w-full px-4 py-2 text-sm text-left text-red-500 hover:bg-red-50 flex items-center gap-2 transition-colors"
               >
@@ -102,33 +101,6 @@ export function AppHeader({ title, description, badge }: AppHeaderProps) {
         </div>
       </div>
 
-      {/* Logout confirmation — ends the real Supabase session, back to login */}
-      {showLogoutModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[70] p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-[360px] p-6">
-            <h2 className="text-base font-semibold text-gray-900">Log out?</h2>
-            <p className="text-sm text-gray-500 mt-1">
-              You&apos;ll need to sign in again to access the dashboard.
-            </p>
-            <div className="flex justify-end gap-2 mt-5">
-              <button
-                type="button"
-                onClick={() => setShowLogoutModal(false)}
-                className="px-4 py-2 text-sm font-medium text-gray-700 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={logout}
-                className="px-4 py-2 text-sm font-medium text-white bg-red-500 hover:bg-red-600 rounded-lg transition-colors"
-              >
-                Log out
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

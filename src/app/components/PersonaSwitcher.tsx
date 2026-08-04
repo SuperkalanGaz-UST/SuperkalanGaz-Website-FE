@@ -36,7 +36,7 @@ export function PersonaSwitcher({ account, switching, onSwitchUser, onLogout }: 
   }, []);
 
   return (
-    <div ref={ref} className="fixed bottom-5 right-5 z-[9999] flex flex-col items-end gap-2 font-sans">
+    <div ref={ref} className="fixed bottom-5 right-5 z-40 flex flex-col items-end gap-2 font-sans">
       {open && (
         <div className="bg-white rounded-xl shadow-2xl border border-gray-200 overflow-hidden w-72">
           <div className="px-4 py-3 border-b border-gray-100">
@@ -70,7 +70,10 @@ export function PersonaSwitcher({ account, switching, onSwitchUser, onLogout }: 
           })}
           <button
             type="button"
-            onClick={onLogout}
+            onClick={() => {
+              setOpen(false);
+              onLogout();
+            }}
             className="w-full flex items-center gap-2 px-4 py-3 text-sm text-left text-red-600 hover:bg-red-50 border-t border-gray-100 transition-colors"
           >
             <LogOut className="w-4 h-4" />

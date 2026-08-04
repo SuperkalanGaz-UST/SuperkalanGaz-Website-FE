@@ -16,9 +16,13 @@ export type Role = 'franchise-admin' | 'branch-owner' | 'branch-manager';
 export type Branch = 'Quezon City Branch' | 'Makati Branch' | 'Mandaluyong Branch';
 
 export interface Account {
+  id: string;
   username: string;
   role: Role;
   displayName: string;
+  email: string;
+  phone: string | null;
+  status: 'Active' | 'Inactive';
   /** Branches this account can see. FA reads across all branches; BO/BM are scoped to their own. */
   branches: Branch[];
 }
@@ -76,6 +80,7 @@ export async function signIn(username: string, password: string): Promise<SignIn
     branches?: Branch[];
     username?: string;
     display_name?: string;
+    phone?: string;
     status?: string;
   };
 
@@ -91,9 +96,13 @@ export async function signIn(username: string, password: string): Promise<SignIn
 
   return {
     account: {
+      id: data.user.id,
       username: claims.username ?? username,
       role: claims.role,
       displayName: claims.display_name ?? claims.username ?? username,
+      email: data.user.email ?? email,
+      phone: typeof claims.phone === 'string' ? claims.phone : null,
+      status: claims.status === 'Inactive' ? 'Inactive' : 'Active',
       branches: (claims.branches ?? []) as Branch[],
     },
     error: null,
@@ -101,5 +110,6 @@ export async function signIn(username: string, password: string): Promise<SignIn
 }
 
 export async function signOut(): Promise<void> {
-  await supabase.auth.signOut();
+  const { error } = await supabase.auth.signOut();
+  if (error) throw error;
 }
