@@ -1,6 +1,6 @@
 'use client';
 
-import { LayoutDashboard, TrendingUp, Star, Settings, Users } from 'lucide-react';
+import { Building2, LayoutDashboard, Settings, Star, TrendingUp, Users } from 'lucide-react';
 import { AppSidebar, SidebarNavEntry } from './AppSidebar';
 
 const PesoIcon = ({ className }: { className?: string }) => (
@@ -30,8 +30,9 @@ const NAV_ENTRIES: SidebarNavEntry[] = [
   { icon: TrendingUp,      label: 'Branch Accounts',     id: 'order-analytics' },
   { icon: Users,           label: 'Customers',           id: 'customers' },
   { icon: Star,            label: 'System CSAT',         id: 'csat' },
-  { icon: Settings,        label: 'Franchise Registry',  id: 'settings' },
+  { icon: Building2,       label: 'Franchise Registry',  id: 'franchise-registry' },
   { icon: PesoIcon,        label: 'Price Configuration', id: 'price-config' },
+  { icon: Settings,        label: 'Settings',            id: 'account-settings' },
 ];
 
 interface SidebarProps {

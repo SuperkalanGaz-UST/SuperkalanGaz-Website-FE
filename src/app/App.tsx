@@ -5,6 +5,7 @@ import dynamic from 'next/dynamic';
 import { toast } from 'sonner';
 import { Toaster } from './components/ui/sonner';
 import { Login } from './components/Login';
+import { LogoutConfirmationDialog } from './components/LogoutConfirmationDialog';
 import { PersonaSwitcher } from './components/PersonaSwitcher';
 import { AccountProvider } from './contexts/AccountContext';
 import { Account, DEMO_ACCOUNTS, signIn, signOut } from './lib/auth';
@@ -27,6 +28,8 @@ const BranchManagerApp = dynamic(
 export default function App() {
   const [account, setAccount] = useState<Account | null>(null);
   const [switching, setSwitching] = useState(false);
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
 
   /**
    * DEMO-ONLY: really signs in as the chosen seed user (new Supabase session),
@@ -49,37 +52,61 @@ export default function App() {
     setSwitching(false);
   };
 
+  const requestLogout = () => setShowLogoutConfirm(true);
+
   const handleLogout = async () => {
-    await signOut();
-    setAccount(null);
+    if (loggingOut) return;
+
+    setLoggingOut(true);
+    try {
+      await signOut();
+      setShowLogoutConfirm(false);
+      setAccount(null);
+      toast.success('You have been successfully logged out.');
+    } catch (logoutError) {
+      toast.error(logoutError instanceof Error ? logoutError.message : 'Could not log out. Please try again.');
+    } finally {
+      setLoggingOut(false);
+    }
   };
 
-  if (!account) {
-    return (
-      <>
-        <Login onLogin={setAccount} />
-        <Toaster />
-      </>
-    );
-  }
+  const handleAccountUpdate = (patch: Partial<Account>) => {
+    setAccount((current) => (current ? { ...current, ...patch } : current));
+  };
 
   return (
-    <AccountProvider account={account} onLogout={handleLogout}>
-      {/* The rendered app always follows the REAL session's role — no view/JWT drift. */}
-      {account.role === 'franchise-admin' && <FranchiseAdminApp />}
-      {account.role === 'branch-owner' && (
-        // Remount when the branch set changes so BranchProvider re-initializes.
-        <BranchOwnerApp key={account.branches.join('|')} branches={account.branches} />
-      )}
-      {account.role === 'branch-manager' && <BranchManagerApp />}
+    <>
+      {account ? (
+        <AccountProvider
+          account={account}
+          onLogout={requestLogout}
+          onAccountUpdate={handleAccountUpdate}
+        >
+          {/* The rendered app always follows the REAL session's role — no view/JWT drift. */}
+          {account.role === 'franchise-admin' && <FranchiseAdminApp />}
+          {account.role === 'branch-owner' && (
+            // Remount when the branch set changes so BranchProvider re-initializes.
+            <BranchOwnerApp key={account.branches.join('|')} branches={account.branches} />
+          )}
+          {account.role === 'branch-manager' && <BranchManagerApp />}
 
-      <PersonaSwitcher
-        account={account}
-        switching={switching}
-        onSwitchUser={handleSwitchUser}
-        onLogout={handleLogout}
-      />
-      <Toaster className="dashboard-toaster" />
-    </AccountProvider>
+          <PersonaSwitcher
+            account={account}
+            switching={switching}
+            onSwitchUser={handleSwitchUser}
+            onLogout={requestLogout}
+          />
+          <LogoutConfirmationDialog
+            open={showLogoutConfirm}
+            loggingOut={loggingOut}
+            onOpenChange={setShowLogoutConfirm}
+            onConfirm={handleLogout}
+          />
+        </AccountProvider>
+      ) : (
+        <Login onLogin={setAccount} />
+      )}
+      <Toaster className={account ? 'dashboard-toaster' : undefined} />
+    </>
   );
 }
