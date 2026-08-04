@@ -1,4 +1,21 @@
-.trackSwitcher { margin-bottom: 1.25rem; }
+.headerRow { display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; margin-bottom: 1.25rem; }
+.trackSwitcher { margin-bottom: 0; }
+
+/* Dual Authorization toggle (BM-013) in the header. */
+.dualAuthToggle { display: inline-flex; align-items: center; gap: 0.5rem; font-size: 0.8125rem; cursor: pointer; user-select: none; }
+.dualAuthToggle input { width: 1rem; height: 1rem; cursor: pointer; }
+.dualAuthBanner { padding: 0.6rem 0.9rem; margin-bottom: 1.25rem; border: 1px solid var(--border); border-left: 3px solid var(--primary); border-radius: 0.375rem; background-color: var(--muted); font-size: 0.8125rem; color: var(--muted-foreground); }
+
+/* System-issued redemption code shown on approved/fulfilled rows (BM-016/017). */
+.codeBadge { display: inline-block; margin-top: 0.25rem; padding: 0.05rem 0.4rem; border: 1px dashed var(--border); border-radius: 0.25rem; font-family: var(--font-family-monospace); font-size: 0.75rem; color: var(--foreground); background-color: var(--card); letter-spacing: 0.03em; }
+
+/* Ledger review panel (BM-014), rendered as an expanded row. */
+.ledgerPanel { display: flex; flex-direction: column; gap: 0.5rem; padding: 0.75rem 0.25rem; }
+.ledgerHead { display: flex; flex-direction: column; gap: 0.15rem; }
+.ledgerTable { width: 100%; border-collapse: collapse; font-size: 0.8125rem; }
+.ledgerTable th { text-align: left; padding: 0.4rem 0.6rem; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted-foreground); border-bottom: 1px solid var(--border); }
+.ledgerTable td { padding: 0.4rem 0.6rem; border-bottom: 1px solid var(--border); }
+.ledgerTable tbody tr:last-child td { border-bottom: none; }
 
 .card { background-color: var(--card); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow); overflow: hidden; margin-bottom: 1.5rem; }
 .cardHeaderFlex { display: flex; justify-content: space-between; align-items: center; padding: 1rem 1.25rem; border-bottom: 1px solid var(--border); gap: 1rem; flex-wrap: wrap; }
