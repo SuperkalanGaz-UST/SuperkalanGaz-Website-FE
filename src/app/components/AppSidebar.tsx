@@ -2,8 +2,8 @@
 
 import { ComponentType, useState } from 'react';
 import Image from 'next/image';
-import { ChevronLeft, ChevronRight, LogOut, UserCircle } from 'lucide-react';
-import { useAccount, useLogout } from '../contexts/AccountContext';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { useAccount } from '../contexts/AccountContext';
 import { ROLE_LABELS } from '../lib/auth';
 
 export interface SidebarNavLeaf {
@@ -33,13 +33,11 @@ function entryIsActive(entry: SidebarNavEntry, activeScreen: string): boolean {
 /**
  * Shared sidebar shell for all staff personas. Role wrappers supply only the
  * destinations their persona may access; the shell owns the consistent
- * expanded/minimized presentation, real session identity, and logout action.
+ * expanded/minimized presentation.
  */
 export function AppSidebar({ entries, activeScreen, onNavigate }: AppSidebarProps) {
   const [isExpanded, setIsExpanded] = useState(true);
   const account = useAccount();
-  const logout = useLogout();
-  const displayName = account.displayName.split(' — ')[0].split(' - ')[0];
   const navigationLabel = `${ROLE_LABELS[account.role]} navigation`;
 
   const handleRailEntry = (entry: SidebarNavEntry) => {
@@ -173,40 +171,6 @@ export function AppSidebar({ entries, activeScreen, onNavigate }: AppSidebarProp
           </nav>
         )}
 
-        {isExpanded ? (
-          <div className="shrink-0 border-t border-white/20 p-4">
-            <div className="mb-3 flex items-center gap-3 px-1">
-              <UserCircle className="h-10 w-10 shrink-0 text-white" aria-hidden="true" />
-              <div className="min-w-0">
-                <p className="truncate text-sm font-medium text-white">{displayName}</p>
-                <p className="truncate text-xs text-white/70">{ROLE_LABELS[account.role]}</p>
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={logout}
-              className="flex h-10 w-full items-center justify-center gap-2 rounded-lg border border-white/70 text-sm font-medium text-white transition-colors hover:bg-white/10"
-            >
-              <LogOut className="h-4 w-4" />
-              Log out
-            </button>
-          </div>
-        ) : (
-          <div className="shrink-0 border-t border-white/20 px-3 py-4">
-            <div className="flex flex-col items-center gap-3">
-              <UserCircle className="h-10 w-10 text-white" aria-hidden="true" />
-              <button
-                type="button"
-                onClick={logout}
-                className="flex h-10 w-10 items-center justify-center rounded-xl text-white transition-colors hover:bg-white/10"
-                aria-label="Log out"
-                title="Log out"
-              >
-                <LogOut className="h-4 w-4" />
-              </button>
-            </div>
-          </div>
-        )}
       </aside>
 
       <button

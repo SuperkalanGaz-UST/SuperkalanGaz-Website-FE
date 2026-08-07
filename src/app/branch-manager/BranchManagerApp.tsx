@@ -12,6 +12,8 @@ import Rewards from './screens/rewards';
 import Fleet from './screens/fleet';
 import Vehicles from './screens/vehicles';
 import Analytics from './screens/analytics';
+import MonthlyExpenses from './screens/monthly-expenses';
+import BranchManagerAccountSettings from './screens/settings';
 import './bm-theme.css';
 
 /** Page titles rendered in the shared header; screens no longer carry their own. */
@@ -24,6 +26,8 @@ const SCREEN_TITLES: Record<string, string> = {
   fleet: 'Fleet Management',
   vehicles: 'Vehicle Management',
   analytics: 'Branch Performance',
+  expenses: 'Monthly Expenses',
+  settings: 'Account settings',
 };
 
 export function BranchManagerApp() {
@@ -39,6 +43,13 @@ export function BranchManagerApp() {
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         <AppHeader
           title={SCREEN_TITLES[activeScreen] ?? 'Overview'}
+          description={
+            activeScreen === 'expenses'
+              ? 'Record and review your branch expenses for the current month.'
+              : activeScreen === 'settings'
+                ? 'Manage your personal details and account security.'
+              : undefined
+          }
           badge={
             branch ? (
               <div className="flex items-center px-3 py-1 rounded-full border border-gray-200 bg-white text-[#007BC1] text-xs font-bold whitespace-nowrap">
@@ -57,6 +68,8 @@ export function BranchManagerApp() {
           {activeScreen === 'fleet' && <Fleet />}
           {activeScreen === 'vehicles' && <Vehicles />}
           {activeScreen === 'analytics' && <Analytics />}
+          {activeScreen === 'expenses' && <MonthlyExpenses />}
+          {activeScreen === 'settings' && <BranchManagerAccountSettings />}
         </main>
       </div>
     </div>

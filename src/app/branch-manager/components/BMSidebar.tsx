@@ -9,13 +9,16 @@ import {
   BarChart3,
   Wrench,
   Gift,
+  WalletCards,
+  Settings,
 } from 'lucide-react';
 import { AppSidebar, SidebarNavEntry } from '../../components/AppSidebar';
 
 /**
  * Branch Manager navigation: day-to-day operations for their own branch —
- * service requests, dispatch, inventory, fleet (AGENTS.md §7). No settings
- * or threshold screens: SLA config is FA-only, branch config is BO-only.
+ * service requests, dispatch, inventory, fleet (AGENTS.md §7). Settings is
+ * self-service account management only: SLA config remains FA-only and branch
+ * configuration remains BO-only.
  */
 const NAV_ENTRIES: SidebarNavEntry[] = [
   { icon: LayoutDashboard, label: 'Overview',  id: 'overview' },
@@ -25,7 +28,9 @@ const NAV_ENTRIES: SidebarNavEntry[] = [
   { icon: Gift,            label: 'Rewards',   id: 'rewards' },
   { icon: Truck,           label: 'Fleet',     id: 'fleet' },
   { icon: Wrench,          label: 'Vehicles',  id: 'vehicles' },
+  { icon: WalletCards,     label: 'Monthly Expenses', id: 'expenses' },
   { icon: BarChart3,       label: 'Analytics', id: 'analytics' },
+  { icon: Settings,        label: 'Settings',  id: 'settings' },
 ];
 
 interface BMSidebarProps {

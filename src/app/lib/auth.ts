@@ -10,6 +10,7 @@
  * user created via User Management is stored the same way.
  */
 import { supabase } from './supabase/client';
+import type { User } from '@supabase/supabase-js';
 
 export type Role = 'franchise-admin' | 'branch-owner' | 'branch-manager';
 
@@ -61,6 +62,59 @@ export interface SignInResult {
   error: string | null;
 }
 
+const VALID_ROLES: readonly Role[] = [
+  'franchise-admin',
+  'branch-owner',
+  'branch-manager',
+];
+
+function isRole(value: unknown): value is Role {
+  return typeof value === 'string' && VALID_ROLES.includes(value as Role);
+}
+
+/**
+ * Builds the UI account from the authenticated Supabase user. This is shared by
+ * fresh sign-in and page-refresh restoration so both paths enforce the same
+ * role/status checks. The API remains authoritative for authorization.
+ */
+export function accountFromUser(user: User, usernameFallback?: string): SignInResult {
+  const claims = (user.app_metadata ?? {}) as Record<string, unknown>;
+
+  if (!isRole(claims.role)) {
+    return {
+      account: null,
+      error: 'Your account has no valid role assigned. Contact an administrator.',
+    };
+  }
+
+  if (claims.status !== undefined && claims.status !== 'Active') {
+    return { account: null, error: 'This account is inactive.' };
+  }
+
+  const claimUsername = typeof claims.username === 'string' ? claims.username : null;
+  const username =
+    claimUsername ?? usernameFallback ?? user.email?.split('@')[0] ?? user.id;
+  const displayName =
+    typeof claims.display_name === 'string' ? claims.display_name : username;
+  const branches = Array.isArray(claims.branches)
+    ? claims.branches.filter((branch): branch is string => typeof branch === 'string')
+    : [];
+
+  return {
+    account: {
+      id: user.id,
+      username,
+      role: claims.role,
+      displayName,
+      email: user.email ?? '',
+      phone: typeof claims.phone === 'string' ? claims.phone : null,
+      status: 'Active',
+      branches: Array.from(new Set(branches)) as Branch[],
+    },
+    error: null,
+  };
+}
+
 /**
  * Sign in against Supabase Auth and read the user's CRM claims from the auth
  * session. On success the session is persisted by the Supabase client; returns
@@ -75,38 +129,13 @@ export async function signIn(username: string, password: string): Promise<SignIn
     return { account: null, error: 'Invalid username or password' };
   }
 
-  const claims = (data.user.app_metadata ?? {}) as {
-    role?: Role;
-    branches?: Branch[];
-    username?: string;
-    display_name?: string;
-    phone?: string;
-    status?: string;
-  };
-
-  if (!claims.role) {
+  const result = accountFromUser(data.user, username);
+  if (!result.account) {
     await supabase.auth.signOut();
-    return { account: null, error: 'Your account has no role assigned. Contact an administrator.' };
+    return result;
   }
 
-  if (claims.status && claims.status !== 'Active') {
-    await supabase.auth.signOut();
-    return { account: null, error: 'This account is inactive.' };
-  }
-
-  return {
-    account: {
-      id: data.user.id,
-      username: claims.username ?? username,
-      role: claims.role,
-      displayName: claims.display_name ?? claims.username ?? username,
-      email: data.user.email ?? email,
-      phone: typeof claims.phone === 'string' ? claims.phone : null,
-      status: claims.status === 'Inactive' ? 'Inactive' : 'Active',
-      branches: (claims.branches ?? []) as Branch[],
-    },
-    error: null,
-  };
+  return result;
 }
 
 export async function signOut(): Promise<void> {
