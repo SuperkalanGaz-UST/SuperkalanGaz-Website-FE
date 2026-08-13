@@ -1,0 +1,51 @@
+.summaryGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
+.summaryCard { background-color: var(--card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 1.25rem; box-shadow: var(--shadow); }
+.summaryAccent { border-left: 3px solid var(--accent); }
+.summaryLabel { font-size: 0.75rem; font-weight: 500; color: var(--muted-foreground); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.5rem; }
+.summaryValue { font-size: 1.75rem; font-weight: 700; color: var(--foreground); line-height: 1; }
+.summaryUnit { font-size: 1rem; font-weight: 500; color: var(--muted-foreground); }
+
+.card { background-color: var(--card); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow); overflow: hidden; margin-bottom: 1.5rem; }
+.cardHeaderFlex { display: flex; justify-content: space-between; align-items: center; padding: 1rem 1.25rem; border-bottom: 1px solid var(--border); gap: 1rem; flex-wrap: wrap; }
+.headerActions { display: flex; align-items: center; gap: 0.75rem; }
+
+.lowToggle { display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.8125rem; color: var(--muted-foreground); cursor: pointer; user-select: none; }
+.lowToggle input { width: 1rem; height: 1rem; cursor: pointer; }
+
+.tableWrapper { overflow-x: auto; }
+.table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
+.table th { padding: 0.75rem 1rem; text-align: left; font-size: 0.75rem; font-weight: 600; color: var(--muted-foreground); text-transform: uppercase; letter-spacing: 0.04em; border-bottom: 1px solid var(--border); white-space: nowrap; background-color: hsl(40, 15%, 98%); }
+.table td { padding: 0.75rem 1rem; border-bottom: 1px solid var(--border); color: var(--foreground); vertical-align: top; }
+.table tbody tr:hover { background-color: var(--muted); }
+
+.boldText { font-weight: 600; }
+.mutedText { color: var(--muted-foreground); font-size: 0.8rem; }
+.emptyState { text-align: center; padding: 2rem; color: var(--muted-foreground); }
+.commentCell { max-width: 280px; }
+.actionsCol { width: 190px; }
+.actionsCell { white-space: nowrap; }
+.actionButtons { display: flex; gap: 0.4rem; }
+
+/* Low-CSAT rows must be visually distinct from higher-rated ones (BM-038 AC). */
+.lowRow { background-color: hsl(4, 70%, 97%); }
+.lowRow:hover { background-color: hsl(4, 70%, 94%); }
+.starsLow { display: inline-flex; gap: 0.1rem; color: hsl(4, 75%, 50%); }
+.starsHigh { display: inline-flex; gap: 0.1rem; color: hsl(35, 85%, 45%); }
+
+/* Expanded delivery-context / resolve panels — same convention as the Orders and
+   Rewards screens' inline expanded rows. */
+.panelRow td { background-color: var(--muted); }
+.panel { display: flex; flex-direction: column; gap: 0.5rem; padding: 0.75rem 0.25rem; }
+.panelTitle { font-size: 0.8125rem; font-weight: 600; color: var(--foreground); margin-top: 0.25rem; }
+.panelTitle:first-child { margin-top: 0; }
+.detailGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 0.5rem 1rem; font-size: 0.8125rem; }
+.detailWide { grid-column: 1 / -1; }
+.detailLabel { display: block; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.03em; color: var(--muted-foreground); margin-bottom: 0.1rem; }
+.resolutionNote { font-size: 0.8125rem; padding: 0.6rem 0.75rem; border: 1px solid var(--border); border-radius: 0.375rem; background-color: var(--card); }
+
+.resolvePanel { display: flex; flex-direction: column; gap: 0.5rem; padding: 0.75rem 0.25rem; max-width: 560px; }
+.fieldLabel { display: block; font-size: 0.8125rem; font-weight: 500; color: var(--foreground); margin-bottom: 0.25rem; }
+.fieldError { font-size: 0.75rem; color: var(--error, #ef4444); margin-top: 0.25rem; }
+.textArea { width: 100%; padding: 0.5rem 0.7rem; border: 1px solid var(--border); border-radius: 0.375rem; background-color: var(--card); color: var(--foreground); font-size: 0.875rem; font-family: inherit; resize: vertical; }
+.textArea:focus-visible { outline: 2px solid var(--primary); outline-offset: -1px; }
+.panelActions { display: flex; gap: 0.5rem; justify-content: flex-end; }
