@@ -1,3 +1,8 @@
+.viewSwitcher { margin-bottom: 1.25rem; }
+
+/* Escalated tag under the status badge on an incident row (BM-022). */
+.escalatedTag { display: inline-flex; align-items: center; gap: 0.25rem; margin-top: 0.25rem; font-size: 0.7rem; color: hsl(4, 75%, 45%); }
+
 .summaryGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
 .summaryCard { background-color: var(--card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 1.25rem; box-shadow: var(--shadow); }
 .summaryAccent { border-left: 3px solid var(--accent); }
