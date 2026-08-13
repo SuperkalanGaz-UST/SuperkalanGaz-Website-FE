@@ -10,6 +10,7 @@ import {
   Wrench,
   Gift,
   WalletCards,
+  MessageSquare,
   Settings,
 } from 'lucide-react';
 import { AppSidebar, SidebarNavEntry } from '../../components/AppSidebar';
@@ -26,6 +27,7 @@ const NAV_ENTRIES: SidebarNavEntry[] = [
   { icon: Package,         label: 'Inventory', id: 'inventory' },
   { icon: Users,           label: 'Customers', id: 'customers' },
   { icon: Gift,            label: 'Rewards',   id: 'rewards' },
+  { icon: MessageSquare,   label: 'Feedback',  id: 'csat' },
   { icon: Truck,           label: 'Fleet',     id: 'fleet' },
   { icon: Wrench,          label: 'Vehicles',  id: 'vehicles' },
   { icon: WalletCards,     label: 'Monthly Expenses', id: 'expenses' },
