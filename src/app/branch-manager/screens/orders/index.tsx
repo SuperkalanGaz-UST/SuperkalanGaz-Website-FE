@@ -28,7 +28,9 @@ interface SRRow {
     // optional server-side).
     customer_id: string | null;
     order_source: 'Mobile App' | 'Walk-in/Phone';
-    status: 'Pending' | 'Dispatched' | 'En Route' | 'Delivered' | 'Cancelled';
+    // 'Under Review' is set when a lost/undelivered cylinder complaint is logged
+    // against this request (BM-US-04, story BM-021) — see the Log Complaint action.
+    status: 'Pending' | 'Dispatched' | 'En Route' | 'Delivered' | 'Cancelled' | 'Under Review';
     customer_name: string;
     customer_contact: string;
     delivery_address: string;
@@ -172,6 +174,16 @@ export default function Orders() {
     const [cancelReason, setCancelReason] = useState('');
     const [cancelError, setCancelError] = useState<string | null>(null);
     const [cancellingId, setCancellingId] = useState<string | null>(null);
+
+    // Log a lost/undelivered cylinder complaint (BM-US-04, stories BM-019/020/021
+    // combined into one action — see the backend). Available on Dispatched/En
+    // Route/Delivered rows only (not Pending — nothing delivered yet to complain
+    // about; not Cancelled/Under Review). Mirrors the cancel panel's shape.
+    const [logComplaintId, setLogComplaintId] = useState<string | null>(null);
+    const [complaintCategory, setComplaintCategory] = useState('lost_cylinder');
+    const [complaintDescription, setComplaintDescription] = useState('');
+    const [complaintError, setComplaintError] = useState<string | null>(null);
+    const [loggingComplaintId, setLoggingComplaintId] = useState<string | null>(null);
 
     const form = useForm({
         defaultValues: {
@@ -380,6 +392,7 @@ export default function Orders() {
         setSelectedRiderId('');
         setAvailableRiders(null); // reset so the panel shows "Loading…" not a stale list
         loadAvailableRiders();
+        closeLogComplaint();
     };
 
     const closeAssign = () => {
@@ -465,6 +478,7 @@ export default function Orders() {
         setEditingId(req.id);
         setCancelConfirmId(null);
         closeAssign();
+        closeLogComplaint();
         setEditValues({
             deliveryAddress: req.delivery_address,
             cylinderSize: req.cylinder_size,
@@ -553,6 +567,7 @@ export default function Orders() {
         setCancelConfirmId(id);
         setEditingId(null);
         closeAssign();
+        closeLogComplaint();
         setCancelReason('');
         setCancelError(null);
     };
@@ -601,6 +616,67 @@ export default function Orders() {
             toast.error(err instanceof Error ? err.message : 'Failed to cancel request');
         } finally {
             setCancellingId(null);
+        }
+    };
+
+    const openLogComplaint = (id: string) => {
+        setLogComplaintId(id);
+        setEditingId(null);
+        closeCancel();
+        closeAssign();
+        setComplaintCategory('lost_cylinder');
+        setComplaintDescription('');
+        setComplaintError(null);
+    };
+
+    const closeLogComplaint = () => {
+        setLogComplaintId(null);
+        setComplaintDescription('');
+        setComplaintError(null);
+    };
+
+    const handleLogComplaint = async (id: string) => {
+        const description = complaintDescription.trim();
+        if (!description) {
+            setComplaintError('A description is required.');
+            return;
+        }
+        setComplaintError(null);
+        setLoggingComplaintId(id);
+        try {
+            const res = await apiFetch('/csat/incidents', {
+                method: 'POST',
+                body: JSON.stringify({
+                    serviceRequestId: id,
+                    category: complaintCategory,
+                    description,
+                }),
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                // 409: the request's status changed before the complaint could be
+                // logged (race) — surface + reconcile the queue.
+                if (res.status === 409) {
+                    toast.error(apiErrorMessage(data, 'Request status changed — please retry'));
+                    closeLogComplaint();
+                    await loadRequests();
+                    return;
+                }
+                if (res.status === 404) {
+                    toast.error('Request not found');
+                    return;
+                }
+                // 400 (ineligible status / missing description) surfaced as-is.
+                toast.error(apiErrorMessage(data, 'Failed to log complaint'));
+                return;
+            }
+            toast.success('Complaint logged — request marked Under Review.');
+            closeLogComplaint();
+            await loadRequests();
+        } catch (err) {
+            toast.error(err instanceof Error ? err.message : 'Failed to log complaint');
+        } finally {
+            setLoggingComplaintId(null);
         }
     };
 
@@ -1000,15 +1076,32 @@ export default function Orders() {
                                                     </div>
                                                 )
                                             ) : req.status === 'Dispatched' || req.status === 'En Route' ? (
-                                                // Out for delivery → let the BM close it out (BM-007).
-                                                <Button
-                                                    size="sm"
-                                                    variant="accent"
-                                                    disabled={deliveringId === req.id}
-                                                    onClick={() => handleDeliver(req.id)}
-                                                >
-                                                    {deliveringId === req.id ? 'Delivering…' : 'Mark Delivered'}
+                                                // Out for delivery → let the BM close it out (BM-007), or log a
+                                                // lost/undelivered cylinder complaint against it (BM-US-04) if
+                                                // something already went wrong mid-delivery.
+                                                <div className={styles.actionButtons}>
+                                                    <Button
+                                                        size="sm"
+                                                        variant="accent"
+                                                        disabled={deliveringId === req.id}
+                                                        onClick={() => handleDeliver(req.id)}
+                                                    >
+                                                        {deliveringId === req.id ? 'Delivering…' : 'Mark Delivered'}
+                                                    </Button>
+                                                    <Button size="sm" variant="ghost" onClick={() => openLogComplaint(req.id)}>
+                                                        Log Complaint
+                                                    </Button>
+                                                </div>
+                                            ) : req.status === 'Delivered' ? (
+                                                // Closed → still eligible for a lost/undelivered cylinder complaint
+                                                // (BM-US-04 AC1: "any closed or active" request).
+                                                <Button size="sm" variant="ghost" onClick={() => openLogComplaint(req.id)}>
+                                                    Log Complaint
                                                 </Button>
+                                            ) : req.status === 'Under Review' ? (
+                                                // A complaint has already been logged (BM-021) — no further BM
+                                                // action is defined for this journey (no resolve/close AC exists).
+                                                <span className={styles.mutedText}>Complaint logged</span>
                                             ) : (
                                                 <span className={styles.mutedText}>—</span>
                                             )}
@@ -1094,6 +1187,48 @@ export default function Orders() {
                                                         <Button size="sm" variant="ghost" onClick={closeCancel} disabled={cancellingId === req.id}>Keep Request</Button>
                                                         <Button size="sm" variant="accent" onClick={() => handleCancelOrder(req.id)} disabled={cancellingId === req.id}>
                                                             {cancellingId === req.id ? 'Cancelling…' : 'Confirm Cancel'}
+                                                        </Button>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    )}
+                                    {/* Log Complaint panel (BM-US-04, BM-019/020/021 combined). Available
+                                        on Dispatched/En Route/Delivered rows — "any closed or active
+                                        Service Request". Submitting sets the request to Under Review. */}
+                                    {logComplaintId === req.id && (
+                                        <tr className={styles.editorRow}>
+                                            <td colSpan={8}>
+                                                <div className={styles.cancelPanel}>
+                                                    <span className={styles.editorTitle}>Log complaint — {req.customer_name}</span>
+                                                    <label className={styles.fieldLabel} htmlFor={`complaint-category-${req.id}`}>Issue type</label>
+                                                    <Select value={complaintCategory} onValueChange={setComplaintCategory}>
+                                                        <SelectTrigger id={`complaint-category-${req.id}`}>
+                                                            <SelectValue placeholder="Select issue type…" />
+                                                        </SelectTrigger>
+                                                        <SelectContent>
+                                                            <SelectItem value="lost_cylinder">Lost / undelivered cylinder</SelectItem>
+                                                            <SelectItem value="late_delivery">Late delivery</SelectItem>
+                                                            <SelectItem value="wrong_item">Wrong item</SelectItem>
+                                                            <SelectItem value="safety">Safety concern</SelectItem>
+                                                            <SelectItem value="billing">Billing issue</SelectItem>
+                                                            <SelectItem value="other">Other</SelectItem>
+                                                        </SelectContent>
+                                                    </Select>
+                                                    <label className={styles.fieldLabel} htmlFor={`complaint-desc-${req.id}`}>Description (required)</label>
+                                                    <Input
+                                                        id={`complaint-desc-${req.id}`}
+                                                        placeholder="e.g. Customer reports the cylinder never arrived; rider marked it delivered."
+                                                        value={complaintDescription}
+                                                        onChange={e => setComplaintDescription(e.target.value)}
+                                                    />
+                                                    {complaintError && <p className={styles.fieldError}>{complaintError}</p>}
+                                                    <div className={styles.editorActions}>
+                                                        <Button size="sm" variant="ghost" onClick={closeLogComplaint} disabled={loggingComplaintId === req.id}>
+                                                            Cancel
+                                                        </Button>
+                                                        <Button size="sm" variant="accent" onClick={() => handleLogComplaint(req.id)} disabled={loggingComplaintId === req.id}>
+                                                            {loggingComplaintId === req.id ? 'Logging…' : 'Log Complaint'}
                                                         </Button>
                                                     </div>
                                                 </div>
