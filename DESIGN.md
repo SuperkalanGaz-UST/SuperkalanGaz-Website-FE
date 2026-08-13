@@ -178,6 +178,25 @@ Dashboard reference layout (two 2-column rows, `grid-cols-1 lg:grid-cols-2 gap-6
   (AGENTS.md §13 — never present invented numbers as client-confirmed).
 - The web app talks to the API only; no direct DB access (AGENTS.md §12).
 
+### 8a. Map surfaces
+
+- Use **MapLibre GL JS 5.x** for every interactive staff map. **OpenFreeMap** supplies the
+  `liberty` style and vector tiles, which are derived from **OpenStreetMap** geographic data.
+- Keep the visual hierarchy consistent across the branch-registration geofence map and the
+  Branch Owner/Branch Manager fleet maps: quiet base map, brand-blue geofence, and
+  status-colored rider markers with text-bearing popups.
+- Keep provider attribution visible inside the map. Do not cover it with cards, controls,
+  or modal actions.
+- CRM geometry remains `[latitude, longitude]`; convert to MapLibre/GeoJSON's
+  `[longitude, latitude]` order only through `src/app/lib/mapConfig.ts`.
+- MapLibre/OpenFreeMap are presentation infrastructure, not location-data business logic.
+  Rider coordinates come from the API once the SinoTrack ST-901 → Traccar ingestion is
+  available; the current fleet coordinates must remain clearly identified as mocks.
+- Do not add geocoding implicitly. Address-to-coordinate lookup is not implemented and is a
+  separate product/architecture decision.
+- These maps are internal staff surfaces. The customer mobile app exposes delivery
+  milestones only and never live coordinates.
+
 ---
 
 ## 9. File Map (Branch Owner reference)
@@ -192,5 +211,7 @@ Dashboard reference layout (two 2-column rows, `grid-cols-1 lg:grid-cols-2 gap-6
 | `src/app/branch-owner/components/KPICard.tsx` | Stat tile (§6) |
 | `src/app/branch-owner/components/Dashboard.tsx` | Reference dashboard (§6–§7) |
 | `src/app/branch-owner/hooks/useBranchData.ts` | Branch-scoped mock data (§8) |
+| `src/app/lib/mapConfig.ts` | OpenFreeMap style URL + coordinate-order conversion (§8a) |
+| `src/app/branch-owner/components/BranchOwnerFleetMap.tsx` | MapLibre fleet map (§8a) |
 | `src/app/contexts/AccountContext.tsx` | Real logged-in account (`useAccount`) + session logout (`useLogout`) |
 | `src/app/branch-owner/contexts/BranchContext.tsx` | Selected/available branches |

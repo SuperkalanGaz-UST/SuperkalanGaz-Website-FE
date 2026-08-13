@@ -1,10 +1,16 @@
 import { useState, useMemo } from 'react';
+import dynamic from 'next/dynamic';
 import { Header } from './Header';
 import { KPICard } from './KPICard';
 import { Users, Navigation, AlertTriangle, Clock, ChevronDown } from 'lucide-react';
 import { useBranch } from '../contexts/BranchContext';
 
-interface Rider {
+const BranchOwnerFleetMap = dynamic(
+  () => import('./BranchOwnerFleetMap').then((module) => module.BranchOwnerFleetMap),
+  { ssr: false },
+);
+
+export interface Rider {
   id: string;
   name: string;
   plateNumber: string;
@@ -139,72 +145,11 @@ export function FleetOverview() {
               </div>
             </div>
             <div className="relative bg-gray-100 rounded-lg overflow-hidden" style={{ height: '500px' }}>
-              <svg width="100%" height="100%" viewBox="0 0 800 500">
-                <rect width="800" height="500" fill="#e5e7eb" />
-
-                <polygon
-                  points="150,100 650,100 650,400 150,400"
-                  fill="#007BC1"
-                  fillOpacity="0.1"
-                  stroke="#007BC1"
-                  strokeWidth="2"
-                  strokeDasharray="5,5"
-                />
-
-                {riders.map((rider) => {
-                  const x = 150 + (rider.lng - 121.045) * 10000;
-                  const y = 100 + (14.660 - rider.lat) * 10000;
-
-                  let markerColor = '#22c55e';
-                  if (rider.status === 'inactive') markerColor = '#9ca3af';
-                  if (rider.status === 'outside-geofence') markerColor = '#f59e0b';
-
-                  return (
-                    <g key={rider.id}>
-                      <circle
-                        cx={x}
-                        cy={y}
-                        r="8"
-                        fill={markerColor}
-                        stroke="white"
-                        strokeWidth="2"
-                        className="cursor-pointer"
-                        onClick={() => setSelectedRider(selectedRider === rider.id ? null : rider.id)}
-                      />
-                      {selectedRider === rider.id && (
-                        <g>
-                          <rect
-                            x={x + 15}
-                            y={y - 40}
-                            width="180"
-                            height="80"
-                            fill="white"
-                            stroke="#e5e7eb"
-                            strokeWidth="1"
-                            rx="4"
-                          />
-                          <text x={x + 25} y={y - 20} fontSize="12" fontWeight="600" fill="#111827">
-                            {rider.name}
-                          </text>
-                          <text x={x + 25} y={y - 5} fontSize="11" fill="#6b7280">
-                            {rider.plateNumber}
-                          </text>
-                          <text x={x + 25} y={y + 10} fontSize="11" fill="#6b7280">
-                            Order: {rider.currentOrder || 'None'}
-                          </text>
-                          <text x={x + 25} y={y + 25} fontSize="10" fill="#9ca3af">
-                            Updated: {rider.lastUpdated}
-                          </text>
-                        </g>
-                      )}
-                    </g>
-                  );
-                })}
-
-                <text x="20" y="30" fontSize="12" fill="#6b7280">
-                  Geofence Boundary
-                </text>
-              </svg>
+              <BranchOwnerFleetMap
+                riders={riders}
+                selectedRider={selectedRider}
+                onSelectRider={setSelectedRider}
+              />
             </div>
           </div>
 

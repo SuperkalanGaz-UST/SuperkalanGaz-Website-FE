@@ -1,8 +1,7 @@
 import dynamic from 'next/dynamic';
 import { useEffect, useState } from 'react';
 
-// Leaflet touches `window` at module load, so the map components must be
-// loaded client-side only.
+// The WebGL map is browser-only, so keep it out of the server-rendered bundle.
 const DrawableMap = dynamic(
   () => import('./DrawableMap').then((m) => m.DrawableMap),
   { ssr: false },
@@ -726,7 +725,7 @@ export function RegisterBranchModal({ isOpen, onClose }: RegisterBranchModalProp
               </div>
 
                 <div className="space-y-3">
-                  {/* Live Leaflet map */}
+                  {/* Live MapLibre map */}
                   <div className="h-[230px] border border-[#E4E4E0] rounded-lg overflow-hidden relative">
                     <DrawableMap
                       points={polygonPoints}

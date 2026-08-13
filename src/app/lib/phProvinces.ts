@@ -1,7 +1,7 @@
 /**
  * Philippine provinces (all 82) plus the National Capital Region ("Metro
  * Manila"), each paired with an approximate geographic center and a sensible
- * default Leaflet zoom.
+ * default map zoom.
  *
  * This backs the Province dropdown in branch registration: picking a province
  * both records the value AND frames the geofence map over that area, so the
@@ -16,7 +16,7 @@ export interface PHProvince {
   name: string;
   /** [lat, lng] to center the map on when this province is selected. */
   center: [number, number];
-  /** Leaflet zoom that comfortably frames the province at that center. */
+  /** Map zoom that comfortably frames the province at that center. */
   zoom: number;
 }
 

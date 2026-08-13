@@ -7,7 +7,7 @@ import type { BranchRow } from "./BranchSettings";
 import { ProvinceCombobox } from "./ProvinceCombobox";
 import { provinceFocus } from "../lib/phProvinces";
 
-// Leaflet touches `window` at module load, so load the map client-side only.
+// The WebGL map is browser-only, so load it client-side only.
 const DrawableMap = dynamic(
   () => import("./DrawableMap").then((m) => m.DrawableMap),
   { ssr: false },

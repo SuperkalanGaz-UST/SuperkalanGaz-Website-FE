@@ -83,6 +83,44 @@ src/app/branch-owner/components/UserManagement.tsx
 ../superkalan-crm-api/src/users/users.service.ts
 ```
 
+## Map stack and data flow
+
+The internal staff maps use three distinct layers:
+
+1. **MapLibre GL JS 5.x** renders interactive maps in the browser using WebGL.
+2. **OpenFreeMap** hosts the `liberty` map style and vector tiles used by MapLibre.
+3. **OpenStreetMap** is the underlying geographic-data source used by OpenFreeMap.
+
+The browser therefore requests the style and vector tiles from
+`tiles.openfreemap.org`; it does not request raster tiles from
+`tile.openstreetmap.org`. The NestJS backend does not render maps or proxy public map
+tiles—it only supplies CRM-owned data such as rider coordinates and branch geofences.
+
+Current boundaries and conventions:
+
+- MapLibre/GeoJSON expects `[longitude, latitude]`, while existing CRM domain data stores
+  polygon points as `[latitude, longitude]`. Convert only at the renderer boundary through
+  `src/app/lib/mapConfig.ts`; do not change the persisted contract silently.
+- The shared OpenFreeMap style is configured in `src/app/lib/mapConfig.ts` and currently
+  uses `https://tiles.openfreemap.org/styles/liberty`.
+- Keep the map attribution control visible. OpenFreeMap automatically provides the required
+  OpenMapTiles/OpenStreetMap attribution through its source metadata.
+- Geocoding is not implemented. Known branch addresses come from the API snapshot, and the
+  province selector uses approximate local centroids only to frame the map.
+- Fleet positions are still mock data until the deferred SinoTrack ST-901 → Traccar → API
+  integration is implemented. This does not change the chosen rendering/tile stack.
+- The customer mobile app continues to show delivery milestones only and must not display
+  live coordinates or an internal fleet map.
+
+Relevant map files:
+
+```
+src/app/lib/mapConfig.ts
+src/app/components/DrawableMap.tsx
+src/app/branch-manager/screens/fleet/FleetMap.tsx
+src/app/branch-owner/components/BranchOwnerFleetMap.tsx
+```
+
 ## Scripts
 
 | Command | Description |

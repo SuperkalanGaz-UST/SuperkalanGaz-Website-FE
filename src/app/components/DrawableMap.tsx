@@ -1,15 +1,17 @@
 import { useEffect, useRef } from 'react';
-import { MapContainer, TileLayer, Polygon, Polyline, CircleMarker, useMapEvents, useMap } from 'react-leaflet';
-import L from 'leaflet';
-import 'leaflet/dist/leaflet.css';
-
-// Fix Leaflet's broken default icon paths under Vite
-delete (L.Icon.Default.prototype as any)._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
-  iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
-  shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
-});
+import {
+  AttributionControl,
+  GeoJSONSource,
+  LngLatBounds,
+  Map as MapLibreMap,
+  NavigationControl,
+} from 'maplibre-gl';
+import type { FeatureCollection, LineString, Point, Polygon } from 'geojson';
+import 'maplibre-gl/dist/maplibre-gl.css';
+import {
+  OPENFREEMAP_STYLE_URL,
+  toLngLat,
+} from '../lib/mapConfig';
 
 interface DrawableMapProps {
   points: [number, number][];
@@ -23,102 +25,156 @@ interface DrawableMapProps {
   focus?: { center: [number, number]; zoom: number };
 }
 
-function ClickCapture({
-  isDrawing,
-  onAddPoint,
-}: {
-  isDrawing: boolean;
-  onAddPoint: (lat: number, lng: number) => void;
-}) {
-  const map = useMap();
+const SHAPE_SOURCE_ID = 'branch-geofence-shape';
+const POINTS_SOURCE_ID = 'branch-geofence-points';
 
-  useMapEvents({
-    click(e) {
-      if (isDrawing) {
-        onAddPoint(e.latlng.lat, e.latlng.lng);
-      }
-    },
-  });
+function shapeData(points: [number, number][]): FeatureCollection<LineString | Polygon> {
+  if (points.length < 2) return { type: 'FeatureCollection', features: [] };
 
-  useEffect(() => {
-    const container = map.getContainer();
-    container.style.cursor = isDrawing ? 'crosshair' : '';
-  }, [isDrawing, map]);
+  const coordinates = points.map(toLngLat);
+  const geometry: LineString | Polygon =
+    points.length >= 3
+      ? { type: 'Polygon', coordinates: [[...coordinates, coordinates[0]]] }
+      : { type: 'LineString', coordinates };
 
-  return null;
+  return {
+    type: 'FeatureCollection',
+    features: [{ type: 'Feature', properties: {}, geometry }],
+  };
 }
 
-/**
- * On open, frame the map to the polygon that was seeded in (an existing branch's
- * saved geofence). Captured once at mount so it never fights the user's view
- * while they draw — a from-scratch map (no seeded points) keeps its default view.
- */
-function FitToSavedPolygon({ points }: { points: [number, number][] }) {
-  const map = useMap();
-  const seeded = useRef(points);
+function pointsData(points: [number, number][]): FeatureCollection<Point> {
+  return {
+    type: 'FeatureCollection',
+    features: points.map((point, index) => ({
+      type: 'Feature',
+      properties: { first: index === 0 },
+      geometry: { type: 'Point', coordinates: toLngLat(point) },
+    })),
+  };
+}
 
-  useEffect(() => {
-    const pts = seeded.current;
-    if (pts.length >= 2) {
-      map.fitBounds(pts as L.LatLngBoundsExpression, { padding: [24, 24], maxZoom: 16 });
-    } else if (pts.length === 1) {
-      map.setView(pts[0], 15);
-    }
-  }, [map]);
+function updateSources(map: MapLibreMap, points: [number, number][]): void {
+  (map.getSource(SHAPE_SOURCE_ID) as GeoJSONSource | undefined)?.setData(shapeData(points));
+  (map.getSource(POINTS_SOURCE_ID) as GeoJSONSource | undefined)?.setData(pointsData(points));
+}
 
-  return null;
+function addGeofenceLayers(map: MapLibreMap, points: [number, number][]): void {
+  map.addSource(SHAPE_SOURCE_ID, { type: 'geojson', data: shapeData(points) });
+  map.addSource(POINTS_SOURCE_ID, { type: 'geojson', data: pointsData(points) });
+
+  map.addLayer({
+    id: 'branch-geofence-fill',
+    type: 'fill',
+    source: SHAPE_SOURCE_ID,
+    paint: { 'fill-color': '#185FA5', 'fill-opacity': 0.15 },
+  });
+  map.addLayer({
+    id: 'branch-geofence-line',
+    type: 'line',
+    source: SHAPE_SOURCE_ID,
+    paint: {
+      'line-color': '#185FA5',
+      'line-width': 2,
+      'line-dasharray': [3, 2],
+    },
+  });
+  map.addLayer({
+    id: 'branch-geofence-point-circles',
+    type: 'circle',
+    source: POINTS_SOURCE_ID,
+    paint: {
+      'circle-radius': 5,
+      'circle-color': ['case', ['boolean', ['get', 'first'], false], '#1D9E75', '#ffffff'],
+      'circle-stroke-color': '#185FA5',
+      'circle-stroke-width': 2,
+    },
+  });
+}
+
+function fitInitialPoints(map: MapLibreMap, points: [number, number][]): void {
+  if (points.length >= 2) {
+    const bounds = points.reduce(
+      (current, point) => current.extend(toLngLat(point)),
+      new LngLatBounds(toLngLat(points[0]), toLngLat(points[0])),
+    );
+    map.fitBounds(bounds, { padding: 24, maxZoom: 16, duration: 0 });
+  } else if (points.length === 1) {
+    map.jumpTo({ center: toLngLat(points[0]), zoom: 15 });
+  }
 }
 
 export function DrawableMap({ points, isDrawing, onAddPoint, focus }: DrawableMapProps) {
-  const center: [number, number] = focus?.center ?? [14.2115, 121.1653];
-  const zoom = focus?.zoom ?? 13;
-  const isClosed = points.length >= 3;
+  const containerRef = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<MapLibreMap | null>(null);
+  const pointsRef = useRef(points);
+  const isDrawingRef = useRef(isDrawing);
+  const onAddPointRef = useRef(onAddPoint);
+  const initialPointsRef = useRef(points);
+  const initialLatitude = focus?.center[0] ?? 14.2115;
+  const initialLongitude = focus?.center[1] ?? 121.1653;
+  const initialZoom = focus?.zoom ?? 13;
+  const focusKey = `${initialLatitude}:${initialLongitude}:${initialZoom}`;
+  const previousFocusKeyRef = useRef(focusKey);
 
-  return (
-    <MapContainer
-      center={center}
-      zoom={zoom}
-      style={{ width: '100%', height: '100%' }}
-      zoomControl={true}
-      attributionControl={false}
-    >
-      <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-      <ClickCapture isDrawing={isDrawing} onAddPoint={onAddPoint} />
-      <FitToSavedPolygon points={points} />
+  pointsRef.current = points;
+  isDrawingRef.current = isDrawing;
+  onAddPointRef.current = onAddPoint;
 
-      {isClosed && (
-        <Polygon
-          positions={points}
-          pathOptions={{
-            color: '#185FA5',
-            weight: 2,
-            fillColor: '#185FA5',
-            fillOpacity: 0.15,
-            dashArray: '6 4',
-          }}
-        />
-      )}
+  useEffect(() => {
+    if (!containerRef.current) return;
 
-      {points.length >= 2 && !isClosed && (
-        <Polyline
-          positions={points}
-          pathOptions={{ color: '#185FA5', weight: 2, dashArray: '6 4' }}
-        />
-      )}
+    const map = new MapLibreMap({
+      container: containerRef.current,
+      style: OPENFREEMAP_STYLE_URL,
+      center: toLngLat([initialLatitude, initialLongitude]),
+      zoom: initialZoom,
+      attributionControl: false,
+    });
+    mapRef.current = map;
+    map.addControl(new NavigationControl({ showCompass: false }), 'top-right');
+    map.addControl(
+      new AttributionControl({ compact: true }),
+      'bottom-right',
+    );
 
-      {points.map((pt, i) => (
-        <CircleMarker
-          key={i}
-          center={pt}
-          radius={5}
-          pathOptions={{
-            color: '#185FA5',
-            fillColor: i === 0 ? '#1D9E75' : '#ffffff',
-            fillOpacity: 1,
-            weight: 2,
-          }}
-        />
-      ))}
-    </MapContainer>
-  );
+    map.on('click', (event) => {
+      if (isDrawingRef.current) {
+        onAddPointRef.current(event.lngLat.lat, event.lngLat.lng);
+      }
+    });
+    map.on('load', () => {
+      addGeofenceLayers(map, pointsRef.current);
+      fitInitialPoints(map, initialPointsRef.current);
+    });
+
+    return () => {
+      mapRef.current = null;
+      map.remove();
+    };
+    // The map owns its DOM lifecycle; prop changes are synchronized below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (map?.isStyleLoaded()) updateSources(map, points);
+  }, [points]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (map) map.getCanvas().style.cursor = isDrawing ? 'crosshair' : '';
+  }, [isDrawing]);
+
+  useEffect(() => {
+    if (previousFocusKeyRef.current === focusKey) return;
+    previousFocusKeyRef.current = focusKey;
+    mapRef.current?.flyTo({
+      center: toLngLat([initialLatitude, initialLongitude]),
+      zoom: initialZoom,
+      duration: 700,
+    });
+  }, [focusKey, initialLatitude, initialLongitude, initialZoom]);
+
+  return <div ref={containerRef} className="h-full w-full" />;
 }
