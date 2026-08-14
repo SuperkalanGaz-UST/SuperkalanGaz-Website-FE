@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useState } from 'react';
-import { Smartphone, Store, RefreshCw } from 'lucide-react';
+import { Smartphone, Store, RefreshCw, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import * as z from 'zod';
 import { Badge } from '../../components/Badge';
@@ -45,7 +45,17 @@ interface SRRow {
     dispatched_at: string | null;
     in_transit_at: string | null;
     delivered_at: string | null;
+    // Delayed-delivery journey (BM-US-02).
+    delay_reason: string | null;
+    sla_breached: boolean;
+    sla_breach_segment: string | null;
+    sla_breached_at: string | null;
     created_at: string;
+    // LIVE (non-persisted) — see ServiceRequestsService.listWithSlaRisk. Only
+    // meaningful for still-in-flight rows; always false once closed (use
+    // sla_breached for the permanent record on a Delivered row instead).
+    sla_at_risk: boolean;
+    sla_at_risk_segment: string | null;
 }
 
 /**
@@ -184,6 +194,21 @@ export default function Orders() {
     const [complaintDescription, setComplaintDescription] = useState('');
     const [complaintError, setComplaintError] = useState<string | null>(null);
     const [loggingComplaintId, setLoggingComplaintId] = useState<string | null>(null);
+
+    // Reassign the rider on a delayed order (BM-US-02, story BM-010). Reuses
+    // availableRiders/selectedRiderId/loadAvailableRiders (same "pick an
+    // Available rider" concept the assign panel already uses). Available on
+    // Dispatched/En Route rows only (a rider must be assigned).
+    const [reassignId, setReassignId] = useState<string | null>(null);
+    const [reassignError, setReassignError] = useState<string | null>(null);
+    const [reassigningId, setReassigningId] = useState<string | null>(null);
+
+    // Log a delay reason (BM-US-02, story BM-011). Available on any
+    // still-in-flight row (Pending/Dispatched/En Route).
+    const [delayReasonId, setDelayReasonId] = useState<string | null>(null);
+    const [delayReasonCategory, setDelayReasonCategory] = useState('traffic');
+    const [delayReasonNote, setDelayReasonNote] = useState('');
+    const [loggingDelayReasonId, setLoggingDelayReasonId] = useState<string | null>(null);
 
     const form = useForm({
         defaultValues: {
@@ -388,11 +413,11 @@ export default function Orders() {
     }, []);
 
     const openAssign = (id: string) => {
+        closeAllPanels();
         setAssigningId(id);
         setSelectedRiderId('');
         setAvailableRiders(null); // reset so the panel shows "Loading…" not a stale list
         loadAvailableRiders();
-        closeLogComplaint();
     };
 
     const closeAssign = () => {
@@ -475,10 +500,8 @@ export default function Orders() {
     // snapshot. Editable fields are order details only — never customer identity
     // /contact. Opening the editor closes any assign/cancel panel on the same row.
     const openEdit = (req: SRRow) => {
+        closeAllPanels();
         setEditingId(req.id);
-        setCancelConfirmId(null);
-        closeAssign();
-        closeLogComplaint();
         setEditValues({
             deliveryAddress: req.delivery_address,
             cylinderSize: req.cylinder_size,
@@ -564,10 +587,8 @@ export default function Orders() {
 
     // --- Pre-dispatch Cancel (BM-036) -----------------------------------------
     const openCancel = (id: string) => {
+        closeAllPanels();
         setCancelConfirmId(id);
-        setEditingId(null);
-        closeAssign();
-        closeLogComplaint();
         setCancelReason('');
         setCancelError(null);
     };
@@ -620,10 +641,8 @@ export default function Orders() {
     };
 
     const openLogComplaint = (id: string) => {
+        closeAllPanels();
         setLogComplaintId(id);
-        setEditingId(null);
-        closeCancel();
-        closeAssign();
         setComplaintCategory('lost_cylinder');
         setComplaintDescription('');
         setComplaintError(null);
@@ -677,6 +696,115 @@ export default function Orders() {
             toast.error(err instanceof Error ? err.message : 'Failed to log complaint');
         } finally {
             setLoggingComplaintId(null);
+        }
+    };
+
+    // Closes every inline row panel across every row. Called at the top of
+    // every open* function below (and above) so opening any ONE panel always
+    // closes whichever other panel — on this row or a different one — was open,
+    // keeping exactly one expanded row at a time table-wide.
+    const closeAllPanels = () => {
+        closeAssign();
+        closeEdit();
+        closeCancel();
+        closeLogComplaint();
+        closeReassign();
+        closeDelayReason();
+    };
+
+    // --- Reassign the rider on a delayed order (BM-US-02, story BM-010) -------
+    const openReassign = (id: string) => {
+        closeAllPanels();
+        setReassignId(id);
+        setSelectedRiderId('');
+        setAvailableRiders(null); // reset so the panel shows "Loading…" not a stale list
+        loadAvailableRiders();
+        setReassignError(null);
+    };
+
+    const closeReassign = () => {
+        setReassignId(null);
+        setReassignError(null);
+    };
+
+    const handleReassign = async (id: string) => {
+        if (!selectedRiderId) {
+            setReassignError('Select a rider.');
+            return;
+        }
+        setReassignError(null);
+        setReassigningId(id);
+        try {
+            const res = await apiFetch(`/service-requests/${id}/reassign`, {
+                method: 'POST',
+                body: JSON.stringify({ riderId: selectedRiderId }),
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                // 409: a concurrent reassign/deliver already won — reconcile the queue.
+                if (res.status === 409) {
+                    toast.error(apiErrorMessage(data, 'Request changed — please retry'));
+                    closeReassign();
+                    await loadRequests();
+                    return;
+                }
+                if (res.status === 404) {
+                    toast.error('Request not found');
+                    return;
+                }
+                // 400 (not out for delivery / rider not assignable / same rider).
+                toast.error(apiErrorMessage(data, 'Failed to reassign rider'));
+                return;
+            }
+            toast.success('Rider reassigned.');
+            closeReassign();
+            await Promise.all([loadRequests(), loadRoster()]);
+        } catch (err) {
+            toast.error(err instanceof Error ? err.message : 'Failed to reassign rider');
+        } finally {
+            setReassigningId(null);
+        }
+    };
+
+    // --- Log a delay reason (BM-US-02, story BM-011) --------------------------
+    const openDelayReason = (id: string) => {
+        closeAllPanels();
+        setDelayReasonId(id);
+        setDelayReasonCategory('traffic');
+        setDelayReasonNote('');
+    };
+
+    const closeDelayReason = () => {
+        setDelayReasonId(null);
+        setDelayReasonNote('');
+    };
+
+    const handleLogDelayReason = async (id: string) => {
+        setLoggingDelayReasonId(id);
+        try {
+            const res = await apiFetch(`/service-requests/${id}/delay-reason`, {
+                method: 'POST',
+                body: JSON.stringify({
+                    reasonCategory: delayReasonCategory,
+                    note: delayReasonNote.trim() || undefined,
+                }),
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                if (res.status === 404) {
+                    toast.error('Request not found');
+                    return;
+                }
+                toast.error(apiErrorMessage(data, 'Failed to log delay reason'));
+                return;
+            }
+            toast.success('Delay reason logged.');
+            closeDelayReason();
+            await loadRequests();
+        } catch (err) {
+            toast.error(err instanceof Error ? err.message : 'Failed to log delay reason');
+        } finally {
+            setLoggingDelayReasonId(null);
         }
     };
 
@@ -1007,6 +1135,20 @@ export default function Orders() {
                                         <td className={styles.mutedText}>{formatRequestedAt(req.requested_at)}</td>
                                         <td>
                                             <Badge variant={getStatusVariant(req.status)}>{req.status}</Badge>
+                                            {/* LIVE at-risk flag (BM-008) — only meaningful while still in-flight;
+                                                distinct from sla_breached below, the PERSISTED record written once
+                                                the delivery closes (BM-012). */}
+                                            {req.sla_at_risk && (
+                                                <div className={styles.slaAtRiskTag}>
+                                                    <AlertTriangle size={12} /> SLA at risk
+                                                </div>
+                                            )}
+                                            {req.sla_breached && (
+                                                <div className={styles.slaBreachedTag} title={req.sla_breached_at ? formatRequestedAt(req.sla_breached_at) : undefined}>
+                                                    <AlertTriangle size={12} /> SLA breached
+                                                    {req.sla_breach_segment && ` (${req.sla_breach_segment.replace(/_/g, ' ')})`}
+                                                </div>
+                                            )}
                                             {/* dispatched_at is the 2nd SLA timestamp; show it once the request leaves Pending */}
                                             {req.dispatched_at && (
                                                 <div className={styles.mutedText} style={{ marginTop: '0.35rem', fontSize: '0.75rem' }}>
@@ -1017,6 +1159,12 @@ export default function Orders() {
                                             {req.delivered_at && (
                                                 <div className={styles.mutedText} style={{ marginTop: '0.35rem', fontSize: '0.75rem' }}>
                                                     Delivered {formatRequestedAt(req.delivered_at)}
+                                                </div>
+                                            )}
+                                            {/* Delay reason (BM-011) — visible once logged, any in-flight status. */}
+                                            {req.delay_reason && (
+                                                <div className={styles.mutedText} style={{ marginTop: '0.35rem', fontSize: '0.75rem' }} title={req.delay_reason}>
+                                                    Delay: {req.delay_reason}
                                                 </div>
                                             )}
                                         </td>
@@ -1073,12 +1221,16 @@ export default function Orders() {
                                                         <Button size="sm" variant="outline" onClick={() => openAssign(req.id)}>Assign &amp; Dispatch</Button>
                                                         <Button size="sm" variant="ghost" onClick={() => openEdit(req)}>Edit</Button>
                                                         <Button size="sm" variant="ghost" onClick={() => openCancel(req.id)}>Cancel</Button>
+                                                        {/* BM-011: a Pending request can already be running late
+                                                            (see the SLA at-risk flag above) before it's even dispatched. */}
+                                                        <Button size="sm" variant="ghost" onClick={() => openDelayReason(req.id)}>Delay Reason</Button>
                                                     </div>
                                                 )
                                             ) : req.status === 'Dispatched' || req.status === 'En Route' ? (
-                                                // Out for delivery → let the BM close it out (BM-007), or log a
-                                                // lost/undelivered cylinder complaint against it (BM-US-04) if
-                                                // something already went wrong mid-delivery.
+                                                // Out for delivery → let the BM close it out (BM-007), reassign to a
+                                                // closer available rider if it's running late (BM-010), log why
+                                                // (BM-011), or log a lost/undelivered cylinder complaint (BM-US-04)
+                                                // if something already went wrong mid-delivery.
                                                 <div className={styles.actionButtons}>
                                                     <Button
                                                         size="sm"
@@ -1087,6 +1239,12 @@ export default function Orders() {
                                                         onClick={() => handleDeliver(req.id)}
                                                     >
                                                         {deliveringId === req.id ? 'Delivering…' : 'Mark Delivered'}
+                                                    </Button>
+                                                    <Button size="sm" variant="outline" onClick={() => openReassign(req.id)}>
+                                                        Reassign
+                                                    </Button>
+                                                    <Button size="sm" variant="ghost" onClick={() => openDelayReason(req.id)}>
+                                                        Delay Reason
                                                     </Button>
                                                     <Button size="sm" variant="ghost" onClick={() => openLogComplaint(req.id)}>
                                                         Log Complaint
@@ -1229,6 +1387,92 @@ export default function Orders() {
                                                         </Button>
                                                         <Button size="sm" variant="accent" onClick={() => handleLogComplaint(req.id)} disabled={loggingComplaintId === req.id}>
                                                             {loggingComplaintId === req.id ? 'Logging…' : 'Log Complaint'}
+                                                        </Button>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    )}
+                                    {/* Reassign panel (BM-US-02, story BM-010): pick a new Available rider.
+                                        Reuses the same availableRiders/selectedRiderId the assign panel above
+                                        uses — same underlying concept, only ever one open at a time. */}
+                                    {reassignId === req.id && (
+                                        <tr className={styles.editorRow}>
+                                            <td colSpan={8}>
+                                                <div className={styles.cancelPanel}>
+                                                    <span className={styles.editorTitle}>
+                                                        Reassign — {req.customer_name} (currently {req.rider_id ? (rosterMap[req.rider_id] ?? req.rider_id) : '—'})
+                                                    </span>
+                                                    <label className={styles.fieldLabel} htmlFor={`reassign-rider-${req.id}`}>New rider</label>
+                                                    {ridersLoading || availableRiders === null ? (
+                                                        <span className={styles.mutedText}>Loading riders…</span>
+                                                    ) : availableRiders.length === 0 ? (
+                                                        <span className={styles.mutedText}>No other available riders</span>
+                                                    ) : (
+                                                        <select
+                                                            id={`reassign-rider-${req.id}`}
+                                                            className={styles.riderSelect}
+                                                            value={selectedRiderId}
+                                                            onChange={(e) => setSelectedRiderId(e.target.value)}
+                                                            aria-label="Select new rider"
+                                                        >
+                                                            <option value="" disabled>Select rider…</option>
+                                                            {availableRiders.map(r => (
+                                                                <option key={r.id} value={r.id}>{r.name} ({r.plate})</option>
+                                                            ))}
+                                                        </select>
+                                                    )}
+                                                    {reassignError && <p className={styles.fieldError}>{reassignError}</p>}
+                                                    <div className={styles.editorActions}>
+                                                        <Button size="sm" variant="ghost" onClick={closeReassign} disabled={reassigningId === req.id}>
+                                                            Cancel
+                                                        </Button>
+                                                        <Button
+                                                            size="sm"
+                                                            variant="accent"
+                                                            disabled={!selectedRiderId || reassigningId === req.id}
+                                                            onClick={() => handleReassign(req.id)}
+                                                        >
+                                                            {reassigningId === req.id ? 'Reassigning…' : 'Confirm Reassign'}
+                                                        </Button>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    )}
+                                    {/* Delay reason panel (BM-US-02, story BM-011): dropdown + optional note. */}
+                                    {delayReasonId === req.id && (
+                                        <tr className={styles.editorRow}>
+                                            <td colSpan={8}>
+                                                <div className={styles.cancelPanel}>
+                                                    <span className={styles.editorTitle}>Log delay reason — {req.customer_name}</span>
+                                                    <label className={styles.fieldLabel} htmlFor={`delay-category-${req.id}`}>Reason</label>
+                                                    <Select value={delayReasonCategory} onValueChange={setDelayReasonCategory}>
+                                                        <SelectTrigger id={`delay-category-${req.id}`}>
+                                                            <SelectValue placeholder="Select a reason…" />
+                                                        </SelectTrigger>
+                                                        <SelectContent>
+                                                            <SelectItem value="traffic">Traffic</SelectItem>
+                                                            <SelectItem value="weather">Weather</SelectItem>
+                                                            <SelectItem value="customer_unavailable">Customer unavailable</SelectItem>
+                                                            <SelectItem value="vehicle_issue">Vehicle issue</SelectItem>
+                                                            <SelectItem value="address_issue">Address issue</SelectItem>
+                                                            <SelectItem value="other">Other</SelectItem>
+                                                        </SelectContent>
+                                                    </Select>
+                                                    <label className={styles.fieldLabel} htmlFor={`delay-note-${req.id}`}>Note (optional)</label>
+                                                    <Input
+                                                        id={`delay-note-${req.id}`}
+                                                        placeholder="e.g. Flooding on the main road"
+                                                        value={delayReasonNote}
+                                                        onChange={e => setDelayReasonNote(e.target.value)}
+                                                    />
+                                                    <div className={styles.editorActions}>
+                                                        <Button size="sm" variant="ghost" onClick={closeDelayReason} disabled={loggingDelayReasonId === req.id}>
+                                                            Cancel
+                                                        </Button>
+                                                        <Button size="sm" variant="accent" onClick={() => handleLogDelayReason(req.id)} disabled={loggingDelayReasonId === req.id}>
+                                                            {loggingDelayReasonId === req.id ? 'Logging…' : 'Log Reason'}
                                                         </Button>
                                                     </div>
                                                 </div>

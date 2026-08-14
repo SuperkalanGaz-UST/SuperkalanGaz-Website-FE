@@ -1,3 +1,8 @@
+/* Delayed-delivery journey (BM-US-02): the LIVE at-risk flag (BM-008) and the
+   PERSISTED breach record (BM-012) shown under the status badge. */
+.slaAtRiskTag { display: inline-flex; align-items: center; gap: 0.25rem; margin-top: 0.35rem; padding: 0.1rem 0.4rem; border-radius: 0.25rem; font-size: 0.7rem; font-weight: 600; color: hsl(35, 90%, 30%); background-color: hsl(35, 90%, 94%); }
+.slaBreachedTag { display: inline-flex; align-items: center; gap: 0.25rem; margin-top: 0.35rem; font-size: 0.7rem; color: hsl(4, 75%, 45%); }
+
 .pageHeader { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.5rem; }
 .pageTitle { font-size: 1.5rem; font-weight: 700; color: var(--foreground); margin-bottom: 0.25rem; }
 .pageSubtitle { font-size: 0.9rem; color: var(--muted-foreground); margin-bottom: 0; }
