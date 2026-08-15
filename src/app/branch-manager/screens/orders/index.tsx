@@ -137,6 +137,9 @@ export default function Orders() {
     const [requests, setRequests] = useState<SRRow[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    // Timestamp of the last successful background or foreground fetch.
+    // Displayed in the header so the BM can see the list is live.
+    const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null);
     const [isCreateFormVisible, setIsCreateFormVisible] = useState(false);
     const [submitting, setSubmitting] = useState(false);
     const [catalogPrices, setCatalogPrices] = useState<LpgPrice[]>([]);
@@ -345,24 +348,60 @@ export default function Orders() {
         setNewCustomerErrors({});
     };
 
-    const loadRequests = useCallback(async () => {
-        setLoading(true);
+    const loadRequests = useCallback(async (isBackground = false) => {
+        console.log('[branch-manager-orders] fetch start /service-requests');
+        if (!isBackground) setLoading(true);
         setError(null);
         try {
             const res = await apiFetch('/service-requests');
             const data = await res.json();
+            console.log('[branch-manager-orders] fetch response', {
+                ok: res.ok,
+                status: res.status,
+                raw: data,
+                count: Array.isArray(data?.serviceRequests) ? data.serviceRequests.length : 0,
+                firstRow: Array.isArray(data?.serviceRequests) && data.serviceRequests.length > 0
+                    ? {
+                        id: data.serviceRequests[0].id,
+                        branch_id: data.serviceRequests[0].branch_id,
+                        status: data.serviceRequests[0].status,
+                    }
+                    : null,
+            });
             if (!res.ok) throw new Error(apiErrorMessage(data, 'Failed to load service requests'));
             setRequests(data.serviceRequests as SRRow[]);
+            // Stamp the last successful refresh so the header indicator stays current.
+            setLastRefreshed(new Date());
         } catch (err) {
             const message = err instanceof Error ? err.message : 'Failed to load service requests';
+            console.log('[branch-manager-orders] fetch error', message);
             setError(message);
             setRequests([]);
         } finally {
-            setLoading(false);
+            if (!isBackground) setLoading(false);
         }
     }, []);
 
-    useEffect(() => { loadRequests(); }, [loadRequests]);
+    useEffect(() => { void loadRequests(); }, [loadRequests]);
+    useEffect(() => {
+        // Poll every 10 s while the tab is open.
+        const intervalId = window.setInterval(() => {
+            void loadRequests(true);
+        }, 10000);
+        // Re-fetch immediately when the BM switches back to this tab after it was
+        // backgrounded — browsers throttle setInterval to ≥ 1 min in hidden tabs,
+        // so without this the list could be stale for up to a minute on tab refocus.
+        const handleVisibility = () => {
+            if (document.visibilityState === 'visible') {
+                void loadRequests(true);
+            }
+        };
+        document.addEventListener('visibilitychange', handleVisibility);
+        return () => {
+            window.clearInterval(intervalId);
+            document.removeEventListener('visibilitychange', handleVisibility);
+        };
+    }, [loadRequests]);
 
     useEffect(() => {
         let active = true;
@@ -870,8 +909,16 @@ export default function Orders() {
 
     return (
         <>
-            {/* Title lives in the shared header; keep the primary action right-aligned */}
-            <div className={styles.pageHeader} style={{ justifyContent: 'flex-end' }}>
+            {/* Title lives in the shared header; keep the primary action right-aligned.
+                The "Last updated" stamp lets the BM confirm the list is live without
+                needing a manual refresh — it advances every time the background poll
+                or a visibilitychange re-fetch completes successfully. */}
+            <div className={styles.pageHeader} style={{ justifyContent: 'flex-end', gap: '0.75rem', alignItems: 'center' }}>
+                {lastRefreshed && (
+                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted, #888)', whiteSpace: 'nowrap' }}>
+                        Updated {lastRefreshed.toLocaleTimeString('en-PH', { hour: 'numeric', minute: '2-digit', second: '2-digit' })}
+                    </span>
+                )}
                 {!isCreateFormVisible && (
                     <Button variant="accent" onClick={() => { resetIntake(); setIsCreateFormVisible(true); }}>New Request</Button>
                 )}
@@ -1080,7 +1127,7 @@ export default function Orders() {
                                 onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchQuery(e.target.value)}
                             />
                         </div>
-                        <Button variant="outline" size="sm" onClick={loadRequests} disabled={loading} aria-label="Refresh service requests">
+                        <Button variant="outline" size="sm" onClick={() => void loadRequests()} disabled={loading} aria-label="Refresh service requests">
                             <RefreshCw size={14} /> Refresh
                         </Button>
                     </div>
@@ -1101,7 +1148,7 @@ export default function Orders() {
                                 <tr>
                                     <td colSpan={8} className={styles.emptyState}>
                                         <div style={{ marginBottom: '0.75rem' }}>{error}</div>
-                                        <Button variant="outline" size="sm" onClick={loadRequests}>Try again</Button>
+                                        <Button variant="outline" size="sm" onClick={() => void loadRequests()}>Try again</Button>
                                     </td>
                                 </tr>
                             ) : filteredRequests.length === 0 ? (
