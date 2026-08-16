@@ -3,6 +3,7 @@
 import { useEffect, useRef } from 'react';
 import {
   AttributionControl,
+  GeoJSONSource,
   LngLatBounds,
   Map as MapLibreMap,
   Marker,
@@ -10,26 +11,40 @@ import {
   Popup,
 } from 'maplibre-gl';
 import type { Feature, Polygon } from 'geojson';
-import 'maplibre-gl/dist/maplibre-gl.css';
 import { OPENFREEMAP_STYLE_URL, toLngLat } from '../../lib/mapConfig';
+import type { BranchGeofence } from '../contexts/BranchContext';
 import type { Rider } from './FleetOverview';
 
-/** Mock coverage area enclosing the four in-zone riders in this deferred GPS screen. */
-const GEOFENCE: [number, number][] = [
-  [14.647, 121.047],
-  [14.654, 121.047],
-  [14.654, 121.054],
-  [14.647, 121.054],
-];
+function toGeofenceFeature(geofence: BranchGeofence): Feature<Polygon> {
+  return {
+    type: 'Feature',
+    properties: {},
+    geometry: {
+      type: 'Polygon',
+      coordinates: [[
+        ...geofence.points.map(toLngLat),
+        toLngLat(geofence.points[0]),
+      ]],
+    },
+  };
+}
 
-const geofenceData: Feature<Polygon> = {
-  type: 'Feature',
-  properties: {},
-  geometry: {
-    type: 'Polygon',
-    coordinates: [[...GEOFENCE.map(toLngLat), toLngLat(GEOFENCE[0])]],
-  },
-};
+function fitGeofence(
+  map: MapLibreMap,
+  geofence: BranchGeofence,
+  duration: number,
+): void {
+  const firstPoint = toLngLat(geofence.points[0]);
+  const bounds = geofence.points.reduce(
+    (current, point) => current.extend(toLngLat(point)),
+    new LngLatBounds(firstPoint, firstPoint),
+  );
+  map.fitBounds(bounds, {
+    padding: 55,
+    maxZoom: 16,
+    duration,
+  });
+}
 
 function markerColor(status: Rider['status']): string {
   if (status === 'outside-geofence') return '#f59e0b';
@@ -87,12 +102,14 @@ function makeMarker(rider: Rider, onSelect: (id: string) => void): Marker {
 }
 
 interface BranchOwnerFleetMapProps {
+  geofence: BranchGeofence;
   riders: Rider[];
   selectedRider: string | null;
   onSelectRider: (id: string) => void;
 }
 
 export function BranchOwnerFleetMap({
+  geofence,
   riders,
   selectedRider,
   onSelectRider,
@@ -102,8 +119,10 @@ export function BranchOwnerFleetMap({
   const markersRef = useRef(new Map<string, Marker>());
   const ridersRef = useRef(riders);
   const onSelectRef = useRef(onSelectRider);
+  const geofenceRef = useRef(geofence);
   ridersRef.current = riders;
   onSelectRef.current = onSelectRider;
+  geofenceRef.current = geofence;
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -111,8 +130,8 @@ export function BranchOwnerFleetMap({
     const map = new MapLibreMap({
       container: containerRef.current,
       style: OPENFREEMAP_STYLE_URL,
-      center: toLngLat([14.6505, 121.0505]),
-      zoom: 15,
+      center: toLngLat(geofenceRef.current.points[0]),
+      zoom: 13,
       attributionControl: false,
     });
     const markers = markersRef.current;
@@ -121,7 +140,10 @@ export function BranchOwnerFleetMap({
     map.addControl(new AttributionControl({ compact: true }), 'bottom-right');
 
     map.on('load', () => {
-      map.addSource('branch-owner-geofence', { type: 'geojson', data: geofenceData });
+      map.addSource('branch-owner-geofence', {
+        type: 'geojson',
+        data: toGeofenceFeature(geofenceRef.current),
+      });
       map.addLayer({
         id: 'branch-owner-geofence-fill',
         type: 'fill',
@@ -139,11 +161,7 @@ export function BranchOwnerFleetMap({
         },
       });
 
-      const bounds = GEOFENCE.reduce(
-        (current, point) => current.extend(toLngLat(point)),
-        new LngLatBounds(toLngLat(GEOFENCE[0]), toLngLat(GEOFENCE[0])),
-      );
-      map.fitBounds(bounds, { padding: 55, maxZoom: 16, duration: 0 });
+      fitGeofence(map, geofenceRef.current, 0);
 
       ridersRef.current.forEach((rider) => {
         const marker = makeMarker(rider, (id) => onSelectRef.current(id)).addTo(map);
@@ -158,6 +176,14 @@ export function BranchOwnerFleetMap({
       map.remove();
     };
   }, []);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map?.isStyleLoaded()) return;
+    const source = map.getSource('branch-owner-geofence') as GeoJSONSource | undefined;
+    source?.setData(toGeofenceFeature(geofence));
+    fitGeofence(map, geofence, 900);
+  }, [geofence]);
 
   useEffect(() => {
     if (!selectedRider) return;

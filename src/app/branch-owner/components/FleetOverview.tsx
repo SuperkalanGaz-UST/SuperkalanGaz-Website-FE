@@ -1,8 +1,8 @@
-import { useState, useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { Header } from './Header';
 import { KPICard } from './KPICard';
-import { Users, Navigation, AlertTriangle, Clock, ChevronDown } from 'lucide-react';
+import { Users, Navigation, AlertTriangle, Clock, ChevronDown, Loader2 } from 'lucide-react';
 import { useBranch } from '../contexts/BranchContext';
 
 const BranchOwnerFleetMap = dynamic(
@@ -85,7 +85,13 @@ const activityLog = [
 ];
 
 export function FleetOverview() {
-  const { selectedBranch } = useBranch();
+  const {
+    selectedBranch,
+    assignedBranches,
+    assignedBranchesLoading,
+    assignedBranchesError,
+    refreshAssignedBranches,
+  } = useBranch();
   const [selectedRider, setSelectedRider] = useState<string | null>(null);
   
   // State for filtering activity log by driver
@@ -94,6 +100,10 @@ export function FleetOverview() {
   const activeRiders = riders.filter(r => r.status === 'active').length;
   const outsideGeofence = riders.filter(r => r.status === 'outside-geofence').length;
   const pastCurfew = 0;
+  const assignedBranch = assignedBranches?.find(
+    (branch) => branch.name === selectedBranch,
+  );
+  const geofence = assignedBranch?.geofence ?? null;
 
   // Memoized filter logic for the activity log
   const filteredActivityLog = useMemo(() => {
@@ -145,11 +155,38 @@ export function FleetOverview() {
               </div>
             </div>
             <div className="relative bg-gray-100 rounded-lg overflow-hidden" style={{ height: '500px' }}>
-              <BranchOwnerFleetMap
-                riders={riders}
-                selectedRider={selectedRider}
-                onSelectRider={setSelectedRider}
-              />
+              {assignedBranchesLoading ? (
+                <div className="flex h-full items-center justify-center gap-2 text-sm text-gray-500">
+                  <Loader2 className="h-4 w-4 animate-spin text-[#007BC1]" />
+                  Preparing branch map…
+                </div>
+              ) : assignedBranchesError ? (
+                <div className="flex h-full flex-col items-center justify-center gap-3 px-8 text-center text-sm text-red-600">
+                  <span>{assignedBranchesError}</span>
+                  <button
+                    type="button"
+                    onClick={() => void refreshAssignedBranches()}
+                    className="rounded-md bg-white px-3 py-1.5 text-xs font-semibold text-[#007BC1] shadow-sm ring-1 ring-gray-200 transition-colors hover:bg-blue-50"
+                  >
+                    Try again
+                  </button>
+                </div>
+              ) : !assignedBranch ? (
+                <div className="flex h-full items-center justify-center px-8 text-center text-sm text-red-600">
+                  The selected branch is not assigned to this account.
+                </div>
+              ) : geofence ? (
+                <BranchOwnerFleetMap
+                  geofence={geofence}
+                  riders={riders}
+                  selectedRider={selectedRider}
+                  onSelectRider={setSelectedRider}
+                />
+              ) : (
+                <div className="flex h-full items-center justify-center px-8 text-center text-sm text-gray-500">
+                  No geofence has been assigned to {selectedBranch}. Contact the Franchise Administrator.
+                </div>
+              )}
             </div>
           </div>
 

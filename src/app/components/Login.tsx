@@ -1,15 +1,34 @@
 import { useState } from 'react';
-import { Eye, EyeOff } from 'lucide-react';
-import { Account, signIn, DEMO_ACCOUNTS, ROLE_LABELS } from '../lib/auth';
+import { ArrowLeft, CheckCircle2, Eye, EyeOff, Mail } from 'lucide-react';
+import {
+  Account,
+  DEMO_ACCOUNTS,
+  requestPasswordReset,
+  ROLE_LABELS,
+  signIn,
+  updatePassword,
+} from '../lib/auth';
 
 interface LoginProps {
   onLogin: (account: Account) => void;
+  passwordRecovery?: boolean;
+  onPasswordReset?: () => Promise<void>;
 }
 
-export function Login({ onLogin }: LoginProps) {
+export function Login({
+  onLogin,
+  passwordRecovery = false,
+  onPasswordReset,
+}: LoginProps) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [forgotPassword, setForgotPassword] = useState(false);
+  const [resetLinkSent, setResetLinkSent] = useState(false);
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [resetComplete, setResetComplete] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -26,6 +45,307 @@ export function Login({ onLogin }: LoginProps) {
     } else {
       setError(signInError ?? 'Invalid username or password');
     }
+  };
+
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+
+    if (!username.trim()) {
+      setError('Enter your username or email address.');
+      return;
+    }
+
+    setLoading(true);
+    const redirectTo = `${window.location.origin}${window.location.pathname}`;
+    const { error: resetError } = await requestPasswordReset(username, redirectTo);
+    setLoading(false);
+
+    if (resetError) {
+      setError(resetError);
+    } else {
+      setResetLinkSent(true);
+    }
+  };
+
+  const handlePasswordReset = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+
+    if (newPassword.length < 6) {
+      setError('Password must be at least 6 characters.');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setError('Passwords do not match.');
+      return;
+    }
+
+    setLoading(true);
+    const { error: resetError } = await updatePassword(newPassword);
+    if (resetError) {
+      setError(resetError);
+      setLoading(false);
+      return;
+    }
+
+    await onPasswordReset?.();
+    setLoading(false);
+    setResetComplete(true);
+  };
+
+  const returnToLogin = () => {
+    setForgotPassword(false);
+    setResetLinkSent(false);
+    setError('');
+  };
+
+  const passwordField = (
+    id: string,
+    value: string,
+    onChange: (value: string) => void,
+    visible: boolean,
+    onToggleVisibility: () => void,
+    autoComplete: 'current-password' | 'new-password',
+  ) => (
+    <div className="relative">
+      <input
+        id={id}
+        type={visible ? 'text' : 'password'}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        autoComplete={autoComplete}
+        required
+        className="w-full px-4 py-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-[#007BC1] focus:border-transparent outline-none pr-12 text-sm"
+      />
+      <button
+        type="button"
+        onClick={onToggleVisibility}
+        aria-label={visible ? 'Hide password' : 'Show password'}
+        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+      >
+        {visible ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+      </button>
+    </div>
+  );
+
+  const renderCardContent = () => {
+    if (resetComplete) {
+      return (
+        <div className="py-6 text-center">
+          <CheckCircle2 className="mx-auto mb-5 h-12 w-12 text-emerald-600" aria-hidden="true" />
+          <h1 className="text-3xl font-bold text-gray-900">Password updated</h1>
+          <p className="mt-3 text-sm leading-6 text-gray-600">
+            Your password has been changed. You can now sign in with your new password.
+          </p>
+          <button
+            type="button"
+            onClick={() => window.location.assign(window.location.pathname)}
+            className="mt-8 w-full rounded-md bg-[#007BC1] py-3.5 text-base font-medium text-white transition-colors hover:bg-[#006399]"
+          >
+            Return to login
+          </button>
+        </div>
+      );
+    }
+
+    if (passwordRecovery) {
+      return (
+        <>
+          <h1 className="text-3xl font-bold text-gray-900">Set a new password</h1>
+          <p className="mt-3 mb-8 text-sm leading-6 text-gray-600">
+            Choose a new password for your Superkalan Gaz account.
+          </p>
+          <form onSubmit={handlePasswordReset}>
+            <div className="mb-5">
+              <label htmlFor="new-password" className="block text-sm font-normal text-gray-700 mb-2">
+                New password
+              </label>
+              {passwordField(
+                'new-password',
+                newPassword,
+                setNewPassword,
+                showNewPassword,
+                () => setShowNewPassword((visible) => !visible),
+                'new-password',
+              )}
+              <p className="mt-2 text-xs text-gray-500">Use at least 6 characters.</p>
+            </div>
+
+            <div className="mb-6">
+              <label htmlFor="confirm-password" className="block text-sm font-normal text-gray-700 mb-2">
+                Confirm new password
+              </label>
+              {passwordField(
+                'confirm-password',
+                confirmPassword,
+                setConfirmPassword,
+                showNewPassword,
+                () => setShowNewPassword((visible) => !visible),
+                'new-password',
+              )}
+            </div>
+
+            {error && (
+              <p className="text-sm text-red-600 mb-4" role="alert">{error}</p>
+            )}
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-[#007BC1] text-white py-3.5 rounded-md font-medium hover:bg-[#006399] transition-colors text-base disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              {loading ? 'Updating password…' : 'Update password'}
+            </button>
+          </form>
+        </>
+      );
+    }
+
+    if (forgotPassword) {
+      if (resetLinkSent) {
+        return (
+          <div className="py-6 text-center">
+            <Mail className="mx-auto mb-5 h-12 w-12 text-[#007BC1]" aria-hidden="true" />
+            <h1 className="text-3xl font-bold text-gray-900">Check your email</h1>
+            <p className="mt-3 text-sm leading-6 text-gray-600">
+              If an account matches the username or email you entered, we sent it a password reset link.
+            </p>
+            <button
+              type="button"
+              onClick={returnToLogin}
+              className="mt-8 inline-flex items-center gap-2 text-sm font-medium text-[#007BC1] hover:text-[#006399]"
+            >
+              <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+              Back to login
+            </button>
+          </div>
+        );
+      }
+
+      return (
+        <>
+          <button
+            type="button"
+            onClick={returnToLogin}
+            className="mb-6 inline-flex items-center gap-2 text-sm font-medium text-gray-600 hover:text-[#007BC1]"
+          >
+            <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+            Back to login
+          </button>
+          <h1 className="text-3xl font-bold text-gray-900">Forgot password?</h1>
+          <p className="mt-3 mb-8 text-sm leading-6 text-gray-600">
+            Enter your username or account email and we’ll send you a reset link.
+          </p>
+          <form onSubmit={handleForgotPassword}>
+            <div className="mb-6">
+              <label htmlFor="recovery-username" className="block text-sm font-normal text-gray-700 mb-2">
+                Username or email
+              </label>
+              <input
+                id="recovery-username"
+                type="text"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                autoComplete="username"
+                autoFocus
+                required
+                className="w-full px-4 py-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-[#007BC1] focus:border-transparent outline-none text-sm"
+              />
+            </div>
+
+            {error && (
+              <p className="text-sm text-red-600 mb-4" role="alert">{error}</p>
+            )}
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-[#007BC1] text-white py-3.5 rounded-md font-medium hover:bg-[#006399] transition-colors text-base disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              {loading ? 'Sending reset link…' : 'Send reset link'}
+            </button>
+          </form>
+        </>
+      );
+    }
+
+    return (
+      <>
+        <h1 className="text-3xl font-bold text-gray-900 mb-10">Login</h1>
+
+        <form onSubmit={handleSubmit}>
+          <div className="mb-6">
+            <label htmlFor="username" className="block text-sm font-normal text-gray-700 mb-2">
+              Username
+            </label>
+            <input
+              id="username"
+              type="text"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              autoComplete="username"
+              required
+              className="w-full px-4 py-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-[#007BC1] focus:border-transparent outline-none text-sm"
+            />
+          </div>
+
+          <div className="mb-2">
+            <label htmlFor="password" className="block text-sm font-normal text-gray-700 mb-2">
+              Password
+            </label>
+            {passwordField(
+              'password',
+              password,
+              setPassword,
+              showPassword,
+              () => setShowPassword((visible) => !visible),
+              'current-password',
+            )}
+          </div>
+
+          <div className="mb-6 text-right">
+            <button
+              type="button"
+              onClick={() => {
+                setForgotPassword(true);
+                setError('');
+              }}
+              className="text-sm font-medium text-[#007BC1] hover:text-[#006399] hover:underline"
+            >
+              Forgot password?
+            </button>
+          </div>
+
+          {error && (
+            <p className="text-sm text-red-600 mb-4" role="alert">{error}</p>
+          )}
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full bg-[#007BC1] text-white py-3.5 rounded-md font-medium hover:bg-[#006399] transition-colors text-base disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            {loading ? 'Signing in…' : 'Login'}
+          </button>
+        </form>
+
+        {/* Demo credentials — remove together with lib/auth.ts when API auth lands */}
+        <div className="mt-8 bg-gray-50 border border-gray-200 rounded-lg p-4">
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+            Demo accounts
+          </p>
+          <ul className="space-y-1">
+            {DEMO_ACCOUNTS.map((demo) => (
+              <li key={demo.username} className="text-xs text-gray-600 flex justify-between gap-2">
+                <span className="font-mono">{demo.username} / {demo.password}</span>
+                <span className="text-gray-400">{ROLE_LABELS[demo.role]}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </>
+    );
   };
 
   return (
@@ -60,75 +380,7 @@ export function Login({ onLogin }: LoginProps) {
             />
           </div>
 
-          <h1 className="text-3xl font-bold text-gray-900 mb-10">Login</h1>
-
-          <form onSubmit={handleSubmit}>
-            <div className="mb-6">
-              <label className="block text-sm font-normal text-gray-700 mb-2">
-                Username
-              </label>
-              <input
-                type="text"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-[#007BC1] focus:border-transparent outline-none text-sm"
-              />
-            </div>
-
-            <div className="mb-6">
-              <label className="block text-sm font-normal text-gray-700 mb-2">
-                Password
-              </label>
-              <div className="relative">
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-[#007BC1] focus:border-transparent outline-none pr-12 text-sm"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                >
-                  {showPassword ? (
-                    <EyeOff className="w-5 h-5" />
-                  ) : (
-                    <Eye className="w-5 h-5" />
-                  )}
-                </button>
-              </div>
-            </div>
-
-            {error && (
-              <p className="text-sm text-red-600 mb-4" role="alert">
-                {error}
-              </p>
-            )}
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full bg-[#007BC1] text-white py-3.5 rounded-md font-medium hover:bg-[#006399] transition-colors text-base disabled:opacity-60 disabled:cursor-not-allowed"
-            >
-              {loading ? 'Signing in…' : 'Login'}
-            </button>
-          </form>
-
-          {/* Demo credentials — remove together with lib/auth.ts when API auth lands */}
-          <div className="mt-8 bg-gray-50 border border-gray-200 rounded-lg p-4">
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
-              Demo accounts
-            </p>
-            <ul className="space-y-1">
-              {DEMO_ACCOUNTS.map((demo) => (
-                <li key={demo.username} className="text-xs text-gray-600 flex justify-between gap-2">
-                  <span className="font-mono">{demo.username} / {demo.password}</span>
-                  <span className="text-gray-400">{ROLE_LABELS[demo.role]}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
+          {renderCardContent()}
         </div>
       </div>
     </div>

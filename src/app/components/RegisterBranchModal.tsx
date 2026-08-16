@@ -12,7 +12,9 @@ import { apiFetch, apiErrorMessage } from '../lib/api';
 import { BranchCreatedModal } from './BranchCreatedModal';
 import { StoreLocationCombobox, StoreLocation } from './StoreLocationCombobox';
 import { ProvinceCombobox } from './ProvinceCombobox';
+import { CityMunicipalityCombobox } from './CityMunicipalityCombobox';
 import { provinceFocus } from '../lib/phProvinces';
+import { cityMunicipalityFocus } from '../lib/phCitiesMunicipalities';
 import { normalizePhMobile, formatPhMobileNational } from '../lib/phMobile';
 
 interface RegisterBranchModalProps {
@@ -119,6 +121,13 @@ export function RegisterBranchModal({ isOpen, onClose }: RegisterBranchModalProp
     setCity('');
     setProvince('');
     setSelectedReferenceId(null);
+  };
+
+  // A city/municipality selection is valid only within its current province.
+  // Clear it when that parent selection changes to prevent mismatched addresses.
+  const handleProvinceChange = (nextProvince: string) => {
+    if (nextProvince !== province) setCity('');
+    setProvince(nextProvince);
   };
 
   // New owner fields
@@ -496,12 +505,11 @@ export function RegisterBranchModal({ isOpen, onClose }: RegisterBranchModalProp
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs text-[#6B6B67] mb-1">City / Municipality</label>
-                  <input
-                    type="text"
+                  <CityMunicipalityCombobox
+                    province={province}
                     value={city}
-                    onChange={(e) => setCity(e.target.value)}
-                    placeholder="Calamba"
-                    className="w-full h-[34px] px-3 text-[13px] border border-[#E4E4E0] rounded-lg bg-[#F7F7F6] outline-none focus:border-[#185FA5]"
+                    onChange={setCity}
+                    placeholder="Search city or municipality…"
                   />
                 </div>
                 <div>
@@ -512,7 +520,7 @@ export function RegisterBranchModal({ isOpen, onClose }: RegisterBranchModalProp
                       zoomed into this province. */}
                   <ProvinceCombobox
                     value={province}
-                    onChange={setProvince}
+                    onChange={handleProvinceChange}
                     placeholder="Search province…"
                   />
                 </div>
@@ -731,9 +739,11 @@ export function RegisterBranchModal({ isOpen, onClose }: RegisterBranchModalProp
                       points={polygonPoints}
                       isDrawing={isDrawingPolygon}
                       onAddPoint={handleAddPoint}
-                      // Frame the map on the province chosen in Step 1 so the
-                      // coverage area is already in view when drawing starts.
-                      focus={provinceFocus(province)}
+                      // Prefer the Step 1 city/municipality; retain province
+                      // framing as a safe fallback for older saved values.
+                      focus={
+                        cityMunicipalityFocus(province, city) ?? provinceFocus(province)
+                      }
                     />
                     {/* Drawing mode badge overlay */}
                     {isDrawingPolygon && (

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import dynamic from 'next/dynamic';
 import { Loader2 } from 'lucide-react';
@@ -8,9 +8,8 @@ import { toast } from 'sonner';
 import { Toaster } from './components/ui/sonner';
 import { Login } from './components/Login';
 import { LogoutConfirmationDialog } from './components/LogoutConfirmationDialog';
-import { PersonaSwitcher } from './components/PersonaSwitcher';
 import { AccountProvider } from './contexts/AccountContext';
-import { Account, accountFromUser, DEMO_ACCOUNTS, signIn, signOut } from './lib/auth';
+import { Account, accountFromUser, signOut } from './lib/auth';
 import { supabase } from './lib/supabase/client';
 
 // Lazy-load each persona app so a page load only compiles/downloads the one
@@ -28,20 +27,32 @@ const BranchManagerApp = dynamic(
   { ssr: false },
 );
 
+const AUTH_RESTORE_TIMEOUT_MS = 10_000;
+
 export default function App() {
   const [account, setAccount] = useState<Account | null>(null);
   const [authReady, setAuthReady] = useState(false);
-  const [switching, setSwitching] = useState(false);
+  const [passwordRecovery, setPasswordRecovery] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
+  const passwordRecoveryRef = useRef(false);
 
   useEffect(() => {
     let mounted = true;
+    // A stalled refresh request must never leave the whole application behind
+    // an infinite loading screen. Auth events remain subscribed after this
+    // fallback, so a session that resolves later can still restore normally.
+    const restoreTimer = window.setTimeout(() => {
+      if (!mounted) return;
+      setAccount(null);
+      setAuthReady(true);
+    }, AUTH_RESTORE_TIMEOUT_MS);
 
     const applySession = (session: Session | null) => {
       if (!mounted) return;
+      window.clearTimeout(restoreTimer);
 
-      if (!session) {
+      if (!session || passwordRecoveryRef.current) {
         setAccount(null);
         setAuthReady(true);
         return;
@@ -63,45 +74,36 @@ export default function App() {
     // automatic token refresh, and changes made in another browser tab.
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        window.clearTimeout(restoreTimer);
+        passwordRecoveryRef.current = true;
+        setPasswordRecovery(true);
+        setAccount(null);
+        setAuthReady(true);
+        return;
+      }
       applySession(session);
     });
 
-    // Restore the persisted session on a hard refresh. getSession refreshes an
-    // expired access token when the stored refresh token is still valid.
-    void supabase.auth
-      .getSession()
-      .then(({ data, error }) => applySession(error ? null : data.session))
-      .catch(() => applySession(null));
-
     return () => {
       mounted = false;
+      window.clearTimeout(restoreTimer);
       subscription.unsubscribe();
     };
   }, []);
 
-  /**
-   * DEMO-ONLY: really signs in as the chosen seed user (new Supabase session),
-   * rather than just re-skinning the view. This keeps the JWT the API verifies
-   * in agreement with the persona on screen — a view-only switch would leave
-   * API calls scoped to the previous user's role/branches.
-   */
-  const handleSwitchUser = async (username: string) => {
-    if (username === account?.username || switching) return;
-    const demo = DEMO_ACCOUNTS.find((d) => d.username === username);
-    if (!demo) return;
-
-    setSwitching(true);
-    const { account: next, error } = await signIn(demo.username, demo.password);
-    if (next) {
-      setAccount(next);
-    } else {
-      toast.error(error ?? 'Could not switch demo user');
-    }
-    setSwitching(false);
-  };
-
   const requestLogout = () => setShowLogoutConfirm(true);
+
+  const handlePasswordReset = async () => {
+    // A recovery link creates a temporary authenticated session. End it after
+    // the password changes so the user deliberately signs in with the new one.
+    await supabase.auth.signOut();
+    passwordRecoveryRef.current = false;
+    setPasswordRecovery(false);
+    setAccount(null);
+    window.history.replaceState({}, document.title, window.location.pathname);
+  };
 
   const handleLogout = async () => {
     if (loggingOut) return;
@@ -153,12 +155,6 @@ export default function App() {
           )}
           {account.role === 'branch-manager' && <BranchManagerApp />}
 
-          <PersonaSwitcher
-            account={account}
-            switching={switching}
-            onSwitchUser={handleSwitchUser}
-            onLogout={requestLogout}
-          />
           <LogoutConfirmationDialog
             open={showLogoutConfirm}
             loggingOut={loggingOut}
@@ -167,7 +163,11 @@ export default function App() {
           />
         </AccountProvider>
       ) : (
-        <Login onLogin={setAccount} />
+        <Login
+          onLogin={setAccount}
+          passwordRecovery={passwordRecovery}
+          onPasswordReset={handlePasswordReset}
+        />
       )}
       <Toaster className={account ? 'dashboard-toaster' : undefined} />
     </>

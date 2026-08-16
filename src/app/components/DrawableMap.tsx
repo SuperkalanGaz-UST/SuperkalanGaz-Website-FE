@@ -7,7 +7,6 @@ import {
   NavigationControl,
 } from 'maplibre-gl';
 import type { FeatureCollection, LineString, Point, Polygon } from 'geojson';
-import 'maplibre-gl/dist/maplibre-gl.css';
 import {
   OPENFREEMAP_STYLE_URL,
   toLngLat,
@@ -18,9 +17,9 @@ interface DrawableMapProps {
   isDrawing: boolean;
   onAddPoint: (lat: number, lng: number) => void;
   /**
-   * Where to frame the map initially — typically the center of the selected
-   * province, so drawing starts already zoomed into the right area. Defaults to
-   * the national fallback when omitted (e.g. the edit modal that has no picker).
+   * Where to frame the map initially — typically the selected city or
+   * municipality, with its province as fallback, so drawing starts in the
+   * right area. Defaults to the national fallback when omitted.
    */
   focus?: { center: [number, number]; zoom: number };
 }

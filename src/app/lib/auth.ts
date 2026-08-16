@@ -62,6 +62,10 @@ export interface SignInResult {
   error: string | null;
 }
 
+export interface AuthActionResult {
+  error: string | null;
+}
+
 const VALID_ROLES: readonly Role[] = [
   'franchise-admin',
   'branch-owner',
@@ -136,6 +140,31 @@ export async function signIn(username: string, password: string): Promise<SignIn
   }
 
   return result;
+}
+
+/**
+ * Sends Supabase's single-use recovery link to the email behind the supplied
+ * username. Supabase deliberately returns success for unknown accounts as well,
+ * so the welcome page cannot be used to discover valid staff logins.
+ */
+export async function requestPasswordReset(
+  username: string,
+  redirectTo: string,
+): Promise<AuthActionResult> {
+  const email = usernameToEmail(username);
+  const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
+
+  return {
+    error: error ? 'Could not send the reset link. Please try again later.' : null,
+  };
+}
+
+/** Updates the password for the recovery session created by Supabase's email link. */
+export async function updatePassword(password: string): Promise<AuthActionResult> {
+  const { error } = await supabase.auth.updateUser({ password });
+  return {
+    error: error ? 'This reset link is invalid or has expired. Request a new link.' : null,
+  };
 }
 
 export async function signOut(): Promise<void> {

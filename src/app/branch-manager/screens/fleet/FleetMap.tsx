@@ -9,7 +9,6 @@ import {
     Popup,
 } from "maplibre-gl";
 import type { Feature, Polygon } from "geojson";
-import "maplibre-gl/dist/maplibre-gl.css";
 import { OPENFREEMAP_STYLE_URL, toLngLat } from "../../../lib/mapConfig";
 import type { RiderStatus, Rider } from "./types";
 

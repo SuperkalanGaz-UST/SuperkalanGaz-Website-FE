@@ -15,9 +15,62 @@ if (!url || !anonKey) {
   );
 }
 
-export const supabase = createClient(url, anonKey, {
-  auth: {
-    persistSession: true,
-    autoRefreshToken: true,
-  },
-});
+// Keep the validated values narrowed inside the client factory closure.
+const supabaseUrl = url;
+const supabaseAnonKey = anonKey;
+
+const AUTH_REQUEST_TIMEOUT_MS = 8_000;
+
+/**
+ * Supabase's default browser fetch has no upper time limit. Bound Auth calls so
+ * an unreachable token endpoint cannot hold client initialization forever.
+ */
+const fetchWithTimeout: typeof fetch = async (input, init) => {
+  const controller = new AbortController();
+  const sourceSignal = init?.signal;
+  const forwardAbort = () => controller.abort(sourceSignal?.reason);
+
+  if (sourceSignal?.aborted) {
+    forwardAbort();
+  } else {
+    sourceSignal?.addEventListener('abort', forwardAbort, { once: true });
+  }
+
+  const timeout = setTimeout(() => controller.abort(), AUTH_REQUEST_TIMEOUT_MS);
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timeout);
+    sourceSignal?.removeEventListener('abort', forwardAbort);
+  }
+};
+
+function createSupabaseClient() {
+  return createClient(supabaseUrl, supabaseAnonKey, {
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+    },
+    global: {
+      fetch: fetchWithTimeout,
+    },
+  });
+}
+
+type SupabaseBrowserGlobal = typeof globalThis & {
+  __superkalanSupabaseClient?: ReturnType<typeof createSupabaseClient>;
+};
+
+const browserGlobal = globalThis as SupabaseBrowserGlobal;
+const reusableDevClient =
+  process.env.NODE_ENV !== 'production' && typeof window !== 'undefined'
+    ? browserGlobal.__superkalanSupabaseClient
+    : undefined;
+
+export const supabase = reusableDevClient ?? createSupabaseClient();
+
+// Next.js Fast Refresh can re-evaluate this module. Reusing the browser client
+// prevents duplicate refresh loops and auth subscriptions during development.
+if (process.env.NODE_ENV !== 'production' && typeof window !== 'undefined') {
+  browserGlobal.__superkalanSupabaseClient = supabase;
+}

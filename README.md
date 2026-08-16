@@ -58,8 +58,6 @@ Users live in Supabase Auth. Log in by **username** (mapped internally to
 | `owner.multi` | `owner123` | Branch Owner (all branches) |
 | `manager` | `manager123` | Branch Manager (Quezon City) |
 
-After login, a floating persona switcher lets you preview the other dashboards.
-
 > These demo credentials are also listed on the login screen. Remove that panel (and rotate
 > the passwords) before going to production.
 

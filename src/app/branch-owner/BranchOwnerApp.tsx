@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import type { ReactNode } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { Dashboard } from './components/Dashboard';
 import { OrderAnalytics } from './components/OrderAnalytics';
@@ -21,13 +22,29 @@ import { ReorderLogFull } from './components/ReorderLogFull';
 import { CustomerRatingsFull } from './components/CustomerRatingsFull';
 import { SalesFull } from './components/SalesFull';
 import { ExpensesLogFull } from './components/ExpensesLogFull';
-import { BranchProvider } from './contexts/BranchContext';
+import { BranchProvider, useBranch } from './contexts/BranchContext';
 
 export type Branch = 'Quezon City Branch' | 'Makati Branch' | 'Mandaluyong Branch';
 
 interface BranchOwnerAppProps {
   /** Branches assigned to the authenticated Branch Owner (from login). */
   branches: Branch[];
+}
+
+function BranchContentTransition({ children }: { children: ReactNode }) {
+  const { isBranchSwitching } = useBranch();
+
+  return (
+    <div
+      className={`flex-1 flex flex-col overflow-hidden transition-[opacity,transform] duration-200 ease-out ${
+        isBranchSwitching
+          ? 'translate-y-1 opacity-70'
+          : 'translate-y-0 opacity-100'
+      }`}
+    >
+      {children}
+    </div>
+  );
 }
 
 export function BranchOwnerApp({ branches }: BranchOwnerAppProps) {
@@ -48,7 +65,7 @@ export function BranchOwnerApp({ branches }: BranchOwnerAppProps) {
       <div className="flex h-screen bg-gray-50">
         <Sidebar activeScreen={activeScreen} onNavigate={setActiveScreen} />
 
-        <div className="flex-1 flex flex-col overflow-hidden">
+        <BranchContentTransition>
           {activeScreen === 'dashboard' && <Dashboard />}
           {activeScreen === 'order-analytics' && <OrderAnalytics />}
           {activeScreen === 'sales-overview' && <SalesOverview />}
@@ -70,7 +87,7 @@ export function BranchOwnerApp({ branches }: BranchOwnerAppProps) {
           {activeScreen === 'redemption-history-full' && <RedemptionHistoryFull onBack={() => setActiveScreen('loyalty')} />}
           {activeScreen === 'reorder-log-full' && <ReorderLogFull onBack={() => setActiveScreen('supply-chain')} />}
           {activeScreen === 'customer-ratings-full' && <CustomerRatingsFull onBack={() => setActiveScreen('csat')} />}
-        </div>
+        </BranchContentTransition>
       </div>
     </BranchProvider>
   );
