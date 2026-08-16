@@ -30,7 +30,17 @@
 .progressText { color: var(--muted-foreground); }
 .progressPercentage { font-weight: 600; color: var(--foreground); }
 
-.actionRow { display: flex; justify-content: flex-end; margin-top: auto; padding-top: 0.5rem; border-top: 1px solid var(--border); }
+.actionRow { display: flex; flex-direction: column; margin-top: auto; padding-top: 0.75rem; border-top: 1px solid var(--border); }
+
+.emptyState { text-align: center; padding: 2rem; color: var(--muted-foreground); }
+
+/* Mileage log history (story BM-042/043 — "appears in the vehicle's
+   maintenance log history"), expanded inline under a card's actions. */
+.historyPanel { display: flex; flex-direction: column; gap: 0.35rem; margin-top: 0.6rem; padding: 0.6rem 0.75rem; background-color: var(--muted); border-radius: var(--radius-md); max-height: 160px; overflow-y: auto; }
+.historyEmpty { font-size: 0.8rem; color: var(--muted-foreground); text-align: center; padding: 0.5rem 0; }
+.historyRow { display: grid; grid-template-columns: 1fr auto auto; gap: 0.75rem; font-size: 0.8rem; color: var(--foreground); }
+
+.fieldError { font-size: 0.8rem; color: var(--error, #ef4444); }
 
 /* Dialog Styles */
 .dialogOverlay { position: fixed; inset: 0; background-color: rgba(0, 0, 0, 0.5); z-index: 50; display: flex; align-items: center; justify-content: center; padding: 1rem; }

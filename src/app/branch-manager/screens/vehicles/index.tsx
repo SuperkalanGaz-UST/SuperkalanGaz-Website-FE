@@ -1,201 +1,338 @@
 'use client';
 
-import React, { useState, useMemo } from "react";
-import { Wrench, Settings, PenLine, AlertTriangle, ShieldCheck, Truck } from "lucide-react";
+import React, { useCallback, useEffect, useState } from "react";
+import { toast } from "sonner";
+import { Wrench, PenLine, AlertTriangle, ShieldCheck, Truck, History } from "lucide-react";
 import { Badge } from "../../components/Badge";
 import { Button } from "../../components/Button";
 import { Progress } from "../../components/Progress";
 import { Input } from "../../components/Input";
+import { apiFetch, apiErrorMessage } from "../../../lib/api";
 import styles from "./screen.module.css";
 
-const PMS_INTERVAL = 3000;
-
-interface Vehicle {
-  id: string;
-  name: string;
-  plate: string;
-  status: "Active" | "Maintenance" | "Idle";
-  currentOdometer: number;
-  lastPmsOdometer: number;
+/** A vehicle row from GET /vehicles (story BM-US-09). */
+interface VehicleRow {
+    id: string;
+    branch_id: string;
+    plate_number: string;
+    vehicle_type: string | null;
+    assigned_rider_id: string | null;
+    assigned_rider_name: string | null;
+    status: "active" | "maintenance" | "inactive";
+    current_odometer_km: number;
+    last_pms_odometer_km: number;
+    km_since_last_pms: number;
+    maintenance_threshold_km: number;
+    updated_at: string;
 }
 
-const INITIAL_VEHICLES: Vehicle[] = [
-  { id: "v1", name: "Honda Click 125i", plate: "NCD-1234", status: "Active", currentOdometer: 14500, lastPmsOdometer: 12000 },
-  { id: "v2", name: "Yamaha Mio i125", plate: "XYZ-9876", status: "Active", currentOdometer: 8900, lastPmsOdometer: 6000 },
-  { id: "v3", name: "Honda Beat", plate: "ABC-1122", status: "Active", currentOdometer: 21500, lastPmsOdometer: 21000 },
-  { id: "v4", name: "Suzuki Skydrive", plate: "QWE-5544", status: "Idle", currentOdometer: 35600, lastPmsOdometer: 32700 }, // Overdue!
-  { id: "v5", name: "Yamaha Aerox", plate: "PLM-3321", status: "Maintenance", currentOdometer: 18000, lastPmsOdometer: 15000 },
-];
+/** A maintenance log entry from GET /vehicles/:id. */
+interface MaintenanceLogRow {
+    id: string;
+    vehicle_id: string;
+    odometer_km: number;
+    fuel_liters: number | null;
+    logged_by: string;
+    logged_at: string;
+}
+
+const todayIso = () => new Date().toISOString().slice(0, 10);
 
 export default function VehicleManagementPage() {
-  const [mounted, setMounted] = React.useState(false);
-  const [vehicles, setVehicles] = useState<Vehicle[]>(INITIAL_VEHICLES);
-  const [updateDialogOpen, setUpdateDialogOpen] = useState(false);
-  const [selectedVehicleId, setSelectedVehicleId] = useState<string | null>(null);
-  const [newOdometerValue, setNewOdometerValue] = useState<string>("");
+    const [mounted, setMounted] = useState(false);
+    const [vehicles, setVehicles] = useState<VehicleRow[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
 
-  React.useEffect(() => {
-    setMounted(true);
-  }, []);
+    const [updateDialogVehicleId, setUpdateDialogVehicleId] = useState<string | null>(null);
+    const [odometerValue, setOdometerValue] = useState("");
+    const [fuelValue, setFuelValue] = useState("");
+    const [dateValue, setDateValue] = useState(todayIso());
+    const [dialogError, setDialogError] = useState<string | null>(null);
+    const [saving, setSaving] = useState(false);
+    const [resettingId, setResettingId] = useState<string | null>(null);
 
-  const totalVehicles = vehicles.length;
-  const overdueVehicles = vehicles.filter(v => (v.currentOdometer - v.lastPmsOdometer) >= PMS_INTERVAL).length;
-  const healthyVehicles = vehicles.filter(v => (v.currentOdometer - v.lastPmsOdometer) < PMS_INTERVAL * 0.8).length;
+    const [historyVehicleId, setHistoryVehicleId] = useState<string | null>(null);
+    const [historyLogs, setHistoryLogs] = useState<MaintenanceLogRow[]>([]);
+    const [historyLoading, setHistoryLoading] = useState(false);
 
-  if (!mounted) {
-    return <div style={{ minHeight: "100vh", backgroundColor: "var(--background)" }} />;
-  }
+    useEffect(() => { setMounted(true); }, []);
 
-  const handleOpenUpdateDialog = (id: string, currentVal: number) => {
-    setSelectedVehicleId(id);
-    setNewOdometerValue(currentVal.toString());
-    setUpdateDialogOpen(true);
-  };
+    const loadVehicles = useCallback(async () => {
+        setLoading(true);
+        setError(null);
+        try {
+            const res = await apiFetch('/vehicles');
+            const data = await res.json();
+            if (!res.ok) throw new Error(apiErrorMessage(data, 'Failed to load vehicles'));
+            setVehicles(data.vehicles as VehicleRow[]);
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Failed to load vehicles');
+            setVehicles([]);
+        } finally {
+            setLoading(false);
+        }
+    }, []);
 
-  const handleCloseDialog = () => {
-    setUpdateDialogOpen(false);
-    setSelectedVehicleId(null);
-    setNewOdometerValue("");
-  };
+    useEffect(() => { void loadVehicles(); }, [loadVehicles]);
 
-  const handleSaveOdometer = () => {
-    if (!selectedVehicleId) return;
-    const newVal = parseInt(newOdometerValue, 10);
-    if (isNaN(newVal)) return;
-
-    setVehicles(prev => prev.map(v => {
-      if (v.id === selectedVehicleId) {
-        // Prevent setting a lower value than current
-        const updatedOdo = Math.max(v.currentOdometer, newVal);
-        return { ...v, currentOdometer: updatedOdo };
-      }
-      return v;
-    }));
-    handleCloseDialog();
-  };
-
-  const handleMarkPmsCompleted = (id: string) => {
-    if (confirm("Are you sure you want to log a PMS completion for this vehicle? This will reset the PMS counter.")) {
-        setVehicles(prev => prev.map(v => {
-            if (v.id === id) {
-                return { ...v, lastPmsOdometer: v.currentOdometer, status: "Active" };
-            }
-            return v;
-        }));
+    if (!mounted) {
+        return <div style={{ minHeight: "100vh", backgroundColor: "var(--background)" }} />;
     }
-  };
 
-  return (
-    <div className={styles.pageWrapper}>
-      <section className={styles.statsGrid}>
-        <div className={styles.statCard}>
-          <div className={styles.statHeader}><span className={styles.statLabel}>Total Fleet</span><Truck className={styles.statIcon} size={20} /></div>
-          <div className={styles.statValue}>{totalVehicles}</div>
+    const totalVehicles = vehicles.length;
+    const overdueVehicles = vehicles.filter(v => v.status === "maintenance").length;
+    const healthyVehicles = vehicles.filter(v => v.status !== "maintenance" && v.km_since_last_pms < v.maintenance_threshold_km * 0.8).length;
+
+    const openUpdateDialog = (vehicle: VehicleRow) => {
+        setUpdateDialogVehicleId(vehicle.id);
+        setOdometerValue(vehicle.current_odometer_km.toString());
+        setFuelValue("");
+        setDateValue(todayIso());
+        setDialogError(null);
+    };
+
+    const closeUpdateDialog = () => {
+        setUpdateDialogVehicleId(null);
+        setDialogError(null);
+    };
+
+    const handleSaveOdometer = async () => {
+        if (!updateDialogVehicleId) return;
+        const odometerKm = parseInt(odometerValue, 10);
+        if (isNaN(odometerKm)) { setDialogError('Enter a valid odometer reading'); return; }
+        const fuelLiters = fuelValue.trim() ? parseInt(fuelValue, 10) : undefined;
+        if (fuelValue.trim() && isNaN(fuelLiters as number)) { setDialogError('Enter a valid fuel amount'); return; }
+
+        setSaving(true);
+        setDialogError(null);
+        try {
+            const res = await apiFetch(`/vehicles/${updateDialogVehicleId}/mileage`, {
+                method: 'POST',
+                body: JSON.stringify({ odometerKm, fuelLiters, loggedAt: dateValue || undefined }),
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                if (res.status === 409) {
+                    toast.error(apiErrorMessage(data, 'A newer reading was already recorded'));
+                    closeUpdateDialog();
+                    await loadVehicles();
+                    return;
+                }
+                setDialogError(apiErrorMessage(data, 'Failed to save reading'));
+                return;
+            }
+            const updated = data.vehicle as VehicleRow;
+            setVehicles(prev => prev.map(v => v.id === updated.id ? updated : v));
+            if (updated.status === 'maintenance') {
+                toast.warning(`${updated.plate_number} reached its PMS interval and is flagged for maintenance.`);
+            } else {
+                toast.success('Odometer reading logged.');
+            }
+            closeUpdateDialog();
+        } catch (err) {
+            setDialogError(err instanceof Error ? err.message : 'Failed to save reading');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const handleResetPms = async (vehicle: VehicleRow) => {
+        setResettingId(vehicle.id);
+        try {
+            const res = await apiFetch(`/vehicles/${vehicle.id}/reset-pms`, { method: 'POST' });
+            const data = await res.json();
+            if (!res.ok) {
+                if (res.status === 409) {
+                    toast.error('This vehicle is not currently flagged for maintenance.');
+                    await loadVehicles();
+                    return;
+                }
+                toast.error(apiErrorMessage(data, 'Failed to reset PMS'));
+                return;
+            }
+            const updated = data.vehicle as VehicleRow;
+            setVehicles(prev => prev.map(v => v.id === updated.id ? updated : v));
+            toast.success(`${updated.plate_number} marked serviced — PMS counter reset.`);
+        } catch (err) {
+            toast.error(err instanceof Error ? err.message : 'Failed to reset PMS');
+        } finally {
+            setResettingId(null);
+        }
+    };
+
+    const toggleHistory = async (vehicleId: string) => {
+        if (historyVehicleId === vehicleId) { setHistoryVehicleId(null); return; }
+        setHistoryVehicleId(vehicleId);
+        setHistoryLoading(true);
+        try {
+            const res = await apiFetch(`/vehicles/${vehicleId}`);
+            const data = await res.json();
+            if (!res.ok) throw new Error(apiErrorMessage(data, 'Failed to load history'));
+            setHistoryLogs(data.maintenanceLogs as MaintenanceLogRow[]);
+        } catch (err) {
+            toast.error(err instanceof Error ? err.message : 'Failed to load history');
+            setHistoryLogs([]);
+        } finally {
+            setHistoryLoading(false);
+        }
+    };
+
+    return (
+        <div className={styles.pageWrapper}>
+            <section className={styles.statsGrid}>
+                <div className={styles.statCard}>
+                    <div className={styles.statHeader}><span className={styles.statLabel}>Total Fleet</span><Truck className={styles.statIcon} size={20} /></div>
+                    <div className={styles.statValue}>{totalVehicles}</div>
+                </div>
+                <div className={styles.statCard}>
+                    <div className={styles.statHeader}><span className={styles.statLabel}>Healthy Vehicles</span><ShieldCheck className={styles.statIcon} style={{ color: "var(--success)" }} size={20} /></div>
+                    <div className={styles.statValue} style={{ color: "var(--success)" }}>{healthyVehicles}</div>
+                </div>
+                <div className={styles.statCard} style={overdueVehicles > 0 ? { borderColor: "var(--error)" } : {}}>
+                    <div className={styles.statHeader}><span className={styles.statLabel}>PMS Due / Overdue</span><AlertTriangle className={styles.statIcon} style={{ color: "var(--error)" }} size={20} /></div>
+                    <div className={styles.statValue} style={{ color: "var(--error)" }}>{overdueVehicles}</div>
+                </div>
+            </section>
+
+            {loading ? (
+                <div className={styles.emptyState}>Loading vehicles…</div>
+            ) : error ? (
+                <div className={styles.emptyState}>
+                    <div style={{ marginBottom: '0.75rem' }}>{error}</div>
+                    <Button variant="outline" size="sm" onClick={() => void loadVehicles()}>Try again</Button>
+                </div>
+            ) : vehicles.length === 0 ? (
+                <div className={styles.emptyState}>No vehicles on this branch&apos;s roster yet.</div>
+            ) : (
+                <section className={styles.vehiclesGrid}>
+                    {vehicles.map(vehicle => {
+                        const sinceLastPms = vehicle.km_since_last_pms;
+                        const threshold = vehicle.maintenance_threshold_km;
+                        const progressPercent = Math.min((sinceLastPms / threshold) * 100, 100);
+                        const isOverdue = vehicle.status === "maintenance";
+                        const isWarning = !isOverdue && sinceLastPms >= threshold * 0.8;
+
+                        return (
+                            <div key={vehicle.id} className={styles.vehicleCard}>
+                                <div className={styles.cardHeader}>
+                                    <div className={styles.vehicleIdentity}>
+                                        <div className={styles.vehicleName}>{vehicle.assigned_rider_name ?? 'Unassigned'}</div>
+                                        <div className={styles.vehiclePlate}>{vehicle.plate_number}{vehicle.vehicle_type ? ` · ${vehicle.vehicle_type}` : ''}</div>
+                                    </div>
+                                    <Badge variant={isOverdue ? "destructive" : isWarning ? "warning" : "success"}>
+                                        {isOverdue ? "Overdue" : isWarning ? "Due Soon" : "Healthy"}
+                                    </Badge>
+                                </div>
+
+                                <div className={styles.metricsRow}>
+                                    <div className={styles.metricBox}>
+                                        <div className={styles.metricLabel}>Current Odometer</div>
+                                        <div className={styles.metricValueWrapper}>
+                                            <span className={styles.metricValue}>{vehicle.current_odometer_km.toLocaleString()}</span>
+                                            <span className={styles.metricUnit}>km</span>
+                                        </div>
+                                    </div>
+                                    <div className={styles.metricBox}>
+                                        <div className={styles.metricLabel}>Since Last PMS</div>
+                                        <div className={styles.metricValueWrapper}>
+                                            <span className={styles.metricValue} style={{ color: isOverdue ? "var(--error)" : isWarning ? "var(--warning)" : "inherit" }}>
+                                                {sinceLastPms.toLocaleString()}
+                                            </span>
+                                            <span className={styles.metricUnit}>km</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className={styles.progressSection}>
+                                    <div className={styles.progressHeader}>
+                                        <span className={styles.progressText}>PMS Interval: {threshold.toLocaleString()} km</span>
+                                        <span className={styles.progressPercentage}>{Math.round(progressPercent)}%</span>
+                                    </div>
+                                    <Progress value={progressPercent} style={{ backgroundColor: "rgba(0,0,0,0.05)" }} className={isOverdue ? "progress-error" : isWarning ? "progress-warning" : ""} />
+                                </div>
+
+                                <div className={styles.actionRow}>
+                                    <div style={{ display: 'flex', gap: '0.5rem', width: '100%' }}>
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            style={{ flex: 1 }}
+                                            disabled={!isOverdue || resettingId === vehicle.id}
+                                            onClick={() => void handleResetPms(vehicle)}
+                                        >
+                                            <Wrench size={16} style={{ marginRight: '0.3rem' }} /> {resettingId === vehicle.id ? 'Resetting…' : 'Reset PMS'}
+                                        </Button>
+                                        <Button variant="primary" size="sm" style={{ flex: 1 }} onClick={() => openUpdateDialog(vehicle)}>
+                                            <PenLine size={16} style={{ marginRight: '0.3rem' }} /> Update Odo
+                                        </Button>
+                                    </div>
+                                    <Button variant="ghost" size="sm" style={{ width: '100%', marginTop: '0.4rem' }} onClick={() => void toggleHistory(vehicle.id)}>
+                                        <History size={14} style={{ marginRight: '0.3rem' }} /> {historyVehicleId === vehicle.id ? 'Hide History' : 'View History'}
+                                    </Button>
+                                    {historyVehicleId === vehicle.id && (
+                                        <div className={styles.historyPanel}>
+                                            {historyLoading ? (
+                                                <div className={styles.historyEmpty}>Loading…</div>
+                                            ) : historyLogs.length === 0 ? (
+                                                <div className={styles.historyEmpty}>No mileage entries logged yet.</div>
+                                            ) : (
+                                                historyLogs.map(log => (
+                                                    <div key={log.id} className={styles.historyRow}>
+                                                        <span>{new Date(log.logged_at).toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' })}</span>
+                                                        <span>{log.odometer_km.toLocaleString()} km</span>
+                                                        <span>{log.fuel_liters != null ? `${log.fuel_liters} L` : '—'}</span>
+                                                    </div>
+                                                ))
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        );
+                    })}
+                </section>
+            )}
+
+            {updateDialogVehicleId && (
+                <div className={styles.dialogOverlay}>
+                    <div className={styles.dialogContent}>
+                        <div className={styles.dialogHeader}>
+                            <h2 className={styles.dialogTitle}>Update Odometer</h2>
+                            <p className={styles.dialogDescription}>Log the latest odometer reading and, optionally, fuel added. This updates the distance since the last PMS.</p>
+                        </div>
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                            <div>
+                                <label style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--foreground)', display: 'block', marginBottom: '0.35rem' }}>New Reading (km)</label>
+                                <Input
+                                    type="number"
+                                    value={odometerValue}
+                                    onChange={(e) => setOdometerValue(e.target.value)}
+                                    autoFocus
+                                    min={vehicles.find(v => v.id === updateDialogVehicleId)?.current_odometer_km ?? 0}
+                                />
+                            </div>
+                            <div>
+                                <label style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--foreground)', display: 'block', marginBottom: '0.35rem' }}>Fuel Added (L) — optional</label>
+                                <Input type="number" value={fuelValue} onChange={(e) => setFuelValue(e.target.value)} min={0} />
+                            </div>
+                            <div>
+                                <label style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--foreground)', display: 'block', marginBottom: '0.35rem' }}>Date</label>
+                                <Input type="date" value={dateValue} onChange={(e) => setDateValue(e.target.value)} max={todayIso()} />
+                            </div>
+                            {dialogError && <div className={styles.fieldError}>{dialogError}</div>}
+                        </div>
+
+                        <div className={styles.dialogFooter}>
+                            <Button variant="ghost" onClick={closeUpdateDialog} disabled={saving}>Cancel</Button>
+                            <Button variant="primary" onClick={() => void handleSaveOdometer()} disabled={saving}>
+                                {saving ? 'Saving…' : 'Save Record'}
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
-        <div className={styles.statCard}>
-          <div className={styles.statHeader}><span className={styles.statLabel}>Healthy Vehicles</span><ShieldCheck className={styles.statIcon} style={{ color: "var(--success)" }} size={20} /></div>
-          <div className={styles.statValue} style={{ color: "var(--success)" }}>{healthyVehicles}</div>
-        </div>
-        <div className={styles.statCard} style={overdueVehicles > 0 ? { borderColor: "var(--error)" } : {}}>
-          <div className={styles.statHeader}><span className={styles.statLabel}>PMS Due / Overdue</span><AlertTriangle className={styles.statIcon} style={{ color: "var(--error)" }} size={20} /></div>
-          <div className={styles.statValue} style={{ color: "var(--error)" }}>{overdueVehicles}</div>
-        </div>
-      </section>
-
-      <section className={styles.vehiclesGrid}>
-        {vehicles.map(vehicle => {
-          const sinceLastPms = vehicle.currentOdometer - vehicle.lastPmsOdometer;
-          const progressPercent = Math.min((sinceLastPms / PMS_INTERVAL) * 100, 100);
-          const isOverdue = sinceLastPms >= PMS_INTERVAL;
-          const isWarning = sinceLastPms >= PMS_INTERVAL * 0.8 && !isOverdue;
-          
-          let progressColor = "var(--primary)";
-          if (isOverdue) progressColor = "var(--error)";
-          else if (isWarning) progressColor = "var(--warning)";
-
-          return (
-            <div key={vehicle.id} className={styles.vehicleCard}>
-              <div className={styles.cardHeader}>
-                <div className={styles.vehicleIdentity}>
-                  <div className={styles.vehicleName}>{vehicle.name}</div>
-                  <div className={styles.vehiclePlate}>{vehicle.plate}</div>
-                </div>
-                <Badge variant={isOverdue ? "destructive" : isWarning ? "warning" : "success"}>
-                  {isOverdue ? "Overdue" : isWarning ? "Due Soon" : "Healthy"}
-                </Badge>
-              </div>
-
-              <div className={styles.metricsRow}>
-                <div className={styles.metricBox}>
-                  <div className={styles.metricLabel}>Current Odometer</div>
-                  <div className={styles.metricValueWrapper}>
-                    <span className={styles.metricValue}>{vehicle.currentOdometer.toLocaleString()}</span>
-                    <span className={styles.metricUnit}>km</span>
-                  </div>
-                </div>
-                <div className={styles.metricBox}>
-                  <div className={styles.metricLabel}>Since Last PMS</div>
-                  <div className={styles.metricValueWrapper}>
-                    <span className={styles.metricValue} style={{ color: isOverdue ? "var(--error)" : isWarning ? "var(--warning)" : "inherit" }}>
-                      {sinceLastPms.toLocaleString()}
-                    </span>
-                    <span className={styles.metricUnit}>km</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className={styles.progressSection}>
-                <div className={styles.progressHeader}>
-                  <span className={styles.progressText}>PMS Interval: {PMS_INTERVAL.toLocaleString()} km</span>
-                  <span className={styles.progressPercentage}>{Math.round(progressPercent)}%</span>
-                </div>
-                <Progress value={progressPercent} style={{ backgroundColor: "rgba(0,0,0,0.05)" }} className={isOverdue ? "progress-error" : isWarning ? "progress-warning" : ""} />
-                {/* We can dynamically override the progress bar color using an inline style block if we wanted, but let's stick to standard classes or just standard Progress */}
-                 {/* As Progress component only has primary color by default, we can wrap it or just use it. */}
-              </div>
-
-              <div className={styles.actionRow}>
-                <div style={{ display: 'flex', gap: '0.5rem', width: '100%' }}>
-                  <Button variant="outline" size="sm" style={{ flex: 1 }} onClick={() => handleMarkPmsCompleted(vehicle.id)}>
-                    <Wrench size={16} style={{ marginRight: '0.3rem' }} /> Reset PMS
-                  </Button>
-                  <Button variant="primary" size="sm" style={{ flex: 1 }} onClick={() => handleOpenUpdateDialog(vehicle.id, vehicle.currentOdometer)}>
-                    <PenLine size={16} style={{ marginRight: '0.3rem' }} /> Update Odo
-                  </Button>
-                </div>
-              </div>
-            </div>
-          );
-        })}
-      </section>
-
-      {/* Update Dialog Modal */}
-      {updateDialogOpen && (
-        <div className={styles.dialogOverlay}>
-          <div className={styles.dialogContent}>
-            <div className={styles.dialogHeader}>
-              <h2 className={styles.dialogTitle}>Update Odometer</h2>
-              <p className={styles.dialogDescription}>Manually record the latest odometer reading. This will automatically update the distance since the last PMS.</p>
-            </div>
-            
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-              <label style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--foreground)' }}>New Reading (km)</label>
-              <Input 
-                type="number" 
-                value={newOdometerValue} 
-                onChange={(e) => setNewOdometerValue(e.target.value)} 
-                autoFocus 
-                min={vehicles.find(v => v.id === selectedVehicleId)?.currentOdometer || 0}
-              />
-            </div>
-
-            <div className={styles.dialogFooter}>
-              <Button variant="ghost" onClick={handleCloseDialog}>Cancel</Button>
-              <Button variant="primary" onClick={handleSaveOdometer}>Save Record</Button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
+    );
 }
