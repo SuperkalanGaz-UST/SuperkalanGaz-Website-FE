@@ -4,85 +4,16 @@ import { Header } from './Header';
 import { KPICard } from './KPICard';
 import { Users, Navigation, AlertTriangle, Clock, ChevronDown, Loader2 } from 'lucide-react';
 import { useBranch } from '../contexts/BranchContext';
+import {
+  FLEET_ACTIVITY,
+  FLEET_RIDERS,
+  positionFleetRiders,
+} from '../../lib/fleetPresentationData';
 
 const BranchOwnerFleetMap = dynamic(
   () => import('./BranchOwnerFleetMap').then((module) => module.BranchOwnerFleetMap),
   { ssr: false },
 );
-
-export interface Rider {
-  id: string;
-  name: string;
-  plateNumber: string;
-  status: 'active' | 'inactive' | 'outside-geofence';
-  currentOrder: string | null;
-  lastUpdated: string;
-  lat: number;
-  lng: number;
-  geofenceBreach?: boolean;
-}
-
-const riders: Rider[] = [
-  {
-    id: '1',
-    name: 'Juan Dela Cruz',
-    plateNumber: 'ABC-1234',
-    status: 'active',
-    currentOrder: 'ORD-1052',
-    lastUpdated: '2 mins ago',
-    lat: 14.6507,
-    lng: 121.0494,
-  },
-  {
-    id: '2',
-    name: 'Pedro Santos',
-    plateNumber: 'XYZ-5678',
-    status: 'active',
-    currentOrder: 'ORD-1053',
-    lastUpdated: '5 mins ago',
-    lat: 14.6520,
-    lng: 121.0510,
-  },
-  {
-    id: '3',
-    name: 'Carlos Reyes',
-    plateNumber: 'DEF-9012',
-    status: 'outside-geofence',
-    currentOrder: 'ORD-1054',
-    lastUpdated: '1 min ago',
-    lat: 14.6580,
-    lng: 121.0450,
-    geofenceBreach: true,
-  },
-  {
-    id: '4',
-    name: 'Miguel Torres',
-    plateNumber: 'GHI-3456',
-    status: 'active',
-    currentOrder: null,
-    lastUpdated: '10 mins ago',
-    lat: 14.6495,
-    lng: 121.0520,
-  },
-  {
-    id: '5',
-    name: 'Ramon Lopez',
-    plateNumber: 'JKL-7890',
-    status: 'inactive',
-    currentOrder: null,
-    lastUpdated: '45 mins ago',
-    lat: 14.6510,
-    lng: 121.0500,
-  },
-];
-
-const activityLog = [
-  { time: '10:42 AM', rider: 'Juan Dela Cruz', event: 'Delivered order ORD-1051 successfully' },
-  { time: '10:38 AM', rider: 'Carlos Reyes', event: 'Left geofence boundary - En route to customer' },
-  { time: '10:35 AM', rider: 'Pedro Santos', event: 'Picked up order ORD-1053 from branch' },
-  { time: '10:30 AM', rider: 'Miguel Torres', event: 'Returned to branch' },
-  { time: '10:25 AM', rider: 'Juan Dela Cruz', event: 'Picked up order ORD-1051 from branch' },
-];
 
 export function FleetOverview() {
   const {
@@ -97,6 +28,7 @@ export function FleetOverview() {
   // State for filtering activity log by driver
   const [activityFilter, setActivityFilter] = useState<string>('all');
 
+  const riders = FLEET_RIDERS;
   const activeRiders = riders.filter(r => r.status === 'active').length;
   const outsideGeofence = riders.filter(r => r.status === 'outside-geofence').length;
   const pastCurfew = 0;
@@ -104,11 +36,15 @@ export function FleetOverview() {
     (branch) => branch.name === selectedBranch,
   );
   const geofence = assignedBranch?.geofence ?? null;
+  const positionedRiders = useMemo(
+    () => geofence ? positionFleetRiders(riders, geofence) : [],
+    [geofence, riders],
+  );
 
   // Memoized filter logic for the activity log
   const filteredActivityLog = useMemo(() => {
-    if (activityFilter === 'all') return activityLog;
-    return activityLog.filter(log => log.rider === activityFilter);
+    if (activityFilter === 'all') return FLEET_ACTIVITY;
+    return FLEET_ACTIVITY.filter(log => log.rider === activityFilter);
   }, [activityFilter]);
 
   return (
@@ -178,7 +114,7 @@ export function FleetOverview() {
               ) : geofence ? (
                 <BranchOwnerFleetMap
                   geofence={geofence}
-                  riders={riders}
+                  riders={positionedRiders}
                   selectedRider={selectedRider}
                   onSelectRider={setSelectedRider}
                 />

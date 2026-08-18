@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import dynamic from 'next/dynamic';
-import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Toaster } from './components/ui/sonner';
 import { Login } from './components/Login';
@@ -27,11 +26,8 @@ const BranchManagerApp = dynamic(
   { ssr: false },
 );
 
-const AUTH_RESTORE_TIMEOUT_MS = 10_000;
-
 export default function App() {
   const [account, setAccount] = useState<Account | null>(null);
-  const [authReady, setAuthReady] = useState(false);
   const [passwordRecovery, setPasswordRecovery] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
@@ -39,28 +35,18 @@ export default function App() {
 
   useEffect(() => {
     let mounted = true;
-    // A stalled refresh request must never leave the whole application behind
-    // an infinite loading screen. Auth events remain subscribed after this
-    // fallback, so a session that resolves later can still restore normally.
-    const restoreTimer = window.setTimeout(() => {
-      if (!mounted) return;
-      setAccount(null);
-      setAuthReady(true);
-    }, AUTH_RESTORE_TIMEOUT_MS);
+    let initialSignOutTimer: number | null = null;
 
     const applySession = (session: Session | null) => {
       if (!mounted) return;
-      window.clearTimeout(restoreTimer);
 
       if (!session || passwordRecoveryRef.current) {
         setAccount(null);
-        setAuthReady(true);
         return;
       }
 
       const restored = accountFromUser(session.user);
       setAccount(restored.account);
-      setAuthReady(true);
 
       if (!restored.account) {
         // Run outside the auth callback to avoid blocking later auth events.
@@ -70,25 +56,45 @@ export default function App() {
       }
     };
 
-    // Keep React state aligned with Supabase across login, logout, user updates,
-    // automatic token refresh, and changes made in another browser tab.
+    // A browser refresh starts a new App instance. Deliberately discard the
+    // persisted session instead of restoring it, so refresh and development
+    // remounts return directly to Login. Subsequent auth events still keep the
+    // active page aligned after an intentional sign-in or sign-out.
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'PASSWORD_RECOVERY') {
-        window.clearTimeout(restoreTimer);
         passwordRecoveryRef.current = true;
         setPasswordRecovery(true);
         setAccount(null);
-        setAuthReady(true);
         return;
+      }
+
+      if (event === 'INITIAL_SESSION') {
+        setAccount(null);
+        if (session) {
+          // Local scope clears this browser immediately without affecting a
+          // separate device where the same account may be signed in.
+          initialSignOutTimer = window.setTimeout(() => {
+            initialSignOutTimer = null;
+            void supabase.auth.signOut({ scope: 'local' });
+          }, 0);
+        }
+        return;
+      }
+
+      // If the user intentionally signs in before the scheduled startup task
+      // runs, never let the stale task sign the new session back out.
+      if (initialSignOutTimer !== null) {
+        window.clearTimeout(initialSignOutTimer);
+        initialSignOutTimer = null;
       }
       applySession(session);
     });
 
     return () => {
       mounted = false;
-      window.clearTimeout(restoreTimer);
+      if (initialSignOutTimer !== null) window.clearTimeout(initialSignOutTimer);
       subscription.unsubscribe();
     };
   }, []);
@@ -124,20 +130,6 @@ export default function App() {
   const handleAccountUpdate = (patch: Partial<Account>) => {
     setAccount((current) => (current ? { ...current, ...patch } : current));
   };
-
-  if (!authReady) {
-    return (
-      <main
-        className="flex min-h-screen items-center justify-center bg-[#e8e8e8] text-gray-700"
-        aria-busy="true"
-      >
-        <div className="flex items-center gap-3" role="status">
-          <Loader2 className="h-5 w-5 animate-spin text-[#007BC1]" aria-hidden="true" />
-          <span className="text-sm font-medium">Restoring your secure session…</span>
-        </div>
-      </main>
-    );
-  }
 
   return (
     <>

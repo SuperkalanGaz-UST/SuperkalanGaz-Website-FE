@@ -1,8 +1,10 @@
 'use client';
 
-import React, { useEffect, useRef } from "react";
+import { useEffect, useRef } from "react";
 import {
     AttributionControl,
+    GeoJSONSource,
+    LngLatBounds,
     Map as MapLibreMap,
     Marker,
     NavigationControl,
@@ -10,27 +12,25 @@ import {
 } from "maplibre-gl";
 import type { Feature, Polygon } from "geojson";
 import { OPENFREEMAP_STYLE_URL, toLngLat } from "../../../lib/mapConfig";
-import type { RiderStatus, Rider } from "./types";
+import type { BranchGeofence } from "../../../lib/branchGeofence";
+import type {
+    FleetRiderStatus,
+    PositionedFleetRider as Rider,
+} from "../../../lib/fleetPresentationData";
 
-const GEOFENCE_POLYGON: [number, number][] = [
-    [14.565, 121.015], [14.560, 121.035], [14.545, 121.030], [14.542, 121.010], [14.555, 121.005],
-];
-const MAKATI_CENTER: [number, number] = [14.5547, 121.0244];
-
-const riderColor = (status: RiderStatus): string => {
+const riderColor = (status: FleetRiderStatus): string => {
     const colorVar =
         status === "active" ? "hsl(150, 60%, 30%)" :
-        status === "outside" ? "hsl(0, 85%, 45%)" :
-        status === "idle" ? "hsl(35, 85%, 45%)" : "hsl(203, 10%, 45%)";
+        status === "outside-geofence" ? "hsl(35, 85%, 45%)" :
+        "hsl(203, 10%, 45%)";
     return colorVar;
 };
 
-const formatStatusText = (status: RiderStatus) => {
+const formatStatusText = (status: FleetRiderStatus) => {
     switch (status) {
         case "active": return "Active";
-        case "outside": return "Outside Zone";
-        case "idle": return "Idle";
-        default: return "Offline";
+        case "outside-geofence": return "Outside geofence";
+        default: return "Inactive";
     }
 };
 
@@ -56,7 +56,7 @@ function createPopupContent(rider: Rider): HTMLDivElement {
     status.textContent = formatStatusText(rider.status);
     status.style.cssText = `background:${riderColor(rider.status)};color:white;border-radius:999px;padding:2px 7px;font-size:.7rem;white-space:nowrap`;
     header.append(name, status);
-    content.append(header, popupRow("Plate", rider.plate));
+    content.append(header, popupRow("Plate", rider.plateNumber));
     if (rider.currentOrder) content.append(popupRow("Order", rider.currentOrder));
     content.append(popupRow("Updated", rider.lastUpdated));
     return content;
@@ -87,26 +87,43 @@ function syncRiderMarkers(
     });
 }
 
-const geofenceData: Feature<Polygon> = {
-    type: "Feature",
-    properties: {},
-    geometry: {
-        type: "Polygon",
-        coordinates: [[...GEOFENCE_POLYGON.map(toLngLat), toLngLat(GEOFENCE_POLYGON[0])]],
-    },
-};
+function toGeofenceFeature(geofence: BranchGeofence): Feature<Polygon> {
+    return {
+        type: "Feature",
+        properties: {},
+        geometry: {
+            type: "Polygon",
+            coordinates: [[
+                ...geofence.points.map(toLngLat),
+                toLngLat(geofence.points[0]),
+            ]],
+        },
+    };
+}
+
+function fitGeofence(map: MapLibreMap, geofence: BranchGeofence, duration: number): void {
+    const firstPoint = toLngLat(geofence.points[0]);
+    const bounds = geofence.points.reduce(
+        (current, point) => current.extend(toLngLat(point)),
+        new LngLatBounds(firstPoint, firstPoint),
+    );
+    map.fitBounds(bounds, { padding: 55, maxZoom: 16, duration });
+}
 
 interface Props {
     riders: Rider[];
+    geofence: BranchGeofence;
     mapCenter: [number, number] | null;
 }
 
-export default function FleetMap({ riders, mapCenter }: Props) {
+export default function FleetMap({ riders, geofence, mapCenter }: Props) {
     const containerRef = useRef<HTMLDivElement>(null);
     const mapRef = useRef<MapLibreMap | null>(null);
     const ridersRef = useRef(riders);
+    const geofenceRef = useRef(geofence);
     const markersRef = useRef(new Map<string, Marker>());
     ridersRef.current = riders;
+    geofenceRef.current = geofence;
 
     useEffect(() => {
         if (!containerRef.current) return;
@@ -114,8 +131,8 @@ export default function FleetMap({ riders, mapCenter }: Props) {
         const map = new MapLibreMap({
             container: containerRef.current,
             style: OPENFREEMAP_STYLE_URL,
-            center: toLngLat(MAKATI_CENTER),
-            zoom: 14,
+            center: toLngLat(geofenceRef.current.points[0]),
+            zoom: 13,
             attributionControl: false,
         });
         const markers = markersRef.current;
@@ -126,7 +143,10 @@ export default function FleetMap({ riders, mapCenter }: Props) {
             "bottom-right",
         );
         map.on("load", () => {
-            map.addSource("fleet-geofence", { type: "geojson", data: geofenceData });
+            map.addSource("fleet-geofence", {
+                type: "geojson",
+                data: toGeofenceFeature(geofenceRef.current),
+            });
             map.addLayer({
                 id: "fleet-geofence-fill",
                 type: "fill",
@@ -143,6 +163,7 @@ export default function FleetMap({ riders, mapCenter }: Props) {
                     "line-dasharray": [2.5, 2.5],
                 },
             });
+            fitGeofence(map, geofenceRef.current, 0);
             syncRiderMarkers(map, ridersRef.current, markers);
         });
 
@@ -158,6 +179,14 @@ export default function FleetMap({ riders, mapCenter }: Props) {
         const map = mapRef.current;
         if (map?.isStyleLoaded()) syncRiderMarkers(map, riders, markersRef.current);
     }, [riders]);
+
+    useEffect(() => {
+        const map = mapRef.current;
+        if (!map?.isStyleLoaded()) return;
+        const source = map.getSource("fleet-geofence") as GeoJSONSource | undefined;
+        source?.setData(toGeofenceFeature(geofence));
+        fitGeofence(map, geofence, 900);
+    }, [geofence]);
 
     useEffect(() => {
         if (mapCenter) {

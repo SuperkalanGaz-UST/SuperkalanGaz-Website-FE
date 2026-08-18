@@ -12,8 +12,8 @@ import {
 } from 'maplibre-gl';
 import type { Feature, Polygon } from 'geojson';
 import { OPENFREEMAP_STYLE_URL, toLngLat } from '../../lib/mapConfig';
-import type { BranchGeofence } from '../contexts/BranchContext';
-import type { Rider } from './FleetOverview';
+import type { BranchGeofence } from '../../lib/branchGeofence';
+import type { PositionedFleetRider as Rider } from '../../lib/fleetPresentationData';
 
 function toGeofenceFeature(geofence: BranchGeofence): Feature<Polygon> {
   return {
@@ -101,6 +101,20 @@ function makeMarker(rider: Rider, onSelect: (id: string) => void): Marker {
     .setPopup(new Popup({ offset: 14 }).setDOMContent(popupContent(rider)));
 }
 
+function syncRiderMarkers(
+  map: MapLibreMap,
+  riders: Rider[],
+  markers: Map<string, Marker>,
+  onSelect: (id: string) => void,
+): void {
+  markers.forEach((marker) => marker.remove());
+  markers.clear();
+  riders.forEach((rider) => {
+    const marker = makeMarker(rider, onSelect).addTo(map);
+    markers.set(rider.id, marker);
+  });
+}
+
 interface BranchOwnerFleetMapProps {
   geofence: BranchGeofence;
   riders: Rider[];
@@ -163,10 +177,12 @@ export function BranchOwnerFleetMap({
 
       fitGeofence(map, geofenceRef.current, 0);
 
-      ridersRef.current.forEach((rider) => {
-        const marker = makeMarker(rider, (id) => onSelectRef.current(id)).addTo(map);
-        markers.set(rider.id, marker);
-      });
+      syncRiderMarkers(
+        map,
+        ridersRef.current,
+        markers,
+        (id) => onSelectRef.current(id),
+      );
     });
 
     return () => {
@@ -184,6 +200,17 @@ export function BranchOwnerFleetMap({
     source?.setData(toGeofenceFeature(geofence));
     fitGeofence(map, geofence, 900);
   }, [geofence]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map?.isStyleLoaded()) return;
+    syncRiderMarkers(
+      map,
+      riders,
+      markersRef.current,
+      (id) => onSelectRef.current(id),
+    );
+  }, [riders]);
 
   useEffect(() => {
     if (!selectedRider) return;

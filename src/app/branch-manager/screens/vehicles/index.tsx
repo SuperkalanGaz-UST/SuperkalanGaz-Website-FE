@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { Wrench, PenLine, AlertTriangle, ShieldCheck, Truck, History } from "lucide-react";
+import { Wrench, PenLine, AlertTriangle, ShieldCheck, Truck, History, Plus } from "lucide-react";
 import { Badge } from "../../components/Badge";
 import { Button } from "../../components/Button";
 import { Progress } from "../../components/Progress";
@@ -36,6 +36,13 @@ interface MaintenanceLogRow {
     logged_at: string;
 }
 
+interface RiderRow {
+    id: string;
+    name: string;
+    plate: string;
+    status: string;
+}
+
 const todayIso = () => new Date().toISOString().slice(0, 10);
 
 export default function VehicleManagementPage() {
@@ -43,6 +50,15 @@ export default function VehicleManagementPage() {
     const [vehicles, setVehicles] = useState<VehicleRow[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+
+    const [registrationOpen, setRegistrationOpen] = useState(false);
+    const [plateNumber, setPlateNumber] = useState("");
+    const [initialOdometerKm, setInitialOdometerKm] = useState("0");
+    const [assignedRiderId, setAssignedRiderId] = useState("");
+    const [riders, setRiders] = useState<RiderRow[]>([]);
+    const [ridersLoading, setRidersLoading] = useState(false);
+    const [registrationError, setRegistrationError] = useState<string | null>(null);
+    const [registering, setRegistering] = useState(false);
 
     const [updateDialogVehicleId, setUpdateDialogVehicleId] = useState<string | null>(null);
     const [odometerValue, setOdometerValue] = useState("");
@@ -83,6 +99,74 @@ export default function VehicleManagementPage() {
     const totalVehicles = vehicles.length;
     const overdueVehicles = vehicles.filter(v => v.status === "maintenance").length;
     const healthyVehicles = vehicles.filter(v => v.status !== "maintenance" && v.km_since_last_pms < v.maintenance_threshold_km * 0.8).length;
+
+    const openRegistrationDialog = async () => {
+        setRegistrationOpen(true);
+        setRegistrationError(null);
+        setRidersLoading(true);
+        try {
+            const res = await apiFetch('/riders');
+            const data = await res.json();
+            if (!res.ok) throw new Error(apiErrorMessage(data, 'Failed to load riders'));
+            setRiders(data.riders as RiderRow[]);
+        } catch (err) {
+            setRiders([]);
+            setRegistrationError(err instanceof Error ? err.message : 'Failed to load riders');
+        } finally {
+            setRidersLoading(false);
+        }
+    };
+
+    const closeRegistrationDialog = () => {
+        if (registering) return;
+        setRegistrationOpen(false);
+        setPlateNumber("");
+        setInitialOdometerKm("0");
+        setAssignedRiderId("");
+        setRegistrationError(null);
+    };
+
+    const handleRegisterVehicle = async (event: React.FormEvent<HTMLFormElement>) => {
+        event.preventDefault();
+        const normalizedPlate = plateNumber.trim().toUpperCase().replace(/\s+/g, ' ');
+        const odometerKm = Number(initialOdometerKm);
+
+        if (!/^[A-Z0-9]+(?:[ -][A-Z0-9]+)*$/.test(normalizedPlate) || normalizedPlate.length < 2 || normalizedPlate.length > 20) {
+            setRegistrationError('Enter a valid plate number using letters, numbers, spaces, or hyphens.');
+            return;
+        }
+        if (!Number.isInteger(odometerKm) || odometerKm < 0) {
+            setRegistrationError('Enter a valid non-negative odometer reading.');
+            return;
+        }
+
+        setRegistering(true);
+        setRegistrationError(null);
+        try {
+            const res = await apiFetch('/vehicles', {
+                method: 'POST',
+                body: JSON.stringify({
+                    plateNumber: normalizedPlate,
+                    initialOdometerKm: odometerKm,
+                    ...(assignedRiderId ? { assignedRiderId } : {}),
+                }),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(apiErrorMessage(data, 'Failed to register vehicle'));
+
+            const created = data.vehicle as VehicleRow;
+            setVehicles(prev => [...prev, created].sort((a, b) => a.plate_number.localeCompare(b.plate_number)));
+            toast.success(`${created.plate_number} registered to this branch.`);
+            setRegistrationOpen(false);
+            setPlateNumber("");
+            setInitialOdometerKm("0");
+            setAssignedRiderId("");
+        } catch (err) {
+            setRegistrationError(err instanceof Error ? err.message : 'Failed to register vehicle');
+        } finally {
+            setRegistering(false);
+        }
+    };
 
     const openUpdateDialog = (vehicle: VehicleRow) => {
         setUpdateDialogVehicleId(vehicle.id);
@@ -180,6 +264,16 @@ export default function VehicleManagementPage() {
 
     return (
         <div className={styles.pageWrapper}>
+            <div className={styles.toolbar}>
+                <div>
+                    <div className={styles.toolbarTitle}>Branch Vehicle Roster</div>
+                    <div className={styles.toolbarDescription}>Register delivery motorcycles and track their PMS mileage.</div>
+                </div>
+                <Button variant="primary" onClick={() => void openRegistrationDialog()}>
+                    <Plus size={17} /> Register Vehicle
+                </Button>
+            </div>
+
             <section className={styles.statsGrid}>
                 <div className={styles.statCard}>
                     <div className={styles.statHeader}><span className={styles.statLabel}>Total Fleet</span><Truck className={styles.statIcon} size={20} /></div>
@@ -331,6 +425,69 @@ export default function VehicleManagementPage() {
                             </Button>
                         </div>
                     </div>
+                </div>
+            )}
+
+            {registrationOpen && (
+                <div className={styles.dialogOverlay} role="presentation">
+                    <form className={styles.dialogContent} onSubmit={(event) => void handleRegisterVehicle(event)} role="dialog" aria-modal="true" aria-labelledby="register-vehicle-title">
+                        <div className={styles.dialogHeader}>
+                            <h2 id="register-vehicle-title" className={styles.dialogTitle}>Register Vehicle</h2>
+                            <p className={styles.dialogDescription}>The vehicle will be registered to your branch. PMS distance starts from the odometer reading entered here.</p>
+                        </div>
+
+                        <div className={styles.formFields}>
+                            <div>
+                                <label className={styles.fieldLabel} htmlFor="vehicle-plate">Plate Number</label>
+                                <Input
+                                    id="vehicle-plate"
+                                    value={plateNumber}
+                                    onChange={(event) => setPlateNumber(event.target.value.toUpperCase())}
+                                    placeholder="ABC-1234"
+                                    autoComplete="off"
+                                    maxLength={20}
+                                    autoFocus
+                                />
+                            </div>
+                            <div>
+                                <label className={styles.fieldLabel} htmlFor="vehicle-odometer">Current Odometer (km)</label>
+                                <Input
+                                    id="vehicle-odometer"
+                                    type="number"
+                                    value={initialOdometerKm}
+                                    onChange={(event) => setInitialOdometerKm(event.target.value)}
+                                    min={0}
+                                    step={1}
+                                />
+                                <div className={styles.fieldHint}>This becomes the starting PMS baseline.</div>
+                            </div>
+                            <div>
+                                <label className={styles.fieldLabel} htmlFor="vehicle-rider">Assign Rider (optional)</label>
+                                <select
+                                    id="vehicle-rider"
+                                    className={styles.select}
+                                    value={assignedRiderId}
+                                    onChange={(event) => setAssignedRiderId(event.target.value)}
+                                    disabled={ridersLoading}
+                                >
+                                    <option value="">{ridersLoading ? 'Loading riders…' : 'Unassigned'}</option>
+                                    {riders.map(rider => (
+                                        <option key={rider.id} value={rider.id}>
+                                            {rider.name} · {rider.plate} · {rider.status}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                            {registrationError && <div className={styles.fieldError} role="alert">{registrationError}</div>}
+                        </div>
+
+                        <div className={styles.dialogFooter}>
+                            <Button type="button" variant="ghost" onClick={closeRegistrationDialog} disabled={registering}>Cancel</Button>
+                            <Button type="submit" variant="primary" disabled={registering || ridersLoading}>
+                                {registering ? 'Registering…' : 'Register Vehicle'}
+                            </Button>
+                        </div>
+                    </form>
                 </div>
             )}
         </div>
