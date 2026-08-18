@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import dynamic from 'next/dynamic';
+import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Toaster } from './components/ui/sonner';
 import { Login } from './components/Login';
@@ -26,8 +27,11 @@ const BranchManagerApp = dynamic(
   { ssr: false },
 );
 
+const AUTH_RESTORE_TIMEOUT_MS = 10_000;
+
 export default function App() {
   const [account, setAccount] = useState<Account | null>(null);
+  const [authReady, setAuthReady] = useState(false);
   const [passwordRecovery, setPasswordRecovery] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
@@ -35,18 +39,31 @@ export default function App() {
 
   useEffect(() => {
     let mounted = true;
-    let initialSignOutTimer: number | null = null;
+    let restoreTimedOut = false;
+    const restoreTimer = window.setTimeout(() => {
+      if (!mounted) return;
+      restoreTimedOut = true;
+      setAccount(null);
+      setAuthReady(true);
+
+      // Fail closed when session restoration stalls. Local scope clears only
+      // this browser; a separate device remains signed in.
+      void supabase.auth.signOut({ scope: 'local' });
+    }, AUTH_RESTORE_TIMEOUT_MS);
 
     const applySession = (session: Session | null) => {
       if (!mounted) return;
+      window.clearTimeout(restoreTimer);
 
       if (!session || passwordRecoveryRef.current) {
         setAccount(null);
+        setAuthReady(true);
         return;
       }
 
       const restored = accountFromUser(session.user);
       setAccount(restored.account);
+      setAuthReady(true);
 
       if (!restored.account) {
         // Run outside the auth callback to avoid blocking later auth events.
@@ -56,45 +73,36 @@ export default function App() {
       }
     };
 
-    // A browser refresh starts a new App instance. Deliberately discard the
-    // persisted session instead of restoring it, so refresh and development
-    // remounts return directly to Login. Subsequent auth events still keep the
-    // active page aligned after an intentional sign-in or sign-out.
+    // Restore a valid persisted session on normal refresh. If INITIAL_SESSION
+    // arrives only after the timeout above, ignore it and keep the user logged
+    // out; later SIGNED_IN events are still accepted as intentional logins.
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'PASSWORD_RECOVERY') {
+        window.clearTimeout(restoreTimer);
         passwordRecoveryRef.current = true;
         setPasswordRecovery(true);
         setAccount(null);
+        setAuthReady(true);
         return;
       }
 
-      if (event === 'INITIAL_SESSION') {
-        setAccount(null);
+      if (event === 'INITIAL_SESSION' && restoreTimedOut) {
         if (session) {
-          // Local scope clears this browser immediately without affecting a
-          // separate device where the same account may be signed in.
-          initialSignOutTimer = window.setTimeout(() => {
-            initialSignOutTimer = null;
+          window.setTimeout(() => {
             void supabase.auth.signOut({ scope: 'local' });
           }, 0);
         }
         return;
       }
 
-      // If the user intentionally signs in before the scheduled startup task
-      // runs, never let the stale task sign the new session back out.
-      if (initialSignOutTimer !== null) {
-        window.clearTimeout(initialSignOutTimer);
-        initialSignOutTimer = null;
-      }
       applySession(session);
     });
 
     return () => {
       mounted = false;
-      if (initialSignOutTimer !== null) window.clearTimeout(initialSignOutTimer);
+      window.clearTimeout(restoreTimer);
       subscription.unsubscribe();
     };
   }, []);
@@ -130,6 +138,20 @@ export default function App() {
   const handleAccountUpdate = (patch: Partial<Account>) => {
     setAccount((current) => (current ? { ...current, ...patch } : current));
   };
+
+  if (!authReady) {
+    return (
+      <main
+        className="flex min-h-screen items-center justify-center bg-[#e8e8e8] text-gray-700"
+        aria-busy="true"
+      >
+        <div className="flex items-center gap-3" role="status">
+          <Loader2 className="h-5 w-5 animate-spin text-[#007BC1]" aria-hidden="true" />
+          <span className="text-sm font-medium">Restoring your secure session…</span>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <>
