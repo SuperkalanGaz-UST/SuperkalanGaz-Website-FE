@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import { AlertCircle, Clock, MapPin, Navigation, ShieldAlert, Truck } from "lucide-react";
 import { Badge } from "../../components/Badge";
@@ -10,16 +10,57 @@ import {
     assignedBranchesFrom,
     type BranchGeofence,
 } from "../../../lib/branchGeofence";
-import {
-    FLEET_ACTIVITY,
-    FLEET_RIDERS,
-    positionFleetRiders,
-    type FleetRider,
-    type FleetRiderStatus,
-} from "../../../lib/fleetPresentationData";
 import { useAccount } from "../../../contexts/AccountContext";
 
+/** Rider status as returned by the NestJS Fleet API. */
+type ApiRiderStatus = 'Available' | 'On Delivery' | 'Maintenance Due' | 'Offline';
+
+interface ApiRiderRow {
+    id: string;
+    branch_id: string;
+    name: string;
+    plate: string;
+    status: ApiRiderStatus;
+    created_at: string;
+}
+
+interface SRRow {
+    id: string;
+    rider_id: string | null;
+    status: string;
+    cylinder_size: string;
+}
+
+/** Presentation status for the Fleet UI. */
+type FleetRiderStatus = 'active' | 'inactive' | 'outside-geofence';
+
+interface FleetRider {
+    id: string;
+    name: string;
+    plateNumber: string;
+    status: FleetRiderStatus;
+    currentOrder: string | null;
+    lastUpdated: string;
+}
+
+interface PositionedFleetRider extends FleetRider {
+    lat: number;
+    lng: number;
+}
+
 const FleetMap = dynamic(() => import("./FleetMap"), { ssr: false, loading: () => <div style={{ height: "100%", background: "var(--muted)", borderRadius: "var(--radius-lg)" }} /> });
+
+/** Map backend rider status to Fleet UI status. */
+function toFleetStatus(status: ApiRiderStatus): FleetRiderStatus {
+    switch (status) {
+        case 'Available':
+        case 'On Delivery':
+            return 'active';
+        case 'Maintenance Due':
+        case 'Offline':
+            return 'inactive';
+    }
+}
 
 const getStatusBadgeVariant = (status: FleetRiderStatus) => {
     switch (status) {
@@ -37,6 +78,34 @@ const formatStatusText = (status: FleetRiderStatus) => {
     }
 };
 
+/**
+ * Temporary display positions derived from the branch geofence.
+ * Replaced by Traccar GPS coordinates when hardware integration is enabled.
+ */
+function positionFleetRiders(
+    riders: FleetRider[],
+    geofence: BranchGeofence,
+): PositionedFleetRider[] {
+    const [latTotal, lngTotal] = geofence.points.reduce(
+        ([lat, lng], point) => [lat + point[0], lng + point[1]],
+        [0, 0],
+    );
+    const center: [number, number] = [
+        latTotal / geofence.points.length,
+        lngTotal / geofence.points.length,
+    ];
+
+    return riders.map((rider, index) => {
+        const vertex = geofence.points[index % geofence.points.length];
+        const factor = rider.status === 'outside-geofence' ? 1.18 : 0.22 + (index % 3) * 0.08;
+        return {
+            ...rider,
+            lat: center[0] + (vertex[0] - center[0]) * factor,
+            lng: center[1] + (vertex[1] - center[1]) * factor,
+        };
+    });
+}
+
 export default function FleetPage() {
     const account = useAccount();
     const branchName = account.branches[0];
@@ -45,6 +114,9 @@ export default function FleetPage() {
     const [geofence, setGeofence] = useState<BranchGeofence | null>(null);
     const [geofenceLoading, setGeofenceLoading] = useState(true);
     const [geofenceError, setGeofenceError] = useState<string | null>(null);
+    const [riders, setRiders] = useState<FleetRider[]>([]);
+    const [ridersLoading, setRidersLoading] = useState(true);
+    const [ridersError, setRidersError] = useState<string | null>(null);
 
     useEffect(() => {
         const controller = new AbortController();
@@ -78,9 +150,52 @@ export default function FleetPage() {
         return () => controller.abort();
     }, [branchName]);
 
+    const loadRiders = useCallback(async () => {
+        setRidersLoading(true);
+        setRidersError(null);
+        try {
+            const [ridersRes, srRes] = await Promise.all([
+                apiFetch('/riders'),
+                apiFetch('/service-requests'),
+            ]);
+            const ridersData = await ridersRes.json();
+            const srData = await srRes.json();
+
+            if (!ridersRes.ok) throw new Error(apiErrorMessage(ridersData, 'Failed to load riders'));
+
+            const apiRiders = (ridersData.riders ?? []) as ApiRiderRow[];
+            const serviceRequests = (srData.serviceRequests ?? []) as SRRow[];
+
+            // Build a map of rider_id → current order info for Dispatched/En Route requests.
+            const activeOrders = new Map<string, string>();
+            for (const sr of serviceRequests) {
+                if (sr.rider_id && (sr.status === 'Dispatched' || sr.status === 'En Route')) {
+                    activeOrders.set(sr.rider_id, `${sr.cylinder_size} delivery`);
+                }
+            }
+
+            const mapped: FleetRider[] = apiRiders.map((r) => ({
+                id: r.id,
+                name: r.name,
+                plateNumber: r.plate,
+                status: toFleetStatus(r.status),
+                currentOrder: activeOrders.get(r.id) ?? null,
+                lastUpdated: formatRelativeTime(r.created_at),
+            }));
+            setRiders(mapped);
+        } catch (err) {
+            setRidersError(err instanceof Error ? err.message : 'Failed to load riders');
+            setRiders([]);
+        } finally {
+            setRidersLoading(false);
+        }
+    }, []);
+
+    useEffect(() => { void loadRiders(); }, [loadRiders]);
+
     const positionedRiders = useMemo(
-        () => geofence ? positionFleetRiders(FLEET_RIDERS, geofence) : [],
-        [geofence],
+        () => geofence ? positionFleetRiders(riders, geofence) : [],
+        [geofence, riders],
     );
 
     const handleRiderClick = (rider: FleetRider) => {
@@ -89,14 +204,14 @@ export default function FleetPage() {
         if (positionedRider) setMapCenter([positionedRider.lat, positionedRider.lng]);
     };
 
-    const activeRiders = FLEET_RIDERS.filter(r => r.status === "active").length;
-    const outsideRiders = FLEET_RIDERS.filter(r => r.status === "outside-geofence").length;
-    const outsideRider = FLEET_RIDERS.find(r => r.status === "outside-geofence");
+    const activeRiders = riders.filter(r => r.status === "active").length;
+    const outsideRiders = riders.filter(r => r.status === "outside-geofence").length;
+    const outsideRider = riders.find(r => r.status === "outside-geofence");
 
     return (
         <div className={styles.pageWrapper}>
             <div className={styles.statsGrid}>
-                <div className={styles.statCard}><div className={styles.statHeader}><span className={styles.statLabel}>Total Riders</span><Truck className={styles.statIcon} size={20} /></div><div className={styles.statValue}>{FLEET_RIDERS.length}</div></div>
+                <div className={styles.statCard}><div className={styles.statHeader}><span className={styles.statLabel}>Total Riders</span><Truck className={styles.statIcon} size={20} /></div><div className={styles.statValue}>{riders.length}</div></div>
                 <div className={styles.statCard}><div className={styles.statHeader}><span className={styles.statLabel}>Active Now</span><Navigation className={styles.statIcon} style={{ color: "var(--success)" }} size={20} /></div><div className={styles.statValue}>{activeRiders}</div></div>
                 <div className={styles.statCard}><div className={styles.statHeader}><span className={styles.statLabel}>Outside Geofence</span><ShieldAlert className={styles.statIcon} style={{ color: "var(--warning)" }} size={20} /></div><div className={styles.statValue}>{outsideRiders}</div></div>
                 <div className={styles.statCard}><div className={styles.statHeader}><span className={styles.statLabel}>Past Curfew</span><Clock className={styles.statIcon} style={{ color: "var(--muted-foreground)" }} size={20} /></div><div className={styles.statValue}>0</div></div>
@@ -124,28 +239,36 @@ export default function FleetPage() {
                 <div className={styles.listPanel}>
                     <div className={styles.panelHeader}><h2 className={styles.panelTitle}>Fleet Roster</h2></div>
                     <div className={styles.riderList}>
-                        {FLEET_RIDERS.map((rider) => (
-                            <button key={rider.id} className={`${styles.riderCard} ${selectedRiderId === rider.id ? styles.riderCardSelected : ""}`} onClick={() => handleRiderClick(rider)} type="button">
-                                <div className={styles.riderCardHeader}>
-                                    <div className={styles.riderIdentity}>
-                                        <span className={styles.riderName}>{rider.name}</span>
-                                        <span className={styles.riderPlate}>{rider.plateNumber}</span>
+                        {ridersLoading ? (
+                            <div className={styles.riderOrderPlaceholder}>Loading riders…</div>
+                        ) : ridersError ? (
+                            <div className={styles.riderOrderPlaceholder}>{ridersError}</div>
+                        ) : riders.length === 0 ? (
+                            <div className={styles.riderOrderPlaceholder}>No riders found in this branch.</div>
+                        ) : (
+                            riders.map((rider) => (
+                                <button key={rider.id} className={`${styles.riderCard} ${selectedRiderId === rider.id ? styles.riderCardSelected : ""}`} onClick={() => handleRiderClick(rider)} type="button">
+                                    <div className={styles.riderCardHeader}>
+                                        <div className={styles.riderIdentity}>
+                                            <span className={styles.riderName}>{rider.name}</span>
+                                            <span className={styles.riderPlate}>{rider.plateNumber}</span>
+                                        </div>
+                                        <Badge variant={getStatusBadgeVariant(rider.status)}>{formatStatusText(rider.status)}</Badge>
                                     </div>
-                                    <Badge variant={getStatusBadgeVariant(rider.status)}>{formatStatusText(rider.status)}</Badge>
-                                </div>
-                                <div className={styles.riderMeta}>
-                                    {rider.currentOrder ? (
-                                        <span className={styles.riderOrder}><MapPin size={14} />Delivering {rider.currentOrder}</span>
-                                    ) : (
-                                        <span className={styles.riderOrderPlaceholder}>No active order</span>
+                                    <div className={styles.riderMeta}>
+                                        {rider.currentOrder ? (
+                                            <span className={styles.riderOrder}><MapPin size={14} />Delivering {rider.currentOrder}</span>
+                                        ) : (
+                                            <span className={styles.riderOrderPlaceholder}>No active order</span>
+                                        )}
+                                        <span className={styles.riderTime}><Clock size={14} />{rider.lastUpdated}</span>
+                                    </div>
+                                    {rider.status === "outside-geofence" && (
+                                        <div className={styles.riderAlert}><AlertCircle size={14} />Outside designated geofence</div>
                                     )}
-                                    <span className={styles.riderTime}><Clock size={14} />{rider.lastUpdated}</span>
-                                </div>
-                                {rider.status === "outside-geofence" && (
-                                    <div className={styles.riderAlert}><AlertCircle size={14} />Outside designated geofence</div>
-                                )}
-                            </button>
-                        ))}
+                                </button>
+                            ))
+                        )}
                     </div>
                 </div>
             </div>
@@ -180,15 +303,19 @@ export default function FleetPage() {
                     <div className={styles.panelHeader}><h2 className={styles.panelTitle}>Today&apos;s Fleet Activity</h2></div>
                     <div className={styles.tableWrapper}>
                         <table className={styles.logTable}>
-                            <thead><tr><th>Time</th><th>Rider</th><th>Event Description</th></tr></thead>
+                            <thead><tr><th>Rider</th><th>Status</th><th>Current Order</th></tr></thead>
                             <tbody>
-                                {FLEET_ACTIVITY.map((log) => (
-                                    <tr key={`${log.time}-${log.rider}`}>
-                                        <td className={styles.logTime}>{log.time}</td>
-                                        <td className={styles.logRider}>{log.rider}</td>
-                                        <td className={styles.logEvent}>{log.event}</td>
-                                    </tr>
-                                ))}
+                                {riders.length === 0 ? (
+                                    <tr><td colSpan={3} className={styles.riderOrderPlaceholder}>No rider activity to display.</td></tr>
+                                ) : (
+                                    riders.map((rider) => (
+                                        <tr key={rider.id}>
+                                            <td className={styles.logRider}>{rider.name}</td>
+                                            <td><Badge variant={getStatusBadgeVariant(rider.status)}>{formatStatusText(rider.status)}</Badge></td>
+                                            <td className={styles.logEvent}>{rider.currentOrder ?? '—'}</td>
+                                        </tr>
+                                    ))
+                                )}
                             </tbody>
                         </table>
                     </div>
@@ -196,4 +323,16 @@ export default function FleetPage() {
             </div>
         </div>
     );
+}
+
+/** ISO timestamp → relative "X ago" string for the fleet roster. */
+function formatRelativeTime(iso: string): string {
+    const diff = Date.now() - new Date(iso).getTime();
+    const minutes = Math.floor(diff / 60_000);
+    if (minutes < 1) return 'Just now';
+    if (minutes < 60) return `${minutes} min ago`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours} hr ago`;
+    const days = Math.floor(hours / 24);
+    return `${days}d ago`;
 }

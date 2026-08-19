@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useState } from 'react';
+import Image from 'next/image';
 import { RefreshCw, Gift } from 'lucide-react';
 import { toast } from 'sonner';
 import { Badge } from '../../components/Badge';
@@ -121,6 +122,14 @@ const STATUS_TABS: { value: string; label: string }[] = [
     { value: 'all', label: 'All' },
 ];
 
+/** Maps household reward catalog names to their product images in /public/catalog. */
+const REWARD_IMAGES: Record<string, string> = {
+    'Free Notebook and Pen': '/catalog/reward-notebook.png',
+    'Free Desk Calendar': '/catalog/reward-calendar.png',
+    'Free Umbrella': '/catalog/reward-umbrella.png',
+    'Free Mug': '/catalog/reward-mug.png',
+};
+
 const formatDateTime = (iso: string | null) => {
     if (!iso) return '—';
     const d = new Date(iso);
@@ -183,6 +192,17 @@ export default function Rewards() {
     const [ledgerId, setLedgerId] = useState<string | null>(null);
     const [ledger, setLedger] = useState<LedgerView | null>(null);
     const [ledgerLoading, setLedgerLoading] = useState(false);
+
+    // Code verification: BM types/pastes a customer's code to look it up.
+    const [codeSearch, setCodeSearch] = useState('');
+    const [codeSearchLoading, setCodeSearchLoading] = useState(false);
+    const [codeSearchError, setCodeSearchError] = useState<string | null>(null);
+
+    // Manage Reward Items: inline stock editor for the BM's branch catalog.
+    const [showManageCatalog, setShowManageCatalog] = useState(false);
+    const [editingStockId, setEditingStockId] = useState<string | null>(null);
+    const [editingStockValue, setEditingStockValue] = useState('');
+    const [savingStockId, setSavingStockId] = useState<string | null>(null);
 
     const isCommercial = track === COMMERCIAL;
 
@@ -457,6 +477,66 @@ export default function Rewards() {
         }
     };
 
+    /** Look up a redemption by code — the BM pastes the customer's code. */
+    const handleCodeSearch = async () => {
+        const code = codeSearch.trim();
+        if (!code) return;
+        setCodeSearchLoading(true);
+        setCodeSearchError(null);
+        try {
+            const res = await apiFetch(`/loyalty/redemptions/verify/${encodeURIComponent(code)}`);
+            const data = await res.json();
+            if (!res.ok) {
+                setCodeSearchError(apiErrorMessage(data, 'Code not found'));
+                return;
+            }
+            const found = data.redemption as RedemptionRow;
+            // Switch to "all" so the row is visible, then prepend the found row.
+            setActiveTab('all');
+            setRedemptions((prev) => {
+                const without = prev.filter((r) => r.id !== found.id);
+                return [found, ...without];
+            });
+            toast.success(`Found redemption for ${found.customer_name ?? 'customer'} — status: ${found.status}`);
+            setCodeSearch('');
+        } catch (err) {
+            setCodeSearchError(err instanceof Error ? err.message : 'Failed to look up code');
+        } finally {
+            setCodeSearchLoading(false);
+        }
+    };
+
+    /** Save the edited stock quantity for a catalog item. */
+    const handleSaveStock = async (id: string) => {
+        const qty = parseInt(editingStockValue, 10);
+        if (isNaN(qty) || qty < 0) {
+            toast.error('Stock must be a non-negative number');
+            return;
+        }
+        setSavingStockId(id);
+        try {
+            const res = await apiFetch(`/loyalty/catalog/${id}/stock`, {
+                method: 'PATCH',
+                body: JSON.stringify({ stockQty: qty }),
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                toast.error(apiErrorMessage(data, 'Failed to update stock'));
+                return;
+            }
+            // Update the local catalog state
+            setCatalog((prev) =>
+                prev.map((c) => (c.id === id ? { ...c, stock_qty: qty } : c))
+            );
+            toast.success('Stock updated');
+            setEditingStockId(null);
+        } catch (err) {
+            toast.error(err instanceof Error ? err.message : 'Failed to update stock');
+        } finally {
+            setSavingStockId(null);
+        }
+    };
+
     // Avoid hydration mismatch on the date/Intl formatting (same guard as Orders).
     if (!mounted) return null;
 
@@ -474,19 +554,85 @@ export default function Rewards() {
                     </Tabs>
                 </div>
 
-                {/* Dual Authorization branch setting (BM-013). */}
-                <label className={styles.dualAuthToggle} title="When off, redemption requests auto-issue a code and bypass this approval queue.">
-                    <span className={styles.mutedText}>Dual authorization</span>
-                    <input
-                        type="checkbox"
-                        checked={dualAuth === true}
-                        disabled={dualAuth === null || togglingDualAuth}
-                        onChange={(e) => handleToggleDualAuth(e.target.checked)}
-                    />
-                    <span className={styles.boldText}>{dualAuth === null ? '…' : dualAuth ? 'On' : 'Off'}</span>
-                </label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    {/* Manage Reward Items — household view only. */}
+                    {!isCommercial && (
+                        <Button
+                            variant="primary"
+                            size="sm"
+                            style={{ backgroundColor: '#007BC1' }}
+                            onClick={() => { setShowManageCatalog(!showManageCatalog); if (!showManageCatalog) loadCatalog(); }}
+                        >
+                            {showManageCatalog ? '← Back to Queue' : 'Manage Reward Items'}
+                        </Button>
+                    )}
+
+                    {/* Dual Authorization branch setting (BM-013). */}
+                    <label className={styles.dualAuthToggle} title="When off, redemption requests auto-issue a code and bypass this approval queue.">
+                        <span className={styles.mutedText}>Dual authorization</span>
+                        <input
+                            type="checkbox"
+                            checked={dualAuth === true}
+                            disabled={dualAuth === null || togglingDualAuth}
+                            onChange={(e) => handleToggleDualAuth(e.target.checked)}
+                        />
+                        <span className={styles.boldText}>{dualAuth === null ? '…' : dualAuth ? 'On' : 'Off'}</span>
+                    </label>
+                </div>
             </div>
 
+            {showManageCatalog ? (
+            <div className={styles.card}>
+                <div className={styles.cardHeaderFlex}>
+                    <div className={styles.cardTitle}>Reward Items</div>
+                </div>
+                <div className={styles.catalogGrid}>
+                    {catalog.length === 0 && (
+                        <div className={styles.emptyState}>No reward items configured.</div>
+                    )}
+                    {catalog.map((item) => {
+                        const isEditing = editingStockId === item.id;
+                        return (
+                            <div key={item.id} className={styles.catalogCard}>
+                                {REWARD_IMAGES[item.name] && (
+                                    <img src={REWARD_IMAGES[item.name]} alt={item.name} style={{ width: '100%', height: 140, objectFit: 'contain', padding: '0.75rem', background: 'var(--muted)' }} />
+                                )}
+                                <div className={styles.catalogCardBody}>
+                                    <span className={styles.catalogCardName}>{item.name}</span>
+                                    <span className={styles.catalogCardPts}>{item.points_cost} pts</span>
+                                    <span className={styles.catalogCardStock}>Stock: {isEditing ? (
+                                        <input
+                                            type="number"
+                                            min={0}
+                                            value={editingStockValue}
+                                            onChange={(e) => setEditingStockValue(e.target.value)}
+                                            onKeyDown={(e) => { if (e.key === 'Enter') handleSaveStock(item.id); if (e.key === 'Escape') setEditingStockId(null); }}
+                                            autoFocus
+                                            className={styles.catalogStockInput}
+                                        />
+                                    ) : item.stock_qty}</span>
+                                </div>
+                                <div className={styles.catalogCardActions}>
+                                    {isEditing ? (
+                                        <>
+                                            <Button variant="accent" size="sm" onClick={() => handleSaveStock(item.id)} disabled={savingStockId === item.id} style={{ backgroundColor: '#007BC1' }}>
+                                                {savingStockId === item.id ? 'Saving…' : 'Save'}
+                                            </Button>
+                                            <Button variant="ghost" size="sm" onClick={() => setEditingStockId(null)}>Cancel</Button>
+                                        </>
+                                    ) : (
+                                        <Button variant="ghost" size="sm" onClick={() => { setEditingStockId(item.id); setEditingStockValue(String(item.stock_qty)); }}>
+                                            Edit Stock
+                                        </Button>
+                                    )}
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+            </div>
+            ) : (
+            <>
             {/* When dual auth is OFF, approvals are delegated — the queue stays empty. */}
             {dualAuth === false && (
                 <div className={styles.dualAuthBanner}>
@@ -608,10 +754,38 @@ export default function Rewards() {
                             ))}
                         </TabsList>
                     </Tabs>
-                    <Button variant="ghost" size="sm" onClick={() => loadRedemptions(track, activeTab)} disabled={loading}>
-                        <RefreshCw size={16} /> Refresh
-                    </Button>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <input
+                            type="text"
+                            placeholder="Search by code…"
+                            value={codeSearch}
+                            onChange={(e) => { setCodeSearch(e.target.value); setCodeSearchError(null); }}
+                            onKeyDown={(e) => { if (e.key === 'Enter') handleCodeSearch(); }}
+                            disabled={codeSearchLoading}
+                            style={{
+                                padding: '6px 10px',
+                                border: '1px solid #d1d5db',
+                                borderRadius: 6,
+                                fontSize: 13,
+                                width: 180,
+                            }}
+                        />
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={handleCodeSearch}
+                            disabled={codeSearchLoading || !codeSearch.trim()}
+                        >
+                            {codeSearchLoading ? 'Searching…' : 'Verify Code'}
+                        </Button>
+                        <Button variant="ghost" size="sm" onClick={() => loadRedemptions(track, activeTab)} disabled={loading}>
+                            <RefreshCw size={16} /> Refresh
+                        </Button>
+                    </div>
                 </div>
+                {codeSearchError && (
+                    <div style={{ padding: '8px 16px', color: '#dc2626', fontSize: 13 }}>{codeSearchError}</div>
+                )}
 
                 <div className={styles.tableWrapper}>
                     <table className={styles.table}>
@@ -619,6 +793,7 @@ export default function Rewards() {
                             <tr>
                                 <th>Customer</th>
                                 <th>Reward</th>
+                                <th>Photo</th>
                                 <th>{isCommercial ? 'Free Cylinders' : 'Cost'}</th>
                                 <th>{isCommercial ? 'Cycle Progress' : 'Balance'}</th>
                                 <th>Requested</th>
@@ -628,13 +803,13 @@ export default function Rewards() {
                         </thead>
                         <tbody>
                             {loading && (
-                                <tr><td colSpan={7} className={styles.emptyState}>Loading…</td></tr>
+                                <tr><td colSpan={8} className={styles.emptyState}>Loading…</td></tr>
                             )}
                             {!loading && error && (
-                                <tr><td colSpan={7} className={styles.emptyState}>{error}</td></tr>
+                                <tr><td colSpan={8} className={styles.emptyState}>{error}</td></tr>
                             )}
                             {!loading && !error && redemptions.length === 0 && (
-                                <tr><td colSpan={7} className={styles.emptyState}>
+                                <tr><td colSpan={8} className={styles.emptyState}>
                                     <Gift size={20} /> No redemptions in this view.
                                 </td></tr>
                             )}
@@ -642,6 +817,7 @@ export default function Rewards() {
                                 const reward = isCommercial
                                     ? (r.reward_description ?? 'Free cylinder (30+1)')
                                     : (r.catalog_item_name ?? r.reward_description ?? '—');
+                                const rewardImage = REWARD_IMAGES[reward] ?? null;
                                 // Household: can't afford if balance < cost. Commercial: can't
                                 // redeem without a completed cycle.
                                 const cannotAct = isCommercial
@@ -653,6 +829,21 @@ export default function Rewards() {
                                         <tr>
                                             <td className={styles.boldText}>{r.customer_name ?? '—'}</td>
                                             <td>{reward}</td>
+                                            <td>
+                                                {rewardImage ? (
+                                                    <div className={styles.rewardThumb}>
+                                                        <Image
+                                                            src={rewardImage}
+                                                            alt={reward}
+                                                            width={40}
+                                                            height={40}
+                                                            className={styles.rewardImg}
+                                                        />
+                                                    </div>
+                                                ) : (
+                                                    <span className={styles.mutedText}>—</span>
+                                                )}
+                                            </td>
                                             <td className={styles.monoText}>
                                                 {isCommercial
                                                     ? (r.completed_cycles == null ? '—' : `${r.completed_cycles}`)
@@ -692,6 +883,7 @@ export default function Rewards() {
                                                                 onClick={() => handleApprove(r.id)}
                                                                 disabled={approvingId === r.id || isRejecting || cannotAct}
                                                                 title={cannotAct ? (isCommercial ? 'No completed cycle to redeem' : 'Insufficient points balance') : undefined}
+                                                                style={{ backgroundColor: '#16a34a', color: '#fff' }}
                                                             >
                                                                 {approvingId === r.id ? 'Approving…' : 'Approve'}
                                                             </Button>
@@ -710,7 +902,7 @@ export default function Rewards() {
                                         </tr>
                                         {isRejecting && (
                                             <tr className={styles.editorRow}>
-                                                <td colSpan={7}>
+                                                <td colSpan={8}>
                                                     <div className={styles.rejectPanel}>
                                                         <label className={styles.fieldLabel}>Reason for rejection</label>
                                                         <input
@@ -734,7 +926,7 @@ export default function Rewards() {
                                         )}
                                         {ledgerId === r.id && (
                                             <tr className={styles.editorRow}>
-                                                <td colSpan={7}>
+                                                <td colSpan={8}>
                                                     {ledgerLoading || !ledger ? (
                                                         <div className={styles.ledgerPanel}>Loading ledger…</div>
                                                     ) : ledger.track === COMMERCIAL ? (
@@ -799,6 +991,8 @@ export default function Rewards() {
                     </table>
                 </div>
             </div>
+            </>
+            )}
         </div>
     );
 }
