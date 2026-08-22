@@ -13,7 +13,11 @@ import { Account, accountFromUser, signOut } from './lib/auth';
 import { supabase } from './lib/supabase/client';
 
 // Lazy-load each persona app so a page load only compiles/downloads the one
-// that's actually shown, instead of all three (each pulls in charts, maps, etc.).
+// that's actually shown instead of every dashboard bundle.
+const SuperAdminApp = dynamic(
+  () => import('./super-admin/SuperAdminApp').then((m) => m.SuperAdminApp),
+  { ssr: false },
+);
 const FranchiseAdminApp = dynamic(
   () => import('./franchise-admin/FranchiseAdminApp').then((m) => m.FranchiseAdminApp),
   { ssr: false },
@@ -162,6 +166,7 @@ export default function App() {
           onAccountUpdate={handleAccountUpdate}
         >
           {/* The rendered app always follows the REAL session's role — no view/JWT drift. */}
+          {account.role === 'super-admin' && <SuperAdminApp />}
           {account.role === 'franchise-admin' && <FranchiseAdminApp />}
           {account.role === 'branch-owner' && (
             // Remount when the branch set changes so BranchProvider re-initializes.

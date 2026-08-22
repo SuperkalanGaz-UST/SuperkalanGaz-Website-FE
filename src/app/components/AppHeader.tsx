@@ -6,7 +6,7 @@ import { useAccount, useLogout } from '../contexts/AccountContext';
 import { NotificationCenter } from './NotificationCenter';
 
 /**
- * Unified page header for all three web personas, in the Branch Owner reference
+ * Unified page header for all staff web personas, in the Branch Owner reference
  * format (DESIGN.md): a card-less bar over the gray canvas — bold title on the
  * left; the persona context badge, notification control, and account menu on the
  * right. The account menu provides a confirmed logout path in addition to the
@@ -16,7 +16,7 @@ import { NotificationCenter } from './NotificationCenter';
 interface AppHeaderProps {
   title: string;
   description?: string;
-  /** Persona context chip: FA "Main Office", BO branch selector, BM branch. */
+  /** Persona context chip: SA/FA "Main Office", BO branch selector, BM branch. */
   badge?: ReactNode;
 }
 

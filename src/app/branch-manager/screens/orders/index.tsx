@@ -71,6 +71,7 @@ interface CustomerRow {
     contact_number: string;
     delivery_address: string;
     registration_source: string;
+    account_type: 'household' | 'commercial';
     last_order_date: string | null;
     created_at: string;
 }
@@ -157,8 +158,13 @@ export default function Orders() {
     // Inline "create new customer" sub-form (not a real <form> — it lives inside the
     // order <form>, so submit is a button handler, not a nested form submit).
     const [showCreateCustomer, setShowCreateCustomer] = useState(false);
-    const [newCustomer, setNewCustomer] = useState({ name: '', contactNumber: '', deliveryAddress: '' });
-    const [newCustomerErrors, setNewCustomerErrors] = useState<Partial<Record<'name' | 'contactNumber' | 'deliveryAddress', string>>>({});
+    const [newCustomer, setNewCustomer] = useState<{
+        name: string;
+        contactNumber: string;
+        deliveryAddress: string;
+        accountType: 'household' | 'commercial';
+    }>({ name: '', contactNumber: '', deliveryAddress: '', accountType: 'household' });
+    const [newCustomerErrors, setNewCustomerErrors] = useState<Partial<Record<'name' | 'contactNumber' | 'deliveryAddress' | 'accountType', string>>>({});
     const [creatingCustomer, setCreatingCustomer] = useState(false);
 
     // Rider assignment / dispatch (Slice 2). Only one row's assign panel is open
@@ -284,7 +290,7 @@ export default function Orders() {
     // Open the inline create form, pre-filling the name with whatever was typed so
     // the BM doesn't retype it (BM-029/030).
     const openCreateCustomer = () => {
-        setNewCustomer({ name: customerSearch.trim(), contactNumber: '', deliveryAddress: '' });
+        setNewCustomer({ name: customerSearch.trim(), contactNumber: '', deliveryAddress: '', accountType: 'household' });
         setNewCustomerErrors({});
         setShowCreateCustomer(true);
     };
@@ -316,6 +322,7 @@ export default function Orders() {
                     name: newCustomer.name.trim(),
                     contactNumber: contactE164,
                     deliveryAddress: newCustomer.deliveryAddress.trim(),
+                    accountType: newCustomer.accountType,
                 }),
             });
             const data = await res.json();
@@ -324,7 +331,7 @@ export default function Orders() {
             // Close the create form, autopopulate the order, and link the id — the BM
             // shouldn't have to re-enter anything to finish the order (BM-032).
             selectCustomer(data.customer as CustomerRow);
-            setNewCustomer({ name: '', contactNumber: '', deliveryAddress: '' });
+            setNewCustomer({ name: '', contactNumber: '', deliveryAddress: '', accountType: 'household' });
             setNewCustomerErrors({});
         } catch (err) {
             toast.error(err instanceof Error ? err.message : 'Failed to register customer');
@@ -344,7 +351,7 @@ export default function Orders() {
         setCustomerResults(null);
         setCustomerSearchError(null);
         setShowCreateCustomer(false);
-        setNewCustomer({ name: '', contactNumber: '', deliveryAddress: '' });
+        setNewCustomer({ name: '', contactNumber: '', deliveryAddress: '', accountType: 'household' });
         setNewCustomerErrors({});
     };
 
@@ -976,6 +983,18 @@ export default function Orders() {
                                                         onChange={e => setNewCustomer(p => ({ ...p, deliveryAddress: e.target.value }))}
                                                         onKeyDown={e => { if (e.key === 'Enter') e.preventDefault(); }} />
                                                     {newCustomerErrors.deliveryAddress && <p className={styles.fieldError}>{newCustomerErrors.deliveryAddress}</p>}
+                                                </div>
+                                                <div>
+                                                    <label className={styles.fieldLabel} htmlFor="new-customer-account-type">Loyalty Track</label>
+                                                    <select
+                                                        id="new-customer-account-type"
+                                                        value={newCustomer.accountType}
+                                                        onChange={e => setNewCustomer(p => ({ ...p, accountType: e.target.value as 'household' | 'commercial' }))}
+                                                        className={styles.customerTypeSelect}
+                                                    >
+                                                        <option value="household">Household Points</option>
+                                                        <option value="commercial">Commercial 30+1</option>
+                                                    </select>
                                                 </div>
                                             </div>
                                             <div className={styles.createCustomerActions}>

@@ -4,10 +4,11 @@ import { useEffect, useMemo, useState } from 'react';
 import { Clock3, Gift, LockKeyhole, PackageSearch } from 'lucide-react';
 import { toast } from 'sonner';
 import { useBranch } from '../../contexts/BranchContext';
+import { apiErrorMessage, apiFetch } from '../../../lib/api';
 
 interface BranchConfiguration {
-  rewardThreshold: string;
   dualAuth: boolean;
+  pointRates: Record<'2.7kg' | '5kg' | '11kg' | '22kg' | '50kg', string>;
   stock11kg: string;
   stock22kg: string;
   stock50kg: string;
@@ -16,8 +17,8 @@ interface BranchConfiguration {
 }
 
 const defaultConfiguration: BranchConfiguration = {
-  rewardThreshold: '30',
   dualAuth: true,
+  pointRates: { '2.7kg': '5', '5kg': '10', '11kg': '15', '22kg': '20', '50kg': '25' },
   stock11kg: '20',
   stock22kg: '10',
   stock50kg: '5',
@@ -37,18 +38,67 @@ export function BranchConfigurationSettings() {
     [savedByBranch, selectedBranch],
   );
   const [form, setForm] = useState<BranchConfiguration>(savedConfiguration);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     setForm(savedConfiguration);
   }, [savedConfiguration]);
 
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const response = await apiFetch('/loyalty/settings');
+        const data = await response.json();
+        if (!response.ok) throw new Error(apiErrorMessage(data, 'Failed to load loyalty settings'));
+        if (cancelled) return;
+        const rates = data.settings.point_rates as Record<keyof BranchConfiguration['pointRates'], number>;
+        setForm((current) => ({
+          ...current,
+          dualAuth: data.settings.dual_auth === true,
+          pointRates: {
+            '2.7kg': String(rates['2.7kg']),
+            '5kg': String(rates['5kg']),
+            '11kg': String(rates['11kg']),
+            '22kg': String(rates['22kg']),
+            '50kg': String(rates['50kg']),
+          },
+        }));
+      } catch (error) {
+        if (!cancelled) toast.error(error instanceof Error ? error.message : 'Failed to load loyalty settings');
+      }
+    };
+    void load();
+    return () => { cancelled = true; };
+  }, [selectedBranch]);
+
   const updateField = <K extends keyof BranchConfiguration>(field: K, value: BranchConfiguration[K]) => {
     setForm((current) => ({ ...current, [field]: value }));
   };
 
-  const handleSave = () => {
-    setSavedByBranch((current) => ({ ...current, [selectedBranch]: form }));
-    toast.success(`Settings saved for ${selectedBranch}.`);
+  const handleSave = async () => {
+    const pointRates = Object.fromEntries(
+      Object.entries(form.pointRates).map(([size, value]) => [size, Number(value)]),
+    );
+    if (Object.values(pointRates).some((value) => !Number.isInteger(value) || value < 0)) {
+      toast.error('Point rates must be whole numbers of zero or more.');
+      return;
+    }
+    setSaving(true);
+    try {
+      const response = await apiFetch('/loyalty/settings', {
+        method: 'PATCH',
+        body: JSON.stringify({ dualAuth: form.dualAuth, pointRates }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(apiErrorMessage(data, 'Failed to save loyalty settings'));
+      setSavedByBranch((current) => ({ ...current, [selectedBranch]: form }));
+      toast.success(`Loyalty settings saved for ${selectedBranch}.`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to save loyalty settings');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const openLoyaltyProgram = () => {
@@ -76,19 +126,7 @@ export function BranchConfigurationSettings() {
 
           <div className="mt-6">
             <h3 className="text-sm font-semibold text-gray-900">Commercial rewards</h3>
-            <label className="mt-4 block text-sm font-medium text-gray-700">
-              Reward threshold
-              <input
-                type="number"
-                min="1"
-                value={form.rewardThreshold}
-                onChange={(event) => updateField('rewardThreshold', event.target.value)}
-                className={`${numberFieldClassName} mt-2`}
-              />
-              <span className="mt-1.5 block text-xs font-normal leading-5 text-gray-500">
-                Number of purchases before a free cylinder reward is flagged.
-              </span>
-            </label>
+            <p className="mt-4 text-sm text-gray-600">30 qualifying purchases earn one free cylinder.</p>
 
             <div className="mt-5 flex items-start justify-between gap-5">
               <div>
@@ -118,6 +156,24 @@ export function BranchConfigurationSettings() {
 
           <div className="mt-6 border-t border-gray-200 pt-5">
             <h3 className="text-sm font-semibold text-gray-900">Household points</h3>
+            <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
+              {(Object.keys(form.pointRates) as Array<keyof BranchConfiguration['pointRates']>).map((size) => (
+                <label key={size} className="block text-xs font-medium text-gray-600">
+                  {size} rate
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={form.pointRates[size]}
+                    onChange={(event) => setForm((current) => ({
+                      ...current,
+                      pointRates: { ...current.pointRates, [size]: event.target.value },
+                    }))}
+                    className={`${numberFieldClassName} mt-2`}
+                  />
+                </label>
+              ))}
+            </div>
             <div className="mt-4 flex items-center justify-between gap-4 rounded-lg bg-gray-50 px-4 py-3">
               <div>
                 <p className="text-sm font-medium text-gray-700">Point expiry</p>
@@ -209,7 +265,7 @@ export function BranchConfigurationSettings() {
           </span>
           <div>
             <h2 id="sla-policy-heading" className="text-base font-semibold text-gray-900">SLA Policy</h2>
-            <p className="mt-1 text-sm text-gray-600">SLA thresholds are managed by the Franchise Administrator.</p>
+            <p className="mt-1 text-sm text-gray-600">System-wide SLA thresholds are proposed by the Franchise Administrator and approved by the Super Administrator.</p>
           </div>
         </section>
       </div>
@@ -218,9 +274,10 @@ export function BranchConfigurationSettings() {
         <button
           type="button"
           onClick={handleSave}
+          disabled={saving}
           className="h-10 rounded-lg bg-[#007BC1] px-5 text-sm font-medium text-white transition hover:bg-[#0068A4]"
         >
-          Save branch settings
+          {saving ? 'Saving…' : 'Save branch settings'}
         </button>
         <button
           type="button"

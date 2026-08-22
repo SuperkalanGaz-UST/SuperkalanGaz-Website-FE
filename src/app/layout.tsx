@@ -5,7 +5,7 @@ import '../styles/index.css';
 export const metadata: Metadata = {
   title: 'Superkalan Gaz CRM',
   description:
-    'Centralized CRM for Superkalan Gaz — internal staff dashboard (FA/BO/BM)',
+    'Centralized CRM for Superkalan Gaz — internal staff dashboard (SA/FA/BO/BM)',
   icons: {
     icon: [{ url: '/logo%20only.png', type: 'image/png' }],
   },

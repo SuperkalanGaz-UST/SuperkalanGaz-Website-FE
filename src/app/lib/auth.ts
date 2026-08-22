@@ -6,13 +6,13 @@
  * self-edited — the same claims the API reads from the JWT. There is no public.profiles
  * table, and we never touch PostgREST (AGENTS.md §4). Supabase Auth is email-based, but
  * the UI logs in by username, so we map `<username>` -> `<username>@superkalan.com`. The
- * four seed personas (admin / owner / owner.multi / manager) already exist there; any
+ * seeded staff personas already exist there; any
  * user created via User Management is stored the same way.
  */
 import { supabase } from './supabase/client';
 import type { User } from '@supabase/supabase-js';
 
-export type Role = 'franchise-admin' | 'branch-owner' | 'branch-manager';
+export type Role = 'super-admin' | 'franchise-admin' | 'branch-owner' | 'branch-manager';
 
 export type Branch = 'Quezon City Branch' | 'Makati Branch' | 'Mandaluyong Branch';
 
@@ -24,7 +24,7 @@ export interface Account {
   email: string;
   phone: string | null;
   status: 'Active' | 'Inactive';
-  /** Branches this account can see. FA reads across all branches; BO/BM are scoped to their own. */
+  /** Branches this account can see. SA/FA read across branches; BO/BM are scoped to their own. */
   branches: Branch[];
 }
 
@@ -52,6 +52,7 @@ export const DEMO_ACCOUNTS: { username: string; password: string; role: Role }[]
 ];
 
 export const ROLE_LABELS: Record<Role, string> = {
+  'super-admin': 'Super Administrator',
   'franchise-admin': 'Franchise Administrator',
   'branch-owner': 'Branch Owner',
   'branch-manager': 'Branch Manager',
@@ -67,6 +68,7 @@ export interface AuthActionResult {
 }
 
 const VALID_ROLES: readonly Role[] = [
+  'super-admin',
   'franchise-admin',
   'branch-owner',
   'branch-manager',

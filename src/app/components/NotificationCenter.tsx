@@ -67,7 +67,7 @@ function relativeTime(value: string): string {
 }
 
 /**
- * Shared FA/BO/BM notification control. Audience filtering is intentionally not
+ * Shared SA/FA/BO/BM notification control. Audience filtering is intentionally not
  * done here: the NestJS API derives role + branch scope from the verified JWT.
  */
 export function NotificationCenter() {

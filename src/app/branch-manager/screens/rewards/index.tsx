@@ -184,10 +184,6 @@ export default function Rewards() {
     const [customerSearchLoading, setCustomerSearchLoading] = useState(false);
     const [creating, setCreating] = useState(false);
 
-    // Dual Authorization branch setting (BM-013). null while loading.
-    const [dualAuth, setDualAuth] = useState<boolean | null>(null);
-    const [togglingDualAuth, setTogglingDualAuth] = useState(false);
-
     // Ledger review panel (BM-014): ledgerId = which row's ledger is open.
     const [ledgerId, setLedgerId] = useState<string | null>(null);
     const [ledger, setLedger] = useState<LedgerView | null>(null);
@@ -197,12 +193,6 @@ export default function Rewards() {
     const [codeSearch, setCodeSearch] = useState('');
     const [codeSearchLoading, setCodeSearchLoading] = useState(false);
     const [codeSearchError, setCodeSearchError] = useState<string | null>(null);
-
-    // Manage Reward Items: inline stock editor for the BM's branch catalog.
-    const [showManageCatalog, setShowManageCatalog] = useState(false);
-    const [editingStockId, setEditingStockId] = useState<string | null>(null);
-    const [editingStockValue, setEditingStockValue] = useState('');
-    const [savingStockId, setSavingStockId] = useState<string | null>(null);
 
     const isCommercial = track === COMMERCIAL;
 
@@ -238,45 +228,6 @@ export default function Rewards() {
     }, []);
 
     useEffect(() => { loadCatalog(); }, [loadCatalog]);
-
-    // Branch Dual Authorization setting (BM-013). Loaded once.
-    const loadSettings = useCallback(async () => {
-        try {
-            const res = await apiFetch('/loyalty/settings');
-            const data = await res.json();
-            if (!res.ok) return;
-            setDualAuth(Boolean(data.settings.dual_auth));
-        } catch {
-            // Non-fatal: the toggle simply stays in a loading state.
-        }
-    }, []);
-
-    useEffect(() => { loadSettings(); }, [loadSettings]);
-
-    const handleToggleDualAuth = async (next: boolean) => {
-        setTogglingDualAuth(true);
-        try {
-            const res = await apiFetch('/loyalty/settings', {
-                method: 'PATCH',
-                body: JSON.stringify({ dualAuth: next }),
-            });
-            const data = await res.json();
-            if (!res.ok) {
-                toast.error(apiErrorMessage(data, 'Failed to update setting'));
-                return;
-            }
-            setDualAuth(Boolean(data.settings.dual_auth));
-            toast.success(
-                next
-                    ? 'Dual authorization ON — requests require your approval.'
-                    : 'Dual authorization OFF — requests auto-issue a code.',
-            );
-        } catch (err) {
-            toast.error(err instanceof Error ? err.message : 'Failed to update setting');
-        } finally {
-            setTogglingDualAuth(false);
-        }
-    };
 
     // Open (or close) the ledger review panel for a row (BM-014).
     const toggleLedger = async (id: string) => {
@@ -506,37 +457,6 @@ export default function Rewards() {
         }
     };
 
-    /** Save the edited stock quantity for a catalog item. */
-    const handleSaveStock = async (id: string) => {
-        const qty = parseInt(editingStockValue, 10);
-        if (isNaN(qty) || qty < 0) {
-            toast.error('Stock must be a non-negative number');
-            return;
-        }
-        setSavingStockId(id);
-        try {
-            const res = await apiFetch(`/loyalty/catalog/${id}/stock`, {
-                method: 'PATCH',
-                body: JSON.stringify({ stockQty: qty }),
-            });
-            const data = await res.json();
-            if (!res.ok) {
-                toast.error(apiErrorMessage(data, 'Failed to update stock'));
-                return;
-            }
-            // Update the local catalog state
-            setCatalog((prev) =>
-                prev.map((c) => (c.id === id ? { ...c, stock_qty: qty } : c))
-            );
-            toast.success('Stock updated');
-            setEditingStockId(null);
-        } catch (err) {
-            toast.error(err instanceof Error ? err.message : 'Failed to update stock');
-        } finally {
-            setSavingStockId(null);
-        }
-    };
-
     // Avoid hydration mismatch on the date/Intl formatting (same guard as Orders).
     if (!mounted) return null;
 
@@ -554,92 +474,7 @@ export default function Rewards() {
                     </Tabs>
                 </div>
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    {/* Manage Reward Items — household view only. */}
-                    {!isCommercial && (
-                        <Button
-                            variant="primary"
-                            size="sm"
-                            style={{ backgroundColor: '#007BC1' }}
-                            onClick={() => { setShowManageCatalog(!showManageCatalog); if (!showManageCatalog) loadCatalog(); }}
-                        >
-                            {showManageCatalog ? '← Back to Queue' : 'Manage Reward Items'}
-                        </Button>
-                    )}
-
-                    {/* Dual Authorization branch setting (BM-013). */}
-                    <label className={styles.dualAuthToggle} title="When off, redemption requests auto-issue a code and bypass this approval queue.">
-                        <span className={styles.mutedText}>Dual authorization</span>
-                        <input
-                            type="checkbox"
-                            checked={dualAuth === true}
-                            disabled={dualAuth === null || togglingDualAuth}
-                            onChange={(e) => handleToggleDualAuth(e.target.checked)}
-                        />
-                        <span className={styles.boldText}>{dualAuth === null ? '…' : dualAuth ? 'On' : 'Off'}</span>
-                    </label>
-                </div>
             </div>
-
-            {showManageCatalog ? (
-            <div className={styles.card}>
-                <div className={styles.cardHeaderFlex}>
-                    <div className={styles.cardTitle}>Reward Items</div>
-                </div>
-                <div className={styles.catalogGrid}>
-                    {catalog.length === 0 && (
-                        <div className={styles.emptyState}>No reward items configured.</div>
-                    )}
-                    {catalog.map((item) => {
-                        const isEditing = editingStockId === item.id;
-                        return (
-                            <div key={item.id} className={styles.catalogCard}>
-                                {REWARD_IMAGES[item.name] && (
-                                    <img src={REWARD_IMAGES[item.name]} alt={item.name} style={{ width: '100%', height: 140, objectFit: 'contain', padding: '0.75rem', background: 'var(--muted)' }} />
-                                )}
-                                <div className={styles.catalogCardBody}>
-                                    <span className={styles.catalogCardName}>{item.name}</span>
-                                    <span className={styles.catalogCardPts}>{item.points_cost} pts</span>
-                                    <span className={styles.catalogCardStock}>Stock: {isEditing ? (
-                                        <input
-                                            type="number"
-                                            min={0}
-                                            value={editingStockValue}
-                                            onChange={(e) => setEditingStockValue(e.target.value)}
-                                            onKeyDown={(e) => { if (e.key === 'Enter') handleSaveStock(item.id); if (e.key === 'Escape') setEditingStockId(null); }}
-                                            autoFocus
-                                            className={styles.catalogStockInput}
-                                        />
-                                    ) : item.stock_qty}</span>
-                                </div>
-                                <div className={styles.catalogCardActions}>
-                                    {isEditing ? (
-                                        <>
-                                            <Button variant="accent" size="sm" onClick={() => handleSaveStock(item.id)} disabled={savingStockId === item.id} style={{ backgroundColor: '#007BC1' }}>
-                                                {savingStockId === item.id ? 'Saving…' : 'Save'}
-                                            </Button>
-                                            <Button variant="ghost" size="sm" onClick={() => setEditingStockId(null)}>Cancel</Button>
-                                        </>
-                                    ) : (
-                                        <Button variant="ghost" size="sm" onClick={() => { setEditingStockId(item.id); setEditingStockValue(String(item.stock_qty)); }}>
-                                            Edit Stock
-                                        </Button>
-                                    )}
-                                </div>
-                            </div>
-                        );
-                    })}
-                </div>
-            </div>
-            ) : (
-            <>
-            {/* When dual auth is OFF, approvals are delegated — the queue stays empty. */}
-            {dualAuth === false && (
-                <div className={styles.dualAuthBanner}>
-                    Dual authorization is <strong>off</strong> — new requests are auto-approved and a code is issued
-                    immediately, so they never appear in this queue.
-                </div>
-            )}
 
             {/* New redemption request. */}
             <div className={styles.card}>
@@ -991,8 +826,6 @@ export default function Rewards() {
                     </table>
                 </div>
             </div>
-            </>
-            )}
         </div>
     );
 }

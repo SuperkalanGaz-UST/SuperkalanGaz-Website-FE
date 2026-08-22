@@ -1,6 +1,6 @@
 'use client';
 
-import { Building2, LayoutDashboard, Settings, Star, TrendingUp, Users } from 'lucide-react';
+import { Building2, ClipboardCheck, FileCheck2, LayoutDashboard, Settings, Star, TrendingUp, Users } from 'lucide-react';
 import { AppSidebar, SidebarNavEntry } from './AppSidebar';
 
 const PesoIcon = ({ className }: { className?: string }) => (
@@ -21,9 +21,9 @@ const PesoIcon = ({ className }: { className?: string }) => (
 );
 
 /**
- * Franchise Administrator navigation: cross-branch READ visibility plus the
- * two FA-only writes (SLA/branch-account config lives under these screens).
- * No operational screens — FA has no operational write actions (AGENTS.md §7).
+ * Franchise Administrator navigation: cross-branch read visibility, initial
+ * branch onboarding, and governance request submission. Controlled changes
+ * are applied only after Super Administrator approval.
  */
 const NAV_ENTRIES: SidebarNavEntry[] = [
   { icon: LayoutDashboard, label: 'Dashboard',           id: 'dashboard' },
@@ -32,6 +32,8 @@ const NAV_ENTRIES: SidebarNavEntry[] = [
   { icon: Star,            label: 'System CSAT',         id: 'csat' },
   { icon: Building2,       label: 'Franchise Registry',  id: 'franchise-registry' },
   { icon: PesoIcon,        label: 'Price Configuration', id: 'price-config' },
+  { icon: ClipboardCheck,  label: 'Governance Requests', id: 'governance-requests' },
+  { icon: FileCheck2,      label: 'Account Reviews',     id: 'account-reviews' },
   { icon: Settings,        label: 'Settings',            id: 'account-settings' },
 ];
 

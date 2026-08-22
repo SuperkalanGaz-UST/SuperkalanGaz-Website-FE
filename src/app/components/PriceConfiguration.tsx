@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { ArrowDown, ArrowUp, Building2, Flame, Info } from 'lucide-react';
 import { toast } from 'sonner';
 import { apiErrorMessage, apiFetch } from '../lib/api';
-import { fetchLpgPrices, parsePriceEnvelope } from '../lib/pricing';
+import { fetchLpgPrices } from '../lib/pricing';
 import { Header } from './Header';
 
 const CYLINDERS = [
@@ -111,6 +111,7 @@ export function PriceConfiguration() {
   const [isLoading, setIsLoading] = useState(true);
   const [isCatalogReady, setIsCatalogReady] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [requestReason, setRequestReason] = useState('');
   const hasChanges = CYLINDERS.some(
     (cylinder) => prices[cylinder.id] !== savedPrices[cylinder.id],
   );
@@ -168,31 +169,31 @@ export function PriceConfiguration() {
 
     setIsSaving(true);
     try {
-      const response = await apiFetch('/prices', {
-        method: 'PATCH',
+      const response = await apiFetch('/governance/requests', {
+        method: 'POST',
         body: JSON.stringify({
-          prices: CYLINDERS.map((cylinder) => ({
-            cylinderSize: cylinder.id,
-            unitPrice: parsePrice(normalizedPrices[cylinder.id]),
-          })),
+          type: 'price-configuration',
+          title: 'System-wide LPG price configuration',
+          reason: requestReason.trim(),
+          riskLevel: 'medium',
+          payload: {
+            prices: CYLINDERS.map((cylinder) => ({
+              cylinderSize: cylinder.id,
+              unitPrice: parsePrice(normalizedPrices[cylinder.id]),
+            })),
+          },
         }),
       });
       const data: unknown = await response.json().catch(() => null);
       if (!response.ok) {
-        throw new Error(apiErrorMessage(data, 'Could not save prices.'));
+        throw new Error(apiErrorMessage(data, 'Could not submit the price request.'));
       }
-
-      const savedRows = parsePriceEnvelope(data);
-      const databasePrices = savedRows.reduce<PriceMap>((result, row) => {
-        result[row.cylinder_size] = formatPrice(row.unit_price);
-        return result;
-      }, { ...normalizedPrices });
-      setPrices(databasePrices);
-      setSavedPrices(databasePrices);
+      setPrices({ ...savedPrices });
+      setRequestReason('');
       window.dispatchEvent(new Event('notifications:refresh'));
-      toast.success('Prices saved and all staff were notified.');
+      toast.success('Price change request submitted for Super Administrator approval.');
     } catch (saveError) {
-      toast.error(saveError instanceof Error ? saveError.message : 'Could not save prices.');
+      toast.error(saveError instanceof Error ? saveError.message : 'Could not submit the price request.');
     } finally {
       setIsSaving(false);
     }
@@ -206,7 +207,7 @@ export function PriceConfiguration() {
     <div className="flex-1 overflow-y-auto bg-gray-50">
       <Header
         title="LPG Pricing"
-        description="Set the standard retail price for each cylinder size across every active branch."
+        description="Propose the standard retail price for each cylinder size. Changes apply only after Super Administrator approval."
       />
 
       <main className="mx-auto w-full max-w-[1540px] px-8 pb-8">
@@ -315,8 +316,19 @@ export function PriceConfiguration() {
 
             <p className="mt-4 flex items-start gap-2 text-xs font-normal leading-5 text-gray-500">
               <Info aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0 text-[#007BC1]" />
-              <span>Changes affect every branch after saving.</span>
+              <span>Approved changes affect every branch. Current order prices remain snapshotted.</span>
             </p>
+
+            <label className="mt-6 block text-[13.5px] font-medium text-gray-800">
+              Request reason <span className="text-red-600">*</span>
+              <textarea
+                value={requestReason}
+                onChange={(event) => setRequestReason(event.target.value)}
+                rows={4}
+                placeholder="Explain why this system-wide price adjustment is needed…"
+                className="mt-2 w-full resize-none rounded-lg border border-gray-300 bg-white p-3 text-sm font-normal outline-none transition focus:border-[#007BC1] focus:ring-2 focus:ring-[#007BC1]/20"
+              />
+            </label>
           </aside>
         </div>
 
@@ -331,14 +343,14 @@ export function PriceConfiguration() {
           <button
             type="button"
             onClick={handleSave}
-            disabled={!hasChanges || !isCatalogReady || isLoading || isSaving}
+            disabled={!hasChanges || requestReason.trim().length < 5 || !isCatalogReady || isLoading || isSaving}
             className={`rounded-lg px-7 py-2.5 text-sm font-semibold text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 ${
-              hasChanges && isCatalogReady && !isLoading && !isSaving
+              hasChanges && requestReason.trim().length >= 5 && isCatalogReady && !isLoading && !isSaving
                 ? 'bg-[#007BC1] hover:bg-[#006aa6] focus-visible:ring-[#007BC1]/35'
                 : 'cursor-not-allowed bg-gray-400'
             }`}
           >
-            {isLoading ? 'Loading…' : isSaving ? 'Saving…' : 'Save changes'}
+            {isLoading ? 'Loading…' : isSaving ? 'Submitting…' : 'Submit for approval'}
           </button>
         </div>
       </main>

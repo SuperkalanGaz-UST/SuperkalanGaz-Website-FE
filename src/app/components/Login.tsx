@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import Link from 'next/link';
 import { ArrowLeft, CheckCircle2, Eye, EyeOff, Mail } from 'lucide-react';
 import {
   Account,
@@ -329,6 +330,16 @@ export function Login({
             {loading ? 'Signing in…' : 'Login'}
           </button>
         </form>
+
+        <div className="mt-6 border-t border-gray-200 pt-5 text-center">
+          <p className="text-sm text-gray-600">First time signing in?</p>
+          <Link
+            href="/signup"
+            className="mt-2 inline-flex text-sm font-semibold text-[#007BC1] hover:text-[#006399] hover:underline"
+          >
+            Activate your account
+          </Link>
+        </div>
 
         {/* Demo credentials — remove together with lib/auth.ts when API auth lands */}
         <div className="mt-8 bg-gray-50 border border-gray-200 rounded-lg p-4">
