@@ -31,7 +31,7 @@ const BranchManagerApp = dynamic(
   { ssr: false },
 );
 
-const AUTH_RESTORE_TIMEOUT_MS = 10_000;
+const AUTH_RESTORE_TIMEOUT_MS = 5_000;
 
 export default function App() {
   const [account, setAccount] = useState<Account | null>(null);

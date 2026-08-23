@@ -9,7 +9,7 @@ import { SalesOverview } from './components/SalesOverview';
 import { OperationalExpenses } from './components/OperationalExpenses';
 import { CSATSatisfaction } from './components/CSATSatisfaction';
 import { LoyaltyProgram } from './components/LoyaltyProgram';
-import { SupplyChain } from './components/SupplyChain';
+import { Inventory } from './components/Inventory';
 import { ReportGeneration } from './components/ReportGeneration';
 import { FleetOverview } from './components/FleetOverview';
 import { UserManagement } from './components/UserManagement';
@@ -72,7 +72,7 @@ export function BranchOwnerApp({ branches }: BranchOwnerAppProps) {
           {activeScreen === 'operational-expenses' && <OperationalExpenses />}
           {activeScreen === 'csat' && <CSATSatisfaction />}
           {activeScreen === 'loyalty' && <LoyaltyProgram />}
-          {activeScreen === 'supply-chain' && <SupplyChain />}
+          {activeScreen === 'inventory' && <Inventory />}
           {activeScreen === 'reports' && <ReportGeneration />}
           {activeScreen === 'fleet-overview' && <FleetOverview />}
           {activeScreen === 'user-management' && <UserManagement />}
@@ -85,7 +85,7 @@ export function BranchOwnerApp({ branches }: BranchOwnerAppProps) {
           {activeScreen === 'complaint-log-full' && <ComplaintLogFull onBack={() => setActiveScreen('csat')} />}
           {activeScreen === 'purchase-tracker-full' && <PurchaseTrackerFull onBack={() => setActiveScreen('loyalty')} />}
           {activeScreen === 'redemption-history-full' && <RedemptionHistoryFull onBack={() => setActiveScreen('loyalty')} />}
-          {activeScreen === 'reorder-log-full' && <ReorderLogFull onBack={() => setActiveScreen('supply-chain')} />}
+          {activeScreen === 'reorder-log-full' && <ReorderLogFull onBack={() => setActiveScreen('inventory')} />}
           {activeScreen === 'customer-ratings-full' && <CustomerRatingsFull onBack={() => setActiveScreen('csat')} />}
         </BranchContentTransition>
       </div>

@@ -30,6 +30,14 @@ function BranchBadge() {
     }
   }, [isSingleBranch]);
 
+  if (availableBranches.length === 0) {
+    return (
+      <div className="flex items-center whitespace-nowrap rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-bold text-amber-700">
+        No active branch
+      </div>
+    );
+  }
+
   if (isSingleBranch) {
     return (
       <div className="flex items-center px-3 py-1 rounded-full border border-gray-200 bg-white text-[#007BC1] text-xs font-bold whitespace-nowrap">
@@ -86,9 +94,10 @@ function BranchBadge() {
 
 interface HeaderProps {
   title: string;
+  description?: string;
 }
 
 /** BO page header: the shared AppHeader with the branch selector as its badge. */
-export function Header({ title }: HeaderProps) {
-  return <AppHeader title={title} badge={<BranchBadge />} />;
+export function Header({ title, description }: HeaderProps) {
+  return <AppHeader title={title} description={description} badge={<BranchBadge />} />;
 }

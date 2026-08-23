@@ -14,7 +14,7 @@ import { AppSidebar, SidebarNavEntry } from '../../components/AppSidebar';
 const NAV_ENTRIES: SidebarNavEntry[] = [
   { icon: LayoutDashboard, label: 'Dashboard', id: 'dashboard' },
   { icon: ClipboardCheck, label: 'Approval Requests', id: 'approval-requests' },
-  { icon: UserCog, label: 'Admin Accounts', id: 'admin-accounts' },
+  { icon: UserCog, label: 'Franchise Administrators', id: 'admin-accounts' },
   { icon: Tags, label: 'Price Change Logs', id: 'price-change-logs' },
   { icon: FileClock, label: 'Branch Owner Logs', id: 'branch-owner-logs' },
   { icon: ShieldCheck, label: 'Audit & Security', id: 'audit-security' },

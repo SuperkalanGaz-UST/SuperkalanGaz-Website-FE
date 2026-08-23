@@ -91,12 +91,6 @@ const MAX_FILE_BYTES = 5 * 1024 * 1024;
 
 const ROLE_OPTIONS: RoleOption[] = [
   {
-    id: 'franchise-admin',
-    label: 'Franchise Administrator',
-    description: 'Cross-branch administration and governance requests.',
-    icon: ShieldCheck,
-  },
-  {
     id: 'branch-owner',
     label: 'Branch Owner',
     description: 'Register and configure your approved branch.',
@@ -308,7 +302,7 @@ function RoleSelection({ selectedRole, onSelect, onContinue }: RoleSelectionProp
       <div className={styles.roleHeading}>
         <span>Staff registration</span>
         <h1>How are you joining Superkalan Gaz?</h1>
-        <p>Choose the role named in your invitation. The invitation is verified before any account can be approved.</p>
+        <p>Choose the branch role named in your invitation. Franchise Administrator accounts use a secure, role-locked activation link.</p>
       </div>
 
       <div className={styles.roleGrid} role="radiogroup" aria-label="Registration role">
@@ -337,7 +331,7 @@ function RoleSelection({ selectedRole, onSelect, onContinue }: RoleSelectionProp
 
       <div className={styles.securityNotice}>
         <ShieldCheck aria-hidden="true" />
-        <span>Choosing a role does not grant permissions. Access follows the verified invitation and required approval workflow.</span>
+        <span>Choosing a branch role does not grant permissions. Access follows the verified invitation and required review workflow.</span>
       </div>
 
       <div className={styles.roleActions}>
@@ -392,7 +386,7 @@ function RoleSelection({ selectedRole, onSelect, onContinue }: RoleSelectionProp
                 <X aria-hidden="true" />
               </button>
             </div>
-            <p>Contact the Franchise Administrator who initiated your registration. Franchise Administrator applicants should contact the existing Franchise Administrator who submitted their account request.</p>
+            <p>For Branch Owner or Branch Manager registration, contact the Franchise Administrator who initiated your registration. Franchise Administrator invitees should use the role-locked activation link sent by the Super Administrator.</p>
           </div>
         </div>
       )}
@@ -478,7 +472,7 @@ function StepGuide({ role, step }: { role: SignupRole; step: StepId }) {
     );
   }
 
-  const reviewActor = role === 'franchise-admin' ? 'Super Administrator review' : 'Franchise Administrator approval';
+  const reviewActor = role === 'franchise-admin' ? 'Invitation validation' : 'Franchise Administrator approval';
   return (
     <aside className={styles.guide}>
       <span className={styles.guideArt}><ClipboardCheck /><BadgeCheck /></span>
@@ -794,7 +788,7 @@ function ReviewStep({
 }) {
   const documents = DOCUMENTS_BY_ROLE[role];
   const approvalCopy = role === 'franchise-admin'
-    ? 'Submitting creates a Franchise Administrator account request for Super Administrator approval. Access is not active yet.'
+    ? 'Submitting activates your verified Franchise Administrator invitation. The role is fixed by the invitation and no second Super Administrator approval is required.'
     : role === 'branch-owner'
       ? 'Submitting sends the branch registration to the Franchise Administrator for approval and geolocation assignment. The decision and approver are recorded for Super Administrator audit visibility.'
       : 'Submitting sends the registration to the Franchise Administrator for approval. The decision and approver are recorded for Super Administrator audit visibility.';
@@ -803,7 +797,7 @@ function ReviewStep({
     <>
       <StepHeading
         eyebrow={`Step ${STEPS_BY_ROLE[role].length} of ${STEPS_BY_ROLE[role].length}`}
-        title={role === 'franchise-admin' ? 'Review your application' : 'Review your registration'}
+        title={role === 'franchise-admin' ? 'Review your account activation' : 'Review your registration'}
         description="Confirm your details and documents before submitting."
       />
       <div className={styles.reviewSections}>
@@ -1028,7 +1022,7 @@ export function StaffSignup() {
                 <span><LockKeyhole aria-hidden="true" /> Details remain in this browser until the page is closed.</span>
                 {currentStep === 'review' ? (
                   <button type="button" className={styles.primaryButton} onClick={submit}>
-                    {role === 'franchise-admin' ? 'Submit for approval' : 'Submit registration'} <ArrowRight aria-hidden="true" />
+                    {role === 'franchise-admin' ? 'Activate account' : 'Submit registration'} <ArrowRight aria-hidden="true" />
                   </button>
                 ) : (
                   <button type="button" className={styles.primaryButton} onClick={next}>

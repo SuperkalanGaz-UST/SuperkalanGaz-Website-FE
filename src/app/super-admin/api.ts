@@ -10,6 +10,10 @@ import type {
 } from './types';
 
 async function json<T>(path: string, init?: RequestInit): Promise<T> {
+  const isRead = !init?.method || init.method === 'GET';
+  const unavailableMessage = isRead
+    ? 'We couldn’t load this information right now. Please try again.'
+    : 'We couldn’t complete this action. No changes were made. Please try again.';
   let response: Response;
   try {
     response = await apiFetch(path, {
@@ -20,18 +24,14 @@ async function json<T>(path: string, init?: RequestInit): Promise<T> {
       signal: init?.signal ?? AbortSignal.timeout(10_000),
     });
   } catch {
-    throw new Error(
-      'The governance API is unavailable. The web dashboard is still running; retry after the API recovers.',
-    );
+    throw new Error(unavailableMessage);
   }
   const body: unknown = await response.json().catch(() => null);
   if (!response.ok) {
     if (response.status >= 500) {
-      throw new Error(
-        'The governance API could not complete this request. Other dashboard areas remain available.',
-      );
+      throw new Error(unavailableMessage);
     }
-    throw new Error(apiErrorMessage(body, 'The governance request could not be completed.'));
+    throw new Error(apiErrorMessage(body, 'We couldn’t complete this request. Please try again.'));
   }
   return body as T;
 }

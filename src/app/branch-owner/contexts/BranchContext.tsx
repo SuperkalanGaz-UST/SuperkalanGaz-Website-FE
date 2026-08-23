@@ -66,10 +66,18 @@ export function BranchProvider({ children, initialBranches = ['Quezon City Branc
       const response = await apiFetch('/branches/assigned', { signal: controller.signal });
       const data: unknown = await response.json().catch(() => null);
       if (!response.ok) {
+        const message = apiErrorMessage(data, 'Could not load the assigned geofences.');
         setAssignedBranches(null);
-        setAssignedBranchesError(
-          apiErrorMessage(data, 'Could not load the assigned geofences.'),
-        );
+        setAssignedBranchesError(message);
+        if (
+          response.status === 403 &&
+          (message === 'No active branch is assigned to this account' ||
+            message === 'Caller has no active branch')
+        ) {
+          // Do not keep displaying a stale JWT branch name after the API has
+          // confirmed that it no longer maps to a live branch record.
+          setAvailableBranches([]);
+        }
         return;
       }
       setAssignedBranches(assignedBranchesFrom(data));

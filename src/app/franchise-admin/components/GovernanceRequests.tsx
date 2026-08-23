@@ -6,19 +6,17 @@ import {
   Clock3,
   Gauge,
   ShieldCheck,
-  UserPlus,
   UsersRound,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Header } from '../../components/Header';
 import { apiErrorMessage, apiFetch } from '../../lib/api';
-import { formatPhMobileNational, toE164PhMobile } from '../../lib/phMobile';
 import type {
   GovernanceRequest,
   GovernanceRequestType,
 } from '../../super-admin/types';
 
-type RequestForm = 'franchise-admin-account' | 'sla-threshold' | 'branch-owner-change';
+type RequestForm = 'sla-threshold' | 'branch-owner-change';
 
 interface BranchOption {
   id: string;
@@ -38,14 +36,8 @@ const FORM_TABS: {
   id: RequestForm;
   label: string;
   description: string;
-  icon: typeof UserPlus;
+  icon: typeof Gauge;
 }[] = [
-  {
-    id: 'franchise-admin-account',
-    label: 'Admin account',
-    description: 'Request a new Franchise Administrator account.',
-    icon: UserPlus,
-  },
   {
     id: 'sla-threshold',
     label: 'SLA threshold',
@@ -70,7 +62,7 @@ const SEGMENTS = [
 function requestTypeLabel(type: GovernanceRequestType) {
   return (
     {
-      'franchise-admin-account': 'Admin account',
+      'franchise-admin-account': 'Legacy FA account request',
       'price-configuration': 'Price configuration',
       'sla-threshold': 'SLA threshold',
       'branch-owner-change': 'Branch Owner change',
@@ -98,19 +90,13 @@ const inputClass =
   'mt-2 h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-[#007BC1] focus:ring-2 focus:ring-[#007BC1]/15';
 
 export function GovernanceRequests() {
-  const [activeForm, setActiveForm] = useState<RequestForm>('franchise-admin-account');
+  const [activeForm, setActiveForm] = useState<RequestForm>('sla-threshold');
   const [requests, setRequests] = useState<GovernanceRequest[]>([]);
   const [branches, setBranches] = useState<BranchOption[]>([]);
   const [owners, setOwners] = useState<OwnerOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const [adminName, setAdminName] = useState('');
-  const [adminEmail, setAdminEmail] = useState('');
-  const [adminUsername, setAdminUsername] = useState('');
-  const [adminPhone, setAdminPhone] = useState('');
-  const [adminReason, setAdminReason] = useState('');
 
   const [slaSegment, setSlaSegment] = useState<(typeof SEGMENTS)[number][0]>(
     'request_to_dispatch',
@@ -182,38 +168,6 @@ export function GovernanceRequests() {
     }
   };
 
-  const submitAdmin = async (event: FormEvent) => {
-    event.preventDefault();
-    const phone = adminPhone.trim() ? toE164PhMobile(adminPhone) : null;
-    if (adminPhone.trim() && !phone) {
-      toast.error('Enter a valid PH mobile number');
-      return;
-    }
-    if (adminReason.trim().length < 5) {
-      toast.error('Explain why this account is needed.');
-      return;
-    }
-    const success = await submit({
-      type: 'franchise-admin-account',
-      title: `Create Franchise Administrator account for ${adminName.trim()}`,
-      reason: adminReason.trim(),
-      riskLevel: 'high',
-      payload: {
-        name: adminName.trim(),
-        email: adminEmail.trim().toLowerCase(),
-        ...(adminUsername.trim() ? { username: adminUsername.trim() } : {}),
-        ...(phone ? { phone } : {}),
-      },
-    });
-    if (success) {
-      setAdminName('');
-      setAdminEmail('');
-      setAdminUsername('');
-      setAdminPhone('');
-      setAdminReason('');
-    }
-  };
-
   const submitSla = async (event: FormEvent) => {
     event.preventDefault();
     const thresholdMinutes = Number(slaMinutes);
@@ -269,7 +223,7 @@ export function GovernanceRequests() {
       />
 
       <main className="mx-auto w-full max-w-[1540px] space-y-7 px-8 pb-10">
-        <section className="grid gap-4 lg:grid-cols-3" aria-label="Request types">
+        <section className="grid gap-4 lg:grid-cols-2" aria-label="Request types">
           {FORM_TABS.map((tab) => {
             const Icon = tab.icon;
             const active = activeForm === tab.id;
@@ -309,45 +263,6 @@ export function GovernanceRequests() {
                 <ShieldCheck className="h-4 w-4" /> Approval required
               </span>
             </div>
-
-            {activeForm === 'franchise-admin-account' && (
-              <form onSubmit={submitAdmin} className="grid gap-5 sm:grid-cols-2">
-                <label className="text-sm font-medium text-slate-700">
-                  Full name
-                  <input required minLength={2} value={adminName} onChange={(e) => setAdminName(e.target.value)} className={inputClass} />
-                </label>
-                <label className="text-sm font-medium text-slate-700">
-                  Email address
-                  <input required type="email" value={adminEmail} onChange={(e) => setAdminEmail(e.target.value)} className={inputClass} />
-                </label>
-                <label className="text-sm font-medium text-slate-700">
-                  Username <span className="font-normal text-slate-400">(optional)</span>
-                  <input value={adminUsername} onChange={(e) => setAdminUsername(e.target.value)} className={inputClass} />
-                </label>
-                <label className="text-sm font-medium text-slate-700">
-                  Mobile number <span className="font-normal text-slate-400">(optional)</span>
-                  <span className="mt-2 flex h-11 overflow-hidden rounded-lg border border-slate-300 bg-white focus-within:border-[#007BC1] focus-within:ring-2 focus-within:ring-[#007BC1]/15">
-                    <span className="flex items-center border-r border-slate-200 bg-slate-50 px-3 text-sm text-slate-600">+63</span>
-                    <input
-                      inputMode="numeric"
-                      placeholder="9XX XXX XXXX"
-                      value={adminPhone}
-                      onChange={(e) => setAdminPhone(formatPhMobileNational(e.target.value))}
-                      className="min-w-0 flex-1 px-3 text-sm outline-none"
-                    />
-                  </span>
-                </label>
-                <label className="text-sm font-medium text-slate-700 sm:col-span-2">
-                  Business justification
-                  <textarea required minLength={5} rows={4} value={adminReason} onChange={(e) => setAdminReason(e.target.value)} className={`${inputClass} h-auto py-3`} />
-                </label>
-                <div className="sm:col-span-2 flex justify-end">
-                  <button disabled={submitting} className="rounded-lg bg-[#007BC1] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#00679f] disabled:opacity-50">
-                    {submitting ? 'Submitting…' : 'Submit account request'}
-                  </button>
-                </div>
-              </form>
-            )}
 
             {activeForm === 'sla-threshold' && (
               <form onSubmit={submitSla} className="grid gap-5 sm:grid-cols-2">

@@ -47,14 +47,17 @@ export function LoadingState({ label = 'Loading governance data…' }: { label?:
 
 export function ErrorState({ message, onRetry }: { message: string; onRetry: () => void }) {
   return (
-    <div className="m-6 rounded-xl border border-red-200 bg-red-50 p-5 text-sm text-red-700">
+    <div
+      role="alert"
+      className="mb-6 rounded-xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900"
+    >
       <p>{message}</p>
       <button
         type="button"
         onClick={onRetry}
-        className="mt-3 font-semibold text-red-800 underline underline-offset-4"
+        className="mt-3 font-semibold text-amber-950 underline underline-offset-4"
       >
-        Try again
+        Retry
       </button>
     </div>
   );

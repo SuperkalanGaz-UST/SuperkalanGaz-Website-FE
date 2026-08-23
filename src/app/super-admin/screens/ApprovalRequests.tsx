@@ -89,6 +89,7 @@ export function ApprovalRequests() {
     });
   }, [filter, requests, search]);
   const selected = (requests ?? []).find((request) => request.id === selectedId) ?? filtered[0] ?? null;
+  const legacyFranchiseAdminRequest = selected?.type === 'franchise-admin-account';
 
   const decide = async (decision: 'approve' | 'reject' | 'request-revision') => {
     if (!selected || reason.trim().length < 5) {
@@ -156,7 +157,7 @@ export function ApprovalRequests() {
                     key={request.id}
                     type="button"
                     onClick={() => { setSelectedId(request.id); setTemporaryPassword(null); }}
-                    className={`grid w-full grid-cols-[1fr_auto] gap-4 px-6 py-5 text-left transition ${selected?.id === request.id ? 'border-l-[3px] border-l-[#007BC1] bg-blue-50/50' : 'hover:bg-gray-50'}`}
+                    className={`grid w-full grid-cols-[1fr_auto] items-start gap-4 px-6 py-5 text-left transition ${selected?.id === request.id ? 'border-l-[3px] border-l-[#007BC1] bg-blue-50/50' : 'hover:bg-gray-50'}`}
                   >
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
@@ -191,6 +192,12 @@ export function ApprovalRequests() {
                     <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
                       Your decision, reason, actor identity, and timestamp will be written to the immutable audit trail.
                     </div>
+                    {legacyFranchiseAdminRequest && selected.status === 'pending' && (
+                      <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-900">
+                        This is a legacy Franchise Administrator account request. It can only
+                        be rejected; new accounts use the Super Administrator invitation flow.
+                      </div>
+                    )}
                   </div>
 
                   {temporaryPassword && (
@@ -210,9 +217,13 @@ export function ApprovalRequests() {
                         Decision reason <span className="text-red-600">*</span>
                         <textarea value={reason} onChange={(event) => setReason(event.target.value)} rows={4} placeholder="Explain the approval, revision request, or rejection…" className="mt-2 w-full resize-none rounded-xl border border-gray-300 p-3 text-sm outline-none focus:border-[#007BC1] focus:ring-2 focus:ring-blue-100" />
                       </label>
-                      <div className="mt-5 grid gap-3 sm:grid-cols-3">
-                        <button type="button" disabled={submitting} onClick={() => void decide('approve')} className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#007BC1] px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50"><CheckCircle2 className="h-4 w-4" />Approve</button>
-                        <button type="button" disabled={submitting} onClick={() => void decide('request-revision')} className="inline-flex items-center justify-center gap-2 rounded-lg border border-amber-400 px-4 py-2.5 text-sm font-semibold text-amber-700 disabled:opacity-50"><RotateCcw className="h-4 w-4" />Revise</button>
+                      <div className={`mt-5 grid gap-3 ${legacyFranchiseAdminRequest ? '' : 'sm:grid-cols-3'}`}>
+                        {!legacyFranchiseAdminRequest && (
+                          <>
+                            <button type="button" disabled={submitting} onClick={() => void decide('approve')} className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#007BC1] px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50"><CheckCircle2 className="h-4 w-4" />Approve</button>
+                            <button type="button" disabled={submitting} onClick={() => void decide('request-revision')} className="inline-flex items-center justify-center gap-2 rounded-lg border border-amber-400 px-4 py-2.5 text-sm font-semibold text-amber-700 disabled:opacity-50"><RotateCcw className="h-4 w-4" />Revise</button>
+                          </>
+                        )}
                         <button type="button" disabled={submitting} onClick={() => void decide('reject')} className="inline-flex items-center justify-center gap-2 rounded-lg border border-red-400 px-4 py-2.5 text-sm font-semibold text-red-700 disabled:opacity-50"><XCircle className="h-4 w-4" />Reject</button>
                       </div>
                     </>

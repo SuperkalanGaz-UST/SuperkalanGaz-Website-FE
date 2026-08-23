@@ -9,7 +9,7 @@ import {
   HeartHandshake,
   Star,
   Gift,
-  Package,
+  Boxes,
   Bike,
   FileText,
   Users,
@@ -42,10 +42,10 @@ const NAV_ENTRIES: SidebarNavEntry[] = [
     ],
   },
   {
-    icon: Package,
+    icon: Boxes,
     label: 'Operations',
     children: [
-      { icon: Package, label: 'Products', id: 'supply-chain' },
+      { icon: Boxes, label: 'Inventory', id: 'inventory' },
       { icon: Bike, label: 'Fleet', id: 'fleet-overview' },
     ],
   },

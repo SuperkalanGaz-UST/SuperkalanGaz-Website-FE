@@ -5,7 +5,10 @@ import { apiFetch, apiErrorMessage } from "../lib/api";
 import { toast } from "sonner";
 import type { BranchRow } from "./BranchSettings";
 import { ProvinceCombobox } from "./ProvinceCombobox";
+import { CityMunicipalityCombobox } from "./CityMunicipalityCombobox";
 import { provinceFocus } from "../lib/phProvinces";
+import { cityMunicipalityFocus } from "../lib/phCitiesMunicipalities";
+import { formatPhMobileNational, normalizePhMobile } from "../lib/phMobile";
 
 // The WebGL map is browser-only, so load it client-side only.
 const DrawableMap = dynamic(
@@ -38,7 +41,12 @@ interface EditBranchModalProps {
 export function EditBranchModal({ branch, onClose, onSaved }: EditBranchModalProps) {
   // --- Branch fields ---
   const [name, setName] = useState(branch.name);
-  const [contactNumber, setContactNumber] = useState(branch.contact_number ?? "");
+  // Keep only the editable national digits in state. The fixed +63 prefix is a
+  // separate UI element and the API receives canonical E.164.
+  const [contactNumber, setContactNumber] = useState(
+    formatPhMobileNational(branch.contact_number ?? ""),
+  );
+  const [contactNumberTouched, setContactNumberTouched] = useState(false);
   const [address, setAddress] = useState(branch.address ?? "");
   const [city, setCity] = useState(branch.city ?? "");
   const [province, setProvince] = useState(branch.province ?? "");
@@ -54,6 +62,7 @@ export function EditBranchModal({ branch, onClose, onSaved }: EditBranchModalPro
   const [ownerName, setOwnerName] = useState("");
   const [ownerEmail, setOwnerEmail] = useState("");
   const [ownerPhone, setOwnerPhone] = useState("");
+  const [ownerPhoneTouched, setOwnerPhoneTouched] = useState(false);
   const [ownerStatus, setOwnerStatus] = useState<"Active" | "Inactive">("Active");
 
   const [submitting, setSubmitting] = useState(false);
@@ -76,7 +85,7 @@ export function EditBranchModal({ branch, onClose, onSaved }: EditBranchModalPro
           if (first) {
             setOwnerName(first.display_name ?? first.username ?? "");
             setOwnerEmail(first.email ?? "");
-            setOwnerPhone(first.phone ?? "");
+            setOwnerPhone(formatPhMobileNational(first.phone ?? ""));
             setOwnerStatus(first.status);
           }
         }
@@ -98,11 +107,32 @@ export function EditBranchModal({ branch, onClose, onSaved }: EditBranchModalPro
     setIsDrawing(false);
   };
 
+  const handleProvinceChange = (nextProvince: string) => {
+    if (nextProvince !== province) setCity("");
+    setProvince(nextProvince);
+  };
+
   const emailValid = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
+  const contactNationalDigits = normalizePhMobile(contactNumber);
+  const canonicalContactNumber = contactNationalDigits ? `+63${contactNationalDigits}` : null;
+  const ownerPhoneNationalDigits = normalizePhMobile(ownerPhone);
+  const canonicalOwnerPhone = ownerPhoneNationalDigits ? `+63${ownerPhoneNationalDigits}` : null;
+  const showContactError = contactNumberTouched && canonicalContactNumber === null;
+  const showOwnerPhoneError = ownerPhoneTouched && canonicalOwnerPhone === null;
   const ownerValid =
-    !owner || (ownerName.trim() !== "" && emailValid(ownerEmail.trim()));
+    !owner ||
+    (ownerName.trim() !== "" &&
+      emailValid(ownerEmail.trim()) &&
+      canonicalOwnerPhone !== null);
   const canSave =
-    name.trim() !== "" && address.trim() !== "" && ownerValid && !submitting;
+    name.trim() !== "" &&
+    canonicalContactNumber !== null &&
+    address.trim() !== "" &&
+    city.trim() !== "" &&
+    province.trim() !== "" &&
+    ownerValid &&
+    !ownerLoading &&
+    !submitting;
 
   const handleSubmit = async () => {
     if (!canSave) return;
@@ -113,7 +143,7 @@ export function EditBranchModal({ branch, onClose, onSaved }: EditBranchModalPro
         method: "PATCH",
         body: JSON.stringify({
           name: name.trim(),
-          contactNumber: contactNumber.trim(),
+          contactNumber: canonicalContactNumber,
           address: address.trim(),
           city: city.trim(),
           province: province.trim(),
@@ -132,7 +162,7 @@ export function EditBranchModal({ branch, onClose, onSaved }: EditBranchModalPro
         if (ownerName.trim() !== (owner.display_name ?? owner.username ?? ""))
           patch.name = ownerName.trim();
         if (ownerEmail.trim() !== (owner.email ?? "")) patch.email = ownerEmail.trim();
-        if (ownerPhone.trim() !== (owner.phone ?? "")) patch.phone = ownerPhone.trim();
+        if (canonicalOwnerPhone !== (owner.phone ?? "")) patch.phone = canonicalOwnerPhone;
         if (ownerStatus !== owner.status) patch.status = ownerStatus;
 
         if (Object.keys(patch).length > 0) {
@@ -146,6 +176,11 @@ export function EditBranchModal({ branch, onClose, onSaved }: EditBranchModalPro
             return;
           }
         }
+      }
+
+      if (!data?.branch) {
+        toast.error("The branch was updated, but the server returned an incomplete response.");
+        return;
       }
 
       onSaved(data.branch as BranchRow);
@@ -163,13 +198,20 @@ export function EditBranchModal({ branch, onClose, onSaved }: EditBranchModalPro
   const sectionTitle = "text-sm font-semibold text-gray-900";
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
-      <div className="bg-white rounded-xl w-[560px] max-h-[90vh] overflow-y-auto shadow-xl">
+    <div className="fixed inset-0 bg-black/45 flex items-center justify-center z-[60] p-4">
+      <div className="bg-white rounded-2xl w-[620px] max-h-[90vh] overflow-y-auto shadow-xl">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 sticky top-0 bg-white">
-          <h2 className="text-lg font-semibold text-gray-900">Edit Branch</h2>
+          <div>
+            <h2 className="text-[17px] font-medium text-[#1A1A18]">Edit branch account</h2>
+            <p className="text-[13px] text-[#6B6B67] mt-1">
+              Franchise Administrator · Franchise Registry
+            </p>
+          </div>
           <button
+            type="button"
             onClick={onClose}
+            aria-label="Close edit branch dialog"
             className="w-7 h-7 rounded-full border border-gray-200 flex items-center justify-center text-gray-500 hover:bg-gray-50 transition-colors"
           >
             <X className="w-3.5 h-3.5" />
@@ -186,11 +228,30 @@ export function EditBranchModal({ branch, onClose, onSaved }: EditBranchModalPro
             </div>
             <div>
               <label className={label}>Contact number</label>
-              <input
-                value={contactNumber}
-                onChange={(e) => setContactNumber(e.target.value)}
-                className={field}
-              />
+              <div
+                className={`flex items-center h-[38px] rounded-lg border overflow-hidden ${
+                  showContactError
+                    ? "border-[#C0392B] focus-within:border-[#C0392B]"
+                    : "border-gray-300 focus-within:ring-2 focus-within:ring-[#007BC1] focus-within:border-transparent"
+                }`}
+              >
+                <span className="pl-3 pr-2 text-sm text-gray-500 border-r border-gray-200 select-none">
+                  +63
+                </span>
+                <input
+                  type="tel"
+                  inputMode="numeric"
+                  value={contactNumber}
+                  onChange={(e) => setContactNumber(formatPhMobileNational(e.target.value))}
+                  onBlur={() => setContactNumberTouched(true)}
+                  aria-invalid={showContactError}
+                  placeholder="9XX XXX XXXX"
+                  className="flex-1 min-w-0 h-full px-3 text-sm bg-transparent outline-none"
+                />
+              </div>
+              {showContactError && (
+                <p className="mt-1 text-xs text-[#C0392B]">Enter a valid PH mobile number</p>
+              )}
             </div>
             <div>
               <label className={label}>Full address</label>
@@ -198,21 +259,29 @@ export function EditBranchModal({ branch, onClose, onSaved }: EditBranchModalPro
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className={label}>City / Municipality</label>
-                <input value={city} onChange={(e) => setCity(e.target.value)} className={field} />
-              </div>
-              <div>
                 <label className={label}>Province</label>
-                {/* Searchable province picker (Metro Manila included); the
-                    chosen province frames the geofence map below. */}
                 <ProvinceCombobox
                   value={province}
-                  onChange={setProvince}
+                  onChange={handleProvinceChange}
                   placeholder="Search province…"
+                />
+              </div>
+              <div>
+                <label className={label}>City / Municipality</label>
+                <CityMunicipalityCombobox
+                  province={province}
+                  value={city}
+                  onChange={setCity}
+                  placeholder="Search city or municipality…"
                 />
               </div>
             </div>
           </div>
+
+          <p className="text-xs text-[#6B6B67] -mt-2">
+            Branch Owner reassignment is handled through a governance request for Super
+            Administrator approval. This form updates the current owner&apos;s profile only.
+          </p>
 
           {/* Geofence */}
           <div className="space-y-3">
@@ -227,13 +296,13 @@ export function EditBranchModal({ branch, onClose, onSaved }: EditBranchModalPro
               </span>
             </div>
             <div className="h-[230px] border border-gray-200 rounded-lg overflow-hidden relative">
-              {/* Frame on this branch's province; a saved polygon still wins
-                  (FitToSavedPolygon frames to existing points on open). */}
               <DrawableMap
                 points={points}
                 isDrawing={isDrawing}
                 onAddPoint={addPoint}
-                focus={provinceFocus(province)}
+                focus={
+                  cityMunicipalityFocus(province, city) ?? provinceFocus(province)
+                }
               />
               {isDrawing && (
                 <div className="absolute top-2 left-1/2 -translate-x-1/2 z-[400] bg-[#007BC1] text-white text-[11px] px-3 py-1 rounded-full shadow pointer-events-none">
@@ -243,6 +312,7 @@ export function EditBranchModal({ branch, onClose, onSaved }: EditBranchModalPro
             </div>
             <div className="flex gap-2">
               <button
+                type="button"
                 onClick={() => setIsDrawing((v) => !v)}
                 className={`px-3 h-[30px] text-xs rounded-lg font-medium transition-colors ${
                   isDrawing ? "bg-[#CC1903] text-white" : "bg-[#007BC1] text-white"
@@ -251,6 +321,7 @@ export function EditBranchModal({ branch, onClose, onSaved }: EditBranchModalPro
                 {isDrawing ? "◼ Stop drawing" : "⬡ Draw polygon"}
               </button>
               <button
+                type="button"
                 onClick={undoPoint}
                 disabled={points.length === 0}
                 className="px-3 h-[30px] bg-white border border-gray-200 text-xs text-gray-700 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-50 transition-colors"
@@ -258,6 +329,7 @@ export function EditBranchModal({ branch, onClose, onSaved }: EditBranchModalPro
                 ↺ Undo last point
               </button>
               <button
+                type="button"
                 onClick={clearPolygon}
                 disabled={points.length === 0}
                 className="px-3 h-[30px] bg-white border border-gray-200 text-xs text-gray-700 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-50 transition-colors"
@@ -269,7 +341,7 @@ export function EditBranchModal({ branch, onClose, onSaved }: EditBranchModalPro
 
           {/* Owner details */}
           <div className="space-y-3">
-            <h3 className={sectionTitle}>Owner details</h3>
+            <h3 className={sectionTitle}>Current owner profile</h3>
             {ownerLoading ? (
               <p className="text-sm text-gray-500">Loading owner…</p>
             ) : !owner ? (
@@ -311,11 +383,32 @@ export function EditBranchModal({ branch, onClose, onSaved }: EditBranchModalPro
                   </div>
                   <div>
                     <label className={label}>Mobile number</label>
-                    <input
-                      value={ownerPhone}
-                      onChange={(e) => setOwnerPhone(e.target.value)}
-                      className={field}
-                    />
+                    <div
+                      className={`flex items-center h-[38px] rounded-lg border overflow-hidden ${
+                        showOwnerPhoneError
+                          ? "border-[#C0392B] focus-within:border-[#C0392B]"
+                          : "border-gray-300 focus-within:ring-2 focus-within:ring-[#007BC1] focus-within:border-transparent"
+                      }`}
+                    >
+                      <span className="pl-3 pr-2 text-sm text-gray-500 border-r border-gray-200 select-none">
+                        +63
+                      </span>
+                      <input
+                        type="tel"
+                        inputMode="numeric"
+                        value={ownerPhone}
+                        onChange={(e) => setOwnerPhone(formatPhMobileNational(e.target.value))}
+                        onBlur={() => setOwnerPhoneTouched(true)}
+                        aria-invalid={showOwnerPhoneError}
+                        placeholder="9XX XXX XXXX"
+                        className="flex-1 min-w-0 h-full px-3 text-sm bg-transparent outline-none"
+                      />
+                    </div>
+                    {showOwnerPhoneError && (
+                      <p className="mt-1 text-xs text-[#C0392B]">
+                        Enter a valid PH mobile number
+                      </p>
+                    )}
                   </div>
                 </div>
               </div>
@@ -326,12 +419,14 @@ export function EditBranchModal({ branch, onClose, onSaved }: EditBranchModalPro
         {/* Footer */}
         <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-gray-100 sticky bottom-0 bg-white">
           <button
+            type="button"
             onClick={onClose}
             className="h-[36px] px-4 bg-white border border-gray-200 text-gray-700 text-sm rounded-lg hover:bg-gray-50 transition-colors"
           >
             Cancel
           </button>
           <button
+            type="button"
             onClick={handleSubmit}
             disabled={!canSave}
             className="h-[36px] px-4 bg-[#007BC1] text-white text-sm font-medium rounded-lg hover:bg-[#0069a6] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"

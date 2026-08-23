@@ -19,6 +19,7 @@ import {
   ExpenseCategory,
   fetchExpenses,
 } from '../../lib/expenses';
+import { Header } from './Header';
 
 const CATEGORY_COLORS: Record<ExpenseCategory, string> = {
   'Gasoline, Fuel & Oil': '#1e3a5f',
@@ -83,6 +84,7 @@ export function OperationalExpenses() {
   const [months, setMonths] = useState<MonthExpenses[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [loadAttempt, setLoadAttempt] = useState(0);
 
   useEffect(() => {
     let active = true;
@@ -99,7 +101,12 @@ export function OperationalExpenses() {
       } catch (loadError) {
         if (active) {
           setMonths([]);
-          setError(loadError instanceof Error ? loadError.message : 'Failed to load expenses');
+          const message = loadError instanceof Error ? loadError.message : 'Failed to load expenses';
+          setError(
+            message === 'Caller has no active branch'
+              ? 'No active branch is assigned to this account. Contact your Franchise Administrator.'
+              : message,
+          );
         }
       } finally {
         if (active) setLoading(false);
@@ -108,7 +115,7 @@ export function OperationalExpenses() {
 
     void load();
     return () => { active = false; };
-  }, []);
+  }, [loadAttempt]);
 
   const currentExpenses = useMemo(() => months.at(-1)?.expenses ?? [], [months]);
   const currentTotal = currentExpenses.reduce((sum, expense) => sum + Number(expense.amount), 0);
@@ -137,26 +144,35 @@ export function OperationalExpenses() {
 
   return (
     <div className="flex-1 overflow-y-auto">
-      <div className="bg-white px-8 py-5">
-        <div className="pt-4">
-          <h1 className="text-2xl font-semibold text-gray-900">Operational Expenses</h1>
-          <p className="mt-1 text-sm text-gray-600">Monitor the operational expenses recorded by your Branch Manager.</p>
-        </div>
-      </div>
+      <Header
+        title="Operational Expenses"
+        description="Monitor the operational expenses recorded by your Branch Manager."
+      />
 
       <div className="space-y-6 p-8">
-        {error && <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700" role="alert">{error}</div>}
+        {error && (
+          <div className="flex items-center justify-between gap-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700" role="alert">
+            <span>{error}</span>
+            <button
+              type="button"
+              onClick={() => setLoadAttempt((attempt) => attempt + 1)}
+              className="shrink-0 rounded-md border border-red-300 bg-white px-3 py-1.5 font-medium text-red-700 transition-colors hover:bg-red-100"
+            >
+              Retry
+            </button>
+          </div>
+        )}
 
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-6">
+        {!error && <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-6">
           <CompactKPICard title="Total this month" value={loading ? '—' : formatPeso(currentTotal)} accentColor="#38bdf8" />
           <CompactKPICard title="Fuel & oil" value={loading ? '—' : formatPeso(categoryTotal('Gasoline, Fuel & Oil'))} accentColor="#1e3a5f" />
           <CompactKPICard title="Repairs" value={loading ? '—' : formatPeso(categoryTotal('Repairs & Maintenance'))} accentColor="#d97706" />
           <CompactKPICard title="Utilities & communication" value={loading ? '—' : formatPeso(utilitiesAndCommunication)} accentColor="#0d9488" />
           <CompactKPICard title="Branch supplies" value={loading ? '—' : formatPeso(categoryTotal('Branch Supplies'))} accentColor="#7c3aed" />
           <CompactKPICard title="Facility costs" value={loading ? '—' : formatPeso(categoryTotal('Facility Costs'))} accentColor="#e11d48" />
-        </div>
+        </div>}
 
-        <div className="rounded-lg border border-gray-200 bg-white p-6">
+        {!error && <div className="rounded-lg border border-gray-200 bg-white p-6">
           <div className="mb-5 flex items-center justify-between">
             <div>
               <h3 className="font-semibold text-gray-900">Total Expense Trend</h3>
@@ -172,9 +188,9 @@ export function OperationalExpenses() {
               <Line type="monotone" dataKey="amount" stroke="#1e3a5f" strokeWidth={2} dot={{ fill: '#1e3a5f', r: 4 }} activeDot={{ r: 6 }} />
             </LineChart>
           </ResponsiveContainer>
-        </div>
+        </div>}
 
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        {!error && <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <div className="rounded-lg border border-gray-200 bg-white p-6">
             <h3 className="mb-4 font-semibold text-gray-900">Expenses by Category</h3>
             <ResponsiveContainer width="100%" height={320}>
@@ -202,9 +218,9 @@ export function OperationalExpenses() {
               </BarChart>
             </ResponsiveContainer>
           </div>
-        </div>
+        </div>}
 
-        <div className="rounded-lg border border-gray-200 bg-white p-6">
+        {!error && <div className="rounded-lg border border-gray-200 bg-white p-6">
           <div className="mb-6 flex items-center justify-between">
             <div>
               <h3 className="font-semibold text-gray-900">Expenses Log</h3>
@@ -249,7 +265,7 @@ export function OperationalExpenses() {
               </tbody>
             </table>
           </div>
-        </div>
+        </div>}
       </div>
     </div>
   );

@@ -1,8 +1,8 @@
+'use client';
+
 import { Header } from './Header';
-import { KPICard } from './KPICard';
-import { CustomerPurchaseTracker } from './CustomerPurchaseTracker';
-import { RedemptionHistory } from './RedemptionHistory';
 import { useBranch } from '../contexts/BranchContext';
+import { LoyaltyTrackDashboard } from '../../components/LoyaltyTrackDashboard';
 
 export function LoyaltyProgram() {
   const { selectedBranch } = useBranch();
@@ -14,29 +14,7 @@ export function LoyaltyProgram() {
       </div>
 
       <div className="p-8">
-        <div className="grid grid-cols-3 gap-6 mb-8">
-          <KPICard
-            title="Active Loyalty Members"
-            value="58"
-            accentColor="#22c55e"
-          />
-          <KPICard
-            title="Eligible for Reward (30th purchase)"
-            value="4"
-            accentColor="#f59e0b"
-          />
-          <KPICard
-            title="Redemptions This Month"
-            value="7"
-            accentColor="#eab308"
-          />
-        </div>
-
-        <div className="mb-8">
-          <CustomerPurchaseTracker />
-        </div>
-
-        <RedemptionHistory />
+        <LoyaltyTrackDashboard scopeLabel={`Illustrative data for ${selectedBranch}`} />
       </div>
     </div>
   );
