@@ -18,6 +18,7 @@ export function SuperAdminApp() {
         {activeScreen === 'dashboard' && <GovernanceDashboard onNavigate={setActiveScreen} />}
         {activeScreen === 'approval-requests' && <ApprovalRequests />}
         {activeScreen === 'admin-accounts' && <AdminAccounts />}
+        {activeScreen === 'account-approval-logs' && <AuditLogs category="admin-account" />}
         {activeScreen === 'price-change-logs' && <AuditLogs category="price-change" />}
         {activeScreen === 'branch-owner-logs' && <AuditLogs category="branch-owner-change" />}
         {activeScreen === 'audit-security' && <AuditSecurity />}

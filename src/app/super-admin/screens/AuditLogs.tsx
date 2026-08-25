@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Download, FileClock, Search, Tags } from 'lucide-react';
+import { Download, FileClock, Search, Tags, UserCheck } from 'lucide-react';
 import { governanceApi } from '../api';
 import type { AuditCategory, AuditEvent } from '../types';
 import { ErrorState, formatDate, humanize, LoadingState, Panel } from '../components/GovernanceUi';
@@ -46,8 +46,29 @@ function PriceComparison({ event }: { event: AuditEvent }) {
   );
 }
 
-export function AuditLogs({ category }: { category: Extract<AuditCategory, 'price-change' | 'branch-owner-change'> }) {
+type VisibleAuditCategory = Extract<
+  AuditCategory,
+  'admin-account' | 'price-change' | 'branch-owner-change'
+>;
+
+export function AuditLogs({ category }: { category: VisibleAuditCategory }) {
   const priceMode = category === 'price-change';
+  const accountMode = category === 'admin-account';
+  const title = accountMode
+    ? 'Account Approval Logs'
+    : priceMode
+      ? 'Price Change Logs'
+      : 'Branch Owner Logs';
+  const description = accountMode
+    ? 'Immutable history of account approvals, rejections, invitations, and status decisions.'
+    : priceMode
+      ? 'Immutable history of approved system-wide product price changes.'
+      : 'Trace every approved Branch Owner assignment and reassignment.';
+  const historyTitle = accountMode
+    ? 'Account Decision History'
+    : priceMode
+      ? 'Approved Price History'
+      : 'Ownership History';
   const [events, setEvents] = useState<AuditEvent[] | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
@@ -88,8 +109,8 @@ export function AuditLogs({ category }: { category: Extract<AuditCategory, 'pric
   return (
     <div className="flex-1 overflow-y-auto bg-[#f7f8fa]">
       <SuperAdminHeader
-        title={priceMode ? 'Price Change Logs' : 'Branch Owner Logs'}
-        description={priceMode ? 'Immutable history of approved system-wide product price changes.' : 'Trace every approved Branch Owner assignment and reassignment.'}
+        title={title}
+        description={description}
       />
       <main className="mx-auto w-full max-w-[1560px] px-8 pb-10">
         <div className="mb-5 flex flex-wrap items-center justify-between gap-4">
@@ -101,12 +122,12 @@ export function AuditLogs({ category }: { category: Extract<AuditCategory, 'pric
         {events && (
           <div className="grid min-h-[650px] gap-6 xl:grid-cols-[minmax(0,1.25fr)_minmax(400px,0.75fr)]">
             <Panel className="overflow-hidden">
-              <div className="border-b border-gray-100 px-6 py-5"><h2 className="text-lg font-semibold text-gray-950">{priceMode ? 'Approved Price History' : 'Ownership History'}</h2><p className="mt-1 text-sm text-gray-500">{filtered.length} immutable event{filtered.length === 1 ? '' : 's'}</p></div>
+              <div className="border-b border-gray-100 px-6 py-5"><h2 className="text-lg font-semibold text-gray-950">{historyTitle}</h2><p className="mt-1 text-sm text-gray-500">{filtered.length} immutable event{filtered.length === 1 ? '' : 's'}</p></div>
               <div className="divide-y divide-gray-100">
                 {filtered.length === 0 && <p className="px-6 py-16 text-center text-sm text-gray-500">No audit events recorded yet.</p>}
                 {filtered.map((event) => (
                   <button key={event.id} type="button" onClick={() => setSelectedId(event.id)} className={`grid w-full grid-cols-[auto_1fr_auto] items-start gap-4 px-6 py-5 text-left ${selected?.id === event.id ? 'border-l-[3px] border-l-[#007BC1] bg-blue-50/50' : 'hover:bg-gray-50'}`}>
-                    <div className={`rounded-xl p-2.5 ${priceMode ? 'bg-emerald-50 text-emerald-700' : 'bg-violet-50 text-violet-700'}`}>{priceMode ? <Tags className="h-5 w-5" /> : <FileClock className="h-5 w-5" />}</div>
+                    <div className={`rounded-xl p-2.5 ${accountMode ? 'bg-sky-50 text-[#007BC1]' : priceMode ? 'bg-emerald-50 text-emerald-700' : 'bg-violet-50 text-violet-700'}`}>{accountMode ? <UserCheck className="h-5 w-5" /> : priceMode ? <Tags className="h-5 w-5" /> : <FileClock className="h-5 w-5" />}</div>
                     <div><p className="font-semibold text-gray-950">{humanize(event.action)}</p><p className="mt-1 text-sm text-gray-600">{event.actorName} · {humanize(event.actorRole)}</p><p className="mt-1 text-xs text-gray-400">{formatDate(event.occurredAt)}</p></div>
                     <span className="text-xs font-medium text-[#007BC1]">{event.governanceRequestId ? event.governanceRequestId.slice(0, 8).toUpperCase() : 'DIRECT'}</span>
                   </button>
@@ -116,7 +137,7 @@ export function AuditLogs({ category }: { category: Extract<AuditCategory, 'pric
 
             <Panel className="self-start p-6">
               {!selected && <p className="py-20 text-center text-sm text-gray-500">Select an event to inspect.</p>}
-              {selected && <><div className="border-b border-gray-100 pb-5"><p className="text-xs font-semibold uppercase tracking-wide text-[#007BC1]">Read-only audit record</p><h2 className="mt-2 text-xl font-semibold text-gray-950">{humanize(selected.action)}</h2><p className="mt-2 text-sm text-gray-500">{formatDate(selected.occurredAt)}</p></div><dl className="space-y-3 py-5 text-sm">{[['Actor', selected.actorName], ['Role', humanize(selected.actorRole)], ['Request ID', selected.governanceRequestId ?? '—'], ['Affected record', selected.affectedRecordType], ['Reason', selected.reason ?? '—']].map(([label, value]) => <div key={label} className="grid grid-cols-[8rem_1fr] gap-3"><dt className="text-gray-500">{label}</dt><dd className="break-words font-medium text-gray-900">{value}</dd></div>)}</dl>{priceMode ? <PriceComparison event={selected} /> : <div className="grid gap-3 sm:grid-cols-2"><div className="rounded-xl border border-gray-200 p-4"><p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Previous Owner</p><p className="mt-3 text-sm font-semibold text-gray-900">{stateSummary(selected.beforeState)}</p></div><div className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-4"><p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">New Owner</p><p className="mt-3 text-sm font-semibold text-gray-900">{stateSummary(selected.afterState)}</p></div></div>}<div className="mt-5 rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800">This audit record cannot be edited or deleted through the application.</div></>}
+              {selected && <><div className="border-b border-gray-100 pb-5"><p className="text-xs font-semibold uppercase tracking-wide text-[#007BC1]">Read-only audit record</p><h2 className="mt-2 text-xl font-semibold text-gray-950">{humanize(selected.action)}</h2><p className="mt-2 text-sm text-gray-500">{formatDate(selected.occurredAt)}</p></div><dl className="space-y-3 py-5 text-sm">{[['Actor', selected.actorName], ['Role', humanize(selected.actorRole)], ['Request ID', selected.governanceRequestId ?? '—'], ['Affected record', selected.affectedRecordType], ['Reason', selected.reason ?? '—']].map(([label, value]) => <div key={label} className="grid grid-cols-[8rem_1fr] gap-3"><dt className="text-gray-500">{label}</dt><dd className="break-words font-medium text-gray-900">{value}</dd></div>)}</dl>{priceMode ? <PriceComparison event={selected} /> : <div className="grid gap-3 sm:grid-cols-2"><div className="rounded-xl border border-gray-200 p-4"><p className="text-xs font-semibold uppercase tracking-wide text-gray-500">{accountMode ? 'Previous State' : 'Previous Owner'}</p><p className="mt-3 text-sm font-semibold text-gray-900">{stateSummary(selected.beforeState)}</p></div><div className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-4"><p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">{accountMode ? 'New State' : 'New Owner'}</p><p className="mt-3 text-sm font-semibold text-gray-900">{stateSummary(selected.afterState)}</p></div></div>}<div className="mt-5 rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800">This audit record cannot be edited or deleted through the application.</div></>}
             </Panel>
           </div>
         )}
