@@ -9,6 +9,7 @@ import {
   FLEET_RIDERS,
   positionFleetRiders,
 } from '../../lib/fleetPresentationData';
+import { DeliveryRiderAccess } from './DeliveryRiderAccess';
 
 const BranchOwnerFleetMap = dynamic(
   () => import('./BranchOwnerFleetMap').then((module) => module.BranchOwnerFleetMap),
@@ -24,6 +25,7 @@ export function FleetOverview() {
     refreshAssignedBranches,
   } = useBranch();
   const [selectedRider, setSelectedRider] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<'overview' | 'access'>('overview');
   
   // State for filtering activity log by driver
   const [activityFilter, setActivityFilter] = useState<string>('all');
@@ -54,9 +56,47 @@ export function FleetOverview() {
       </div>
 
       <div className="p-8">
+        <div
+          className="mb-6 flex items-center gap-6 border-b border-gray-200"
+          role="tablist"
+          aria-label="Fleet sections"
+        >
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === 'overview'}
+            onClick={() => setActiveTab('overview')}
+            className={`border-b-2 px-1 pb-3 text-sm font-semibold transition-colors ${
+              activeTab === 'overview'
+                ? 'border-[#007BC1] text-[#007BC1]'
+                : 'border-transparent text-gray-500 hover:text-gray-800'
+            }`}
+          >
+            Fleet Overview
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === 'access'}
+            onClick={() => setActiveTab('access')}
+            className={`flex items-center gap-2 border-b-2 px-1 pb-3 text-sm font-semibold transition-colors ${
+              activeTab === 'access'
+                ? 'border-[#007BC1] text-[#007BC1]'
+                : 'border-transparent text-gray-500 hover:text-gray-800'
+            }`}
+          >
+            Delivery Rider Access
+            <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
+              API pending
+            </span>
+          </button>
+        </div>
+
+        {activeTab === 'overview' ? (
+          <>
         <div className="grid grid-cols-4 gap-6 mb-8">
           <KPICard
-            title="Total Riders"
+            title="Total Delivery Riders"
             value={String(riders.length)}
             icon={<Users className="w-5 h-5 text-[#007BC1]" />}
             accentColor="#007BC1"
@@ -127,7 +167,7 @@ export function FleetOverview() {
           </div>
 
           <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <h3 className="font-semibold text-gray-900 mb-4">Fleet Roster</h3>
+            <h3 className="font-semibold text-gray-900 mb-4">Delivery Rider Roster</h3>
             <div className="space-y-3" style={{ maxHeight: '500px', overflowY: 'auto' }}>
               {riders.map((rider) => (
                 <div
@@ -180,7 +220,7 @@ export function FleetOverview() {
             <div className="mb-4 pb-4 border-b border-gray-200">
               <div className="text-xs text-gray-500 mb-2">Branch Operating Hours</div>
               <div className="text-sm text-gray-900 font-medium">6:00 AM — 10:00 PM</div>
-              <div className="text-xs text-gray-500 mt-1">All riders must return before curfew</div>
+              <div className="text-xs text-gray-500 mt-1">All Delivery Riders must return before curfew</div>
             </div>
             <div>
               <div className="text-xs text-gray-500 mb-3">Active Geofence Alerts</div>
@@ -215,7 +255,7 @@ export function FleetOverview() {
                   onChange={(e) => setActivityFilter(e.target.value)}
                   className="appearance-none bg-gray-50 border border-gray-200 text-gray-700 text-xs rounded-md pl-2 pr-8 py-1.5 focus:ring-[#007BC1] focus:border-[#007BC1] outline-none cursor-pointer"
                 >
-                  <option value="all">All Riders</option>
+                  <option value="all">All Delivery Riders</option>
                   {riders.map(r => (
                     <option key={r.id} value={r.name}>{r.name}</option>
                   ))}
@@ -243,6 +283,10 @@ export function FleetOverview() {
             </div>
           </div>
         </div>
+          </>
+        ) : (
+          <DeliveryRiderAccess />
+        )}
       </div>
     </div>
   );

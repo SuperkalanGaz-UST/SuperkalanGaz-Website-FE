@@ -361,9 +361,7 @@ export function Inventory() {
 
   return (
     <div className="flex-1 overflow-y-auto bg-gray-50">
-      <div className="sticky top-0 z-10">
-        <Header title="Inventory" />
-      </div>
+      <Header title="Inventory" />
 
       <main className="p-5 md:p-8">
         <div className="mb-8 grid grid-cols-1 gap-4 lg:grid-cols-3">
