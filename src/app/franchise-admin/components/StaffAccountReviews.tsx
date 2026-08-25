@@ -2,14 +2,11 @@
 
 import {
   AlertCircle,
-  Building2,
-  CheckCircle2,
+  ChevronRight,
   Clock3,
   Loader2,
   Search,
-  ShieldCheck,
   UserRound,
-  XCircle,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
@@ -20,9 +17,11 @@ import {
 } from '../../components/account-review/DocumentReviewPanel';
 import { apiErrorMessage, apiFetch } from '../../lib/api';
 
+type ReviewRole = 'branch-owner' | 'branch-manager';
+
 interface StaffAccountReviewRequest {
   id: string;
-  role: 'branch-owner' | 'branch-manager';
+  role: ReviewRole;
   status: 'pending' | 'approved' | 'rejected' | 'revision-requested';
   applicant_name: string;
   applicant_email: string;
@@ -34,7 +33,7 @@ interface StaffAccountReviewRequest {
   decision_reason: string | null;
 }
 
-function roleLabel(role: StaffAccountReviewRequest['role']): string {
+function roleLabel(role: ReviewRole): string {
   return role === 'branch-owner' ? 'Branch Owner' : 'Branch Manager';
 }
 
@@ -48,6 +47,12 @@ function formatDate(value: string): string {
   }).format(date);
 }
 
+function initials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '?';
+  return `${parts[0][0] ?? ''}${parts.at(-1)?.[0] ?? ''}`.toUpperCase();
+}
+
 async function responseJson<T>(response: Response, fallback: string): Promise<T> {
   const body: unknown = await response.json().catch(() => null);
   if (!response.ok) throw new Error(apiErrorMessage(body, fallback));
@@ -58,6 +63,7 @@ export function StaffAccountReviews() {
   const [requests, setRequests] = useState<StaffAccountReviewRequest[] | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
+  const [roleFilter, setRoleFilter] = useState<'all' | ReviewRole>('all');
   const [reason, setReason] = useState('');
   const [working, setWorking] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -72,6 +78,9 @@ export function StaffAccountReviews() {
         '/staff-registration/requests?status=pending&roles=branch-owner,branch-manager',
         { signal: AbortSignal.timeout(10_000) },
       );
+      if (response.status === 404) {
+        throw new Error('The secure staff-registration service is not connected yet.');
+      }
       const body = await responseJson<{ requests: StaffAccountReviewRequest[] }>(
         response,
         'Could not load staff account registrations.',
@@ -95,22 +104,22 @@ export function StaffAccountReviews() {
 
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
-    return (requests ?? []).filter((request) =>
-      !term
-        ? true
-        : `${request.applicant_name} ${request.applicant_email} ${request.branch_name ?? ''} ${roleLabel(request.role)}`
-            .toLowerCase()
-            .includes(term),
-    );
-  }, [requests, search]);
+    return (requests ?? []).filter((request) => {
+      if (roleFilter !== 'all' && request.role !== roleFilter) return false;
+      if (!term) return true;
+      return `${request.applicant_name} ${request.applicant_email} ${request.branch_name ?? ''}`
+        .toLowerCase()
+        .includes(term);
+    });
+  }, [requests, roleFilter, search]);
 
   const selected =
-    (requests ?? []).find((request) => request.id === selectedId) ?? filtered[0] ?? null;
+    filtered.find((request) => request.id === selectedId) ?? filtered[0] ?? null;
 
   const decide = async (decision: 'approve' | 'reject') => {
     if (!selected) return;
     if (documentReviewState !== 'ready') {
-      toast.error('Verify every required document before recording an account decision.');
+      toast.error('Required documents must be securely available before deciding.');
       return;
     }
     if (reason.trim().length < 5) {
@@ -155,24 +164,47 @@ export function StaffAccountReviews() {
       />
 
       <main className="mx-auto w-full max-w-[1540px] px-8 pb-10">
+        <section className="mb-5 flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:flex-row">
+          <label className="relative block min-w-0 flex-1">
+            <span className="sr-only">Search registrations</span>
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Search name, email, or branch"
+              className="h-11 w-full rounded-lg border border-slate-200 pl-10 pr-3 text-sm outline-none transition focus:border-[#007BC1] focus:ring-2 focus:ring-sky-100"
+            />
+          </label>
+          <label>
+            <span className="sr-only">Filter by role</span>
+            <select
+              value={roleFilter}
+              onChange={(event) => setRoleFilter(event.target.value as 'all' | ReviewRole)}
+              className="h-11 min-w-40 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 outline-none focus:border-[#007BC1]"
+            >
+              <option value="all">All roles</option>
+              <option value="branch-owner">Branch Owner</option>
+              <option value="branch-manager">Branch Manager</option>
+            </select>
+          </label>
+        </section>
+
         {error && (
-          <section className="rounded-xl border border-amber-200 bg-amber-50 p-6 text-amber-950">
-            <div className="flex items-start gap-3">
-              <AlertCircle className="mt-0.5 h-5 w-5 flex-none" />
-              <div>
-                <h2 className="font-semibold">Account review is unavailable</h2>
-                <p className="mt-1 text-sm leading-6">
-                  {error} No applicant data is fabricated and no account decision is permitted while this dependency is unavailable.
-                </p>
-                <button
-                  type="button"
-                  onClick={() => void load()}
-                  className="mt-4 rounded-lg border border-amber-400 bg-white px-4 py-2 text-sm font-semibold hover:bg-amber-100"
-                >
-                  Retry secure service
-                </button>
-              </div>
-            </div>
+          <section className="rounded-xl border border-slate-200 bg-white px-6 py-16 text-center shadow-sm" role="alert">
+            <span className="mx-auto flex h-11 w-11 items-center justify-center rounded-full bg-amber-50 text-amber-700">
+              <AlertCircle className="h-5 w-5" />
+            </span>
+            <h2 className="mt-4 font-semibold text-slate-900">Account reviews are not connected yet</h2>
+            <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-slate-500">
+              {error} Applicant information and account decisions remain unavailable until the secure service is ready.
+            </p>
+            <button
+              type="button"
+              onClick={() => void load()}
+              className="mt-5 rounded-lg border border-[#007BC1] px-4 py-2 text-sm font-semibold text-[#007BC1] hover:bg-sky-50"
+            >
+              Retry
+            </button>
           </section>
         )}
 
@@ -183,88 +215,83 @@ export function StaffAccountReviews() {
         )}
 
         {requests && (
-          <div className="grid min-h-[680px] gap-6 xl:grid-cols-[minmax(0,0.85fr)_minmax(460px,1.15fr)]">
-            <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-              <div className="border-b border-slate-100 p-5">
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <h2 className="text-lg font-semibold text-slate-900">Pending registrations</h2>
-                    <p className="mt-1 text-sm text-slate-500">No account is activated before approval.</p>
-                  </div>
-                  <span className="rounded-full bg-sky-50 px-3 py-1 text-xs font-semibold text-[#007BC1]">
-                    {filtered.length} pending
-                  </span>
-                </div>
-                <label className="relative mt-4 block">
-                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                  <input
-                    value={search}
-                    onChange={(event) => setSearch(event.target.value)}
-                    placeholder="Search applicant or branch…"
-                    className="h-10 w-full rounded-lg border border-slate-200 pl-10 pr-3 text-sm outline-none focus:border-[#007BC1]"
-                  />
-                </label>
-              </div>
+          <div className="grid min-h-[650px] gap-5 xl:grid-cols-[430px_minmax(0,1fr)]">
+            <section className="self-start overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+              <header className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+                <h2 className="font-semibold text-slate-900">Pending registrations</h2>
+                <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">
+                  {filtered.length} pending
+                </span>
+              </header>
 
               <div className="divide-y divide-slate-100">
                 {filtered.length === 0 && (
-                  <p className="px-6 py-16 text-center text-sm text-slate-500">No pending registrations match this view.</p>
+                  <p className="px-6 py-16 text-center text-sm text-slate-500">
+                    No pending registrations match this view.
+                  </p>
                 )}
                 {filtered.map((request) => (
                   <button
                     key={request.id}
                     type="button"
-                    onClick={() => { setSelectedId(request.id); setReason(''); }}
-                    className={`grid w-full grid-cols-[auto_1fr_auto] items-center gap-4 px-5 py-4 text-left transition ${
+                    onClick={() => {
+                      setSelectedId(request.id);
+                      setReason('');
+                      setDocumentReviewState('loading');
+                    }}
+                    className={`grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-5 py-4 text-left transition ${
                       selected?.id === request.id
-                        ? 'border-l-[3px] border-[#007BC1] bg-sky-50/60'
-                        : 'hover:bg-slate-50'
+                        ? 'border-l-[3px] border-[#007BC1] bg-sky-50/70'
+                        : 'border-l-[3px] border-transparent hover:bg-slate-50'
                     }`}
                   >
-                    <span className="flex h-11 w-11 items-center justify-center rounded-full bg-sky-100 text-[#007BC1]">
-                      <UserRound className="h-5 w-5" />
+                    <span className="flex h-11 w-11 items-center justify-center rounded-full bg-slate-100 text-sm font-semibold text-slate-700">
+                      {initials(request.applicant_name)}
                     </span>
                     <span className="min-w-0">
-                      <strong className="block truncate text-sm text-slate-900">{request.applicant_name}</strong>
-                      <span className="mt-1 block truncate text-xs text-slate-500">{roleLabel(request.role)} · {request.branch_name ?? 'Branch pending'}</span>
+                      <span className="flex min-w-0 items-center gap-2">
+                        <strong className="truncate text-sm text-slate-900">{request.applicant_name}</strong>
+                        <span className="shrink-0 rounded-full bg-sky-50 px-2 py-0.5 text-[10px] font-semibold text-[#007BC1]">
+                          {roleLabel(request.role)}
+                        </span>
+                      </span>
+                      <span className="mt-1 block truncate text-xs text-slate-600">
+                        {request.branch_name ?? 'Branch pending'}
+                      </span>
+                      <span className="mt-1.5 flex items-center gap-1 text-[11px] text-slate-400">
+                        <Clock3 className="h-3.5 w-3.5" /> {formatDate(request.submitted_at)}
+                      </span>
                     </span>
-                    <span className="flex items-center gap-1 text-[11px] text-slate-400">
-                      <Clock3 className="h-3.5 w-3.5" /> {formatDate(request.submitted_at)}
-                    </span>
+                    <ChevronRight className="h-4 w-4 text-slate-400" />
                   </button>
                 ))}
               </div>
             </section>
 
-            <section className="self-start rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+            <section className="self-start overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+              <header className="border-b border-slate-100 px-6 py-5">
+                <h2 className="text-lg font-semibold text-slate-900">Review application</h2>
+              </header>
+
               {!selected && (
-                <p className="py-24 text-center text-sm text-slate-500">Select an applicant to review.</p>
+                <div className="px-6 py-24 text-center text-sm text-slate-500">
+                  <UserRound className="mx-auto mb-3 h-8 w-8 text-slate-300" />
+                  Select an applicant to review.
+                </div>
               )}
+
               {selected && (
                 <>
-                  <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-5">
-                    <div className="flex items-center gap-3">
-                      <span className="rounded-full bg-sky-100 p-3 text-[#007BC1]"><UserRound className="h-6 w-6" /></span>
-                      <div>
-                        <h2 className="text-xl font-semibold text-slate-950">{selected.applicant_name}</h2>
-                        <p className="mt-1 text-sm text-slate-500">{roleLabel(selected.role)}</p>
-                      </div>
-                    </div>
-                    <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">Pending review</span>
-                  </div>
-
-                  <dl className="mt-5 grid gap-3 text-sm sm:grid-cols-2">
-                    <div><dt className="text-xs text-slate-500">Email</dt><dd className="mt-1 font-medium text-slate-900">{selected.applicant_email}</dd></div>
-                    <div><dt className="text-xs text-slate-500">Mobile number</dt><dd className="mt-1 font-medium text-slate-900">{selected.applicant_phone ?? '—'}</dd></div>
-                    <div><dt className="text-xs text-slate-500">Branch</dt><dd className="mt-1 font-medium text-slate-900">{selected.branch_name ?? '—'}</dd></div>
-                    <div><dt className="text-xs text-slate-500">Submitted</dt><dd className="mt-1 font-medium text-slate-900">{formatDate(selected.submitted_at)}</dd></div>
-                    {selected.branch_address && <div className="sm:col-span-2"><dt className="text-xs text-slate-500">Registered branch address</dt><dd className="mt-1 font-medium text-slate-900">{selected.branch_address}</dd></div>}
-                  </dl>
-
-                  <div className="mt-5 rounded-xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-900">
-                    <p className="flex items-start gap-2"><ShieldCheck className="mt-0.5 h-4 w-4 flex-none" />The API must derive reviewer authority and branch scope from the verified Franchise Administrator JWT.</p>
-                    {selected.role === 'branch-owner' && <p className="mt-2 flex items-start gap-2"><Building2 className="mt-0.5 h-4 w-4 flex-none" />Assign geolocation only after the registration is approved.</p>}
-                  </div>
+                  <section className="px-6 py-5">
+                    <h3 className="text-sm font-semibold text-slate-900">Submitted details</h3>
+                    <dl className="mt-4 grid gap-x-10 gap-y-3 text-sm sm:grid-cols-2">
+                      <div><dt className="text-slate-500">Full name</dt><dd className="mt-1 font-medium text-slate-900">{selected.applicant_name}</dd></div>
+                      <div><dt className="text-slate-500">Role</dt><dd className="mt-1 font-medium text-slate-900">{roleLabel(selected.role)}</dd></div>
+                      <div><dt className="text-slate-500">Branch</dt><dd className="mt-1 font-medium text-slate-900">{selected.branch_name ?? '—'}</dd></div>
+                      <div><dt className="text-slate-500">Email</dt><dd className="mt-1 break-all font-medium text-slate-900">{selected.applicant_email}</dd></div>
+                      <div><dt className="text-slate-500">Mobile number</dt><dd className="mt-1 font-medium text-slate-900">{selected.applicant_phone ?? '—'}</dd></div>
+                    </dl>
+                  </section>
 
                   <DocumentReviewPanel
                     key={selected.id}
@@ -272,42 +299,37 @@ export function StaffAccountReviews() {
                     onReviewStateChange={setDocumentReviewState}
                   />
 
-                  <label className="mt-5 block text-sm font-medium text-slate-800">
-                    Decision reason
-                    <textarea
-                      value={reason}
-                      onChange={(event) => setReason(event.target.value)}
-                      rows={4}
-                      placeholder="Required for approval or rejection…"
-                      className="mt-2 w-full resize-none rounded-xl border border-slate-300 p-3 outline-none focus:border-[#007BC1]"
-                    />
-                  </label>
-                  {documentReviewState !== 'ready' && (
-                    <p className="mt-3 text-xs font-medium text-amber-700">
-                      Account decisions remain disabled until all required documents are securely available and verified.
-                    </p>
-                  )}
-                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                    <button
-                      type="button"
-                      disabled={working || documentReviewState !== 'ready'}
-                      onClick={() => void decide('approve')}
-                      className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#007BC1] px-4 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      <CheckCircle2 className="h-4 w-4" /> Approve account
-                    </button>
-                    <button
-                      type="button"
-                      disabled={working || documentReviewState !== 'ready'}
-                      onClick={() => void decide('reject')}
-                      className="inline-flex items-center justify-center gap-2 rounded-lg border border-red-400 px-4 py-2.5 text-sm font-semibold text-red-700 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      <XCircle className="h-4 w-4" /> Reject registration
-                    </button>
-                  </div>
-                  <p className="mt-4 text-xs leading-5 text-slate-500">
-                    The backend decision must record the approver, role, affected account, before/after status, timestamp, and decision reason for Super Administrator audit visibility.
-                  </p>
+                  <section className="border-t border-slate-100 px-6 py-5">
+                    <label className="block text-sm font-medium text-slate-800">
+                      Decision reason
+                      <textarea
+                        value={reason}
+                        onChange={(event) => setReason(event.target.value)}
+                        rows={3}
+                        maxLength={500}
+                        placeholder="Provide a reason for your decision."
+                        className="mt-2 w-full resize-none rounded-lg border border-slate-300 p-3 text-sm outline-none focus:border-[#007BC1] focus:ring-2 focus:ring-sky-100"
+                      />
+                    </label>
+                    <div className="mt-4 flex flex-wrap justify-end gap-3">
+                      <button
+                        type="button"
+                        disabled={working || documentReviewState !== 'ready'}
+                        onClick={() => void decide('reject')}
+                        className="rounded-lg border border-red-400 px-5 py-2.5 text-sm font-semibold text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        Reject
+                      </button>
+                      <button
+                        type="button"
+                        disabled={working || documentReviewState !== 'ready'}
+                        onClick={() => void decide('approve')}
+                        className="rounded-lg bg-[#007BC1] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#006ba7] disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {working ? 'Saving…' : 'Approve account'}
+                      </button>
+                    </div>
+                  </section>
                 </>
               )}
             </section>

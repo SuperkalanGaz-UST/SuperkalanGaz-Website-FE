@@ -6,6 +6,7 @@ import type {
   GovernanceDashboardData,
   GovernanceRequest,
   GovernanceRequestType,
+  FranchiseAdminInvitation,
   SecuritySummary,
 } from './types';
 
@@ -62,8 +63,33 @@ export const governanceApi = {
     ),
 
   adminAccounts: () =>
-    json<{ accounts: AdminAccount[]; requests: GovernanceRequest[] }>(
+    json<{
+      accounts: AdminAccount[];
+      invitations: FranchiseAdminInvitation[];
+      requests: GovernanceRequest[];
+    }>(
       '/governance/admin-accounts',
+    ),
+
+  inviteFranchiseAdministrator: (name: string, email: string) =>
+    json<{ invitation: FranchiseAdminInvitation }>(
+      '/governance/franchise-admin-invitations',
+      {
+        method: 'POST',
+        body: JSON.stringify({ name, email }),
+      },
+    ),
+
+  resendFranchiseAdministratorInvitation: (id: string) =>
+    json<{ invitation: FranchiseAdminInvitation }>(
+      `/governance/franchise-admin-invitations/${id}/resend`,
+      { method: 'POST' },
+    ),
+
+  revokeFranchiseAdministratorInvitation: (id: string) =>
+    json<{ invitation: FranchiseAdminInvitation }>(
+      `/governance/franchise-admin-invitations/${id}/revoke`,
+      { method: 'PATCH' },
     ),
 
   audit: async (category?: AuditCategory) => {

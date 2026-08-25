@@ -83,6 +83,18 @@ export interface AdminAccount {
   createdAt: string;
 }
 
+export interface FranchiseAdminInvitation {
+  id: string;
+  email: string;
+  displayName: string;
+  status: 'Pending' | 'Expired' | 'Revoked';
+  invitedAt: string;
+  confirmationSentAt: string;
+  expiresAt: string;
+  invitedBy: string;
+  invitedByName: string;
+}
+
 export interface SecuritySummary {
   accountHealth: {
     activeSuperAdministrators: number;

@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { ArrowLeft, CheckCircle2, Eye, EyeOff, Mail } from 'lucide-react';
 import {
   Account,
+  activateFranchiseAdminInvitation,
   DEMO_ACCOUNTS,
   requestPasswordReset,
   ROLE_LABELS,
@@ -14,12 +15,16 @@ interface LoginProps {
   onLogin: (account: Account) => void;
   passwordRecovery?: boolean;
   onPasswordReset?: () => Promise<void>;
+  invitationActivation?: boolean;
+  onInvitationActivation?: (account: Account) => void;
 }
 
 export function Login({
   onLogin,
   passwordRecovery = false,
   onPasswordReset,
+  invitationActivation = false,
+  onInvitationActivation,
 }: LoginProps) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -95,6 +100,29 @@ export function Login({
     setResetComplete(true);
   };
 
+  const handleInvitationActivation = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+
+    if (newPassword.length < 8 || !/\d/.test(newPassword)) {
+      setError('Password must be at least 8 characters and include a number.');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setError('Passwords do not match.');
+      return;
+    }
+
+    setLoading(true);
+    const result = await activateFranchiseAdminInvitation(newPassword);
+    setLoading(false);
+    if (!result.account) {
+      setError(result.error ?? 'Could not activate this invitation.');
+      return;
+    }
+    onInvitationActivation?.(result.account);
+  };
+
   const returnToLogin = () => {
     setForgotPassword(false);
     setResetLinkSent(false);
@@ -147,6 +175,60 @@ export function Login({
             Return to login
           </button>
         </div>
+      );
+    }
+
+    if (invitationActivation) {
+      return (
+        <>
+          <h1 className="text-3xl font-bold text-gray-900">Activate your account</h1>
+          <p className="mt-3 mb-8 text-sm leading-6 text-gray-600">
+            Your email is verified. Choose your own password to finish activating your
+            Franchise Administrator account.
+          </p>
+          <form onSubmit={handleInvitationActivation}>
+            <div className="mb-5">
+              <label htmlFor="invitation-password" className="block text-sm font-normal text-gray-700 mb-2">
+                New password
+              </label>
+              {passwordField(
+                'invitation-password',
+                newPassword,
+                setNewPassword,
+                showNewPassword,
+                () => setShowNewPassword((visible) => !visible),
+                'new-password',
+              )}
+              <p className="mt-2 text-xs text-gray-500">
+                Use at least 8 characters and include a number.
+              </p>
+            </div>
+
+            <div className="mb-6">
+              <label htmlFor="invitation-password-confirm" className="block text-sm font-normal text-gray-700 mb-2">
+                Confirm password
+              </label>
+              {passwordField(
+                'invitation-password-confirm',
+                confirmPassword,
+                setConfirmPassword,
+                showNewPassword,
+                () => setShowNewPassword((visible) => !visible),
+                'new-password',
+              )}
+            </div>
+
+            {error && <p className="text-sm text-red-600 mb-4" role="alert">{error}</p>}
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-[#007BC1] text-white py-3.5 rounded-md font-medium hover:bg-[#006399] transition-colors text-base disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              {loading ? 'Activating account…' : 'Activate account'}
+            </button>
+          </form>
+        </>
       );
     }
 

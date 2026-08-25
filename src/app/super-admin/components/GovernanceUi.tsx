@@ -22,7 +22,9 @@ export function StatusChip({ value }: { value: string }) {
     normalized.includes('completed') ||
     normalized.includes('active')
       ? 'bg-emerald-50 text-emerald-700 ring-emerald-200'
-      : normalized.includes('reject') || normalized.includes('inactive')
+      : normalized.includes('reject') ||
+          normalized.includes('revoke') ||
+          normalized.includes('inactive')
         ? 'bg-red-50 text-red-700 ring-red-200'
         : normalized.includes('high')
           ? 'bg-red-50 text-red-700 ring-red-200'

@@ -9,7 +9,12 @@ import { Toaster } from './components/ui/sonner';
 import { Login } from './components/Login';
 import { LogoutConfirmationDialog } from './components/LogoutConfirmationDialog';
 import { AccountProvider } from './contexts/AccountContext';
-import { Account, accountFromUser, signOut } from './lib/auth';
+import {
+  Account,
+  accountFromUser,
+  isPendingFranchiseAdminInvitation,
+  signOut,
+} from './lib/auth';
 import { supabase } from './lib/supabase/client';
 
 // Lazy-load each persona app so a page load only compiles/downloads the one
@@ -37,6 +42,7 @@ export default function App() {
   const [account, setAccount] = useState<Account | null>(null);
   const [authReady, setAuthReady] = useState(false);
   const [passwordRecovery, setPasswordRecovery] = useState(false);
+  const [invitationActivation, setInvitationActivation] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
   const passwordRecoveryRef = useRef(false);
@@ -65,7 +71,15 @@ export default function App() {
         return;
       }
 
+      if (isPendingFranchiseAdminInvitation(session.user)) {
+        setInvitationActivation(true);
+        setAccount(null);
+        setAuthReady(true);
+        return;
+      }
+
       const restored = accountFromUser(session.user);
+      setInvitationActivation(false);
       setAccount(restored.account);
       setAuthReady(true);
 
@@ -120,6 +134,12 @@ export default function App() {
     passwordRecoveryRef.current = false;
     setPasswordRecovery(false);
     setAccount(null);
+    window.history.replaceState({}, document.title, window.location.pathname);
+  };
+
+  const handleInvitationActivation = (activatedAccount: Account) => {
+    setInvitationActivation(false);
+    setAccount(activatedAccount);
     window.history.replaceState({}, document.title, window.location.pathname);
   };
 
@@ -186,6 +206,8 @@ export default function App() {
           onLogin={setAccount}
           passwordRecovery={passwordRecovery}
           onPasswordReset={handlePasswordReset}
+          invitationActivation={invitationActivation}
+          onInvitationActivation={handleInvitationActivation}
         />
       )}
       <Toaster className={account ? 'dashboard-toaster' : undefined} />

@@ -11,6 +11,7 @@
  */
 import { supabase } from './supabase/client';
 import type { User } from '@supabase/supabase-js';
+import { apiErrorMessage, apiFetch } from './api';
 
 export type Role = 'super-admin' | 'franchise-admin' | 'branch-owner' | 'branch-manager';
 
@@ -76,6 +77,11 @@ const VALID_ROLES: readonly Role[] = [
 
 function isRole(value: unknown): value is Role {
   return typeof value === 'string' && VALID_ROLES.includes(value as Role);
+}
+
+export function isPendingFranchiseAdminInvitation(user: User): boolean {
+  const claims = (user.app_metadata ?? {}) as Record<string, unknown>;
+  return claims.role === 'franchise-admin' && claims.status === 'Pending';
 }
 
 /**
@@ -167,6 +173,54 @@ export async function updatePassword(password: string): Promise<AuthActionResult
   return {
     error: error ? 'This reset link is invalid or has expired. Request a new link.' : null,
   };
+}
+
+/**
+ * Completes the role-locked invitation only after Supabase has verified the
+ * single-use email link and the invitee has chosen their own password.
+ */
+export async function activateFranchiseAdminInvitation(
+  password: string,
+): Promise<SignInResult> {
+  const passwordResult = await supabase.auth.updateUser({ password });
+  if (passwordResult.error) {
+    return {
+      account: null,
+      error: 'This invitation link is invalid or has expired. Ask the Super Administrator to resend it.',
+    };
+  }
+
+  let response: Response;
+  try {
+    response = await apiFetch('/governance/franchise-admin-invitations/accept', {
+      method: 'POST',
+      signal: AbortSignal.timeout(10_000),
+    });
+  } catch {
+    return {
+      account: null,
+      error: 'Your password was saved, but activation could not finish. Please try again.',
+    };
+  }
+  const body: unknown = await response.json().catch(() => null);
+  if (!response.ok) {
+    return {
+      account: null,
+      error: apiErrorMessage(
+        body,
+        'This invitation could not be activated. Ask the Super Administrator to resend it.',
+      ),
+    };
+  }
+
+  const refreshed = await supabase.auth.refreshSession();
+  if (refreshed.error || !refreshed.data.user) {
+    return {
+      account: null,
+      error: 'Your account was activated. Return to sign in with your new password.',
+    };
+  }
+  return accountFromUser(refreshed.data.user);
 }
 
 export async function signOut(): Promise<void> {
