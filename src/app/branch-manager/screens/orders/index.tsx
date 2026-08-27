@@ -129,12 +129,25 @@ const getStatusVariant = (status: SRRow['status']) => {
     }
 };
 
-export default function Orders() {
+interface OrdersProps {
+    /** Set by the Customers screen's "View order history" link — seeds the
+     * search box so this screen lands pre-filtered to that customer. Purely an
+     * initial value: once here, the BM can edit or clear it like any other
+     * manual search. */
+    initialSearch?: string | null;
+}
+
+export default function Orders({ initialSearch }: OrdersProps = {}) {
     const [mounted, setMounted] = useState(false);
     useEffect(() => { setMounted(true); }, []);
 
     const [activeTab, setActiveTab] = useState('all');
-    const [searchQuery, setSearchQuery] = useState('');
+    const [searchQuery, setSearchQuery] = useState(initialSearch ?? '');
+    // Re-seed if the BM comes back from Customers with a different name — but
+    // only follow actual changes, so it doesn't fight the BM's own typing.
+    useEffect(() => {
+        if (initialSearch) setSearchQuery(initialSearch);
+    }, [initialSearch]);
     const [requests, setRequests] = useState<SRRow[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);

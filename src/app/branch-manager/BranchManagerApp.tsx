@@ -34,6 +34,14 @@ const SCREEN_TITLES: Record<string, string> = {
 
 export function BranchManagerApp() {
   const [activeScreen, setActiveScreen] = useState('overview');
+  // Set when the Customers screen's "view order history" link is clicked;
+  // seeds the Orders screen's own search box so it lands pre-filtered to that
+  // customer, then behaves like any other manual search from there on.
+  const [ordersCustomerSearch, setOrdersCustomerSearch] = useState<string | null>(null);
+  const viewCustomerOrders = (customerName: string) => {
+    setOrdersCustomerSearch(customerName);
+    setActiveScreen('orders');
+  };
   // BM is strictly single-branch (AGENTS.md §5) — show it as a static chip.
   const account = useAccount();
   const branch = account.branches[0];
@@ -63,9 +71,9 @@ export function BranchManagerApp() {
 
         <main style={{ flex: 1, padding: '2rem', overflowY: 'auto' }}>
           {activeScreen === 'overview' && <Overview />}
-          {activeScreen === 'orders' && <Orders />}
+          {activeScreen === 'orders' && <Orders initialSearch={ordersCustomerSearch} />}
           {activeScreen === 'inventory' && <Inventory />}
-          {activeScreen === 'customers' && <Customers />}
+          {activeScreen === 'customers' && <Customers onViewOrders={viewCustomerOrders} />}
           {activeScreen === 'rewards' && <Rewards />}
           {activeScreen === 'csat' && <Csat />}
           {activeScreen === 'fleet' && <Fleet />}
