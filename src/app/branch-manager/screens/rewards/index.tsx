@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useState } from 'react';
 import Image from 'next/image';
-import { RefreshCw, Gift } from 'lucide-react';
+import { RefreshCw, Gift, Star, UsersRound, Clock3, RotateCw, Building2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Badge } from '../../components/Badge';
 import { Button } from '../../components/Button';
@@ -215,6 +215,37 @@ export default function Rewards() {
 
     useEffect(() => { loadRedemptions(track, activeTab); }, [track, activeTab, loadRedemptions]);
 
+    // KPI summary row above the queue — real counts derived from the full
+    // (unfiltered-by-status) redemption list for the active track, not a
+    // separate mocked-up metric. Loaded independently of the status-filtered
+    // `redemptions` list above so the cards stay stable while the BM switches
+    // status tabs underneath them.
+    const [trackSummary, setTrackSummary] = useState<{
+        pending: number;
+        approved: number;
+        fulfilled: number;
+        pendingPoints: number;
+    } | null>(null);
+    const loadTrackSummary = useCallback(async (t: Track) => {
+        try {
+            const res = await apiFetch(`/loyalty/redemptions?track=${t}&status=all`);
+            const data = await res.json();
+            if (!res.ok) return;
+            const all = data.redemptions as RedemptionRow[];
+            setTrackSummary({
+                pending: all.filter((r) => r.status === 'pending').length,
+                approved: all.filter((r) => r.status === 'approved').length,
+                fulfilled: all.filter((r) => r.status === 'fulfilled').length,
+                pendingPoints: all
+                    .filter((r) => r.status === 'pending')
+                    .reduce((sum, r) => sum + (r.points_spent ?? 0), 0),
+            });
+        } catch {
+            // Non-fatal: the KPI row just stays blank, the queue below still works.
+        }
+    }, []);
+    useEffect(() => { loadTrackSummary(track); }, [track, loadTrackSummary]);
+
     // Active household reward catalog — loaded once for the household create form.
     const loadCatalog = useCallback(async () => {
         try {
@@ -325,7 +356,7 @@ export default function Rewards() {
                 toast.success('Redemption request logged.');
             }
             resetCreate();
-            await loadRedemptions(track, activeTab);
+            await Promise.all([loadRedemptions(track, activeTab), loadTrackSummary(track)]);
         } catch (err) {
             toast.error(err instanceof Error ? err.message : 'Failed to create redemption request');
         } finally {
@@ -348,7 +379,7 @@ export default function Rewards() {
                 // completed cycle (commercial) — the API's message says which.
                 if (res.status === 409) {
                     toast.error(apiErrorMessage(data, 'Could not approve this redemption'));
-                    await loadRedemptions(track, activeTab);
+                    await Promise.all([loadRedemptions(track, activeTab), loadTrackSummary(track)]);
                     return;
                 }
                 if (res.status === 404) { toast.error('Redemption not found'); return; }
@@ -360,7 +391,7 @@ export default function Rewards() {
             toast.success((isCommercial ? 'Free cylinder approved' : 'Redemption approved') + codeMsg);
             // Close the ledger panel for this row if it was open; state changed.
             if (ledgerId === id) { setLedgerId(null); setLedger(null); }
-            await Promise.all([loadRedemptions(track, activeTab), loadCatalog()]);
+            await Promise.all([loadRedemptions(track, activeTab), loadCatalog(), loadTrackSummary(track)]);
         } catch (err) {
             toast.error(err instanceof Error ? err.message : 'Failed to approve redemption');
         } finally {
@@ -388,7 +419,7 @@ export default function Rewards() {
                 if (res.status === 409) {
                     toast.error(apiErrorMessage(data, 'This redemption is no longer pending'));
                     setRejectId(null);
-                    await loadRedemptions(track, activeTab);
+                    await Promise.all([loadRedemptions(track, activeTab), loadTrackSummary(track)]);
                     return;
                 }
                 toast.error(apiErrorMessage(data, 'Failed to reject redemption'));
@@ -396,7 +427,7 @@ export default function Rewards() {
             }
             toast.success('Redemption rejected.');
             setRejectId(null);
-            await loadRedemptions(track, activeTab);
+            await Promise.all([loadRedemptions(track, activeTab), loadTrackSummary(track)]);
         } catch (err) {
             toast.error(err instanceof Error ? err.message : 'Failed to reject redemption');
         } finally {
@@ -412,7 +443,7 @@ export default function Rewards() {
             if (!res.ok) {
                 if (res.status === 409) {
                     toast.error(apiErrorMessage(data, 'This redemption is not approved'));
-                    await loadRedemptions(track, activeTab);
+                    await Promise.all([loadRedemptions(track, activeTab), loadTrackSummary(track)]);
                     return;
                 }
                 if (res.status === 404) { toast.error('Redemption not found'); return; }
@@ -420,7 +451,7 @@ export default function Rewards() {
                 return;
             }
             toast.success('Reward marked as handed over.');
-            await loadRedemptions(track, activeTab);
+            await Promise.all([loadRedemptions(track, activeTab), loadTrackSummary(track)]);
         } catch (err) {
             toast.error(err instanceof Error ? err.message : 'Failed to mark fulfilled');
         } finally {
@@ -462,18 +493,69 @@ export default function Rewards() {
 
     return (
         <div>
-            {/* Track switcher — the two loyalty mechanics are independent views. */}
-            <div className={styles.headerRow}>
-                <div className={styles.trackSwitcher}>
-                    <Tabs value={track} onValueChange={(v: string) => switchTrack(v as Track)}>
-                        <TabsList>
-                            {TRACK_TABS.map((t) => (
-                                <TabsTrigger key={t.value} value={t.value}>{t.label}</TabsTrigger>
-                            ))}
-                        </TabsList>
-                    </Tabs>
+            {/* Track switcher — the two loyalty mechanics are independent views.
+                Underline-tab style matches the Branch Owner Loyalty Program tab. */}
+            <div className={styles.trackTabsRow}>
+                <div className={styles.trackTabs} role="tablist" aria-label="Loyalty program tracks">
+                    {TRACK_TABS.map((t) => {
+                        const isActive = track === t.value;
+                        return (
+                            <button
+                                key={t.value}
+                                type="button"
+                                role="tab"
+                                aria-selected={isActive}
+                                onClick={() => switchTrack(t.value)}
+                                className={`${styles.trackTab} ${isActive ? styles.trackTabActive : ''}`}
+                            >
+                                {t.label}
+                                <span className={styles.trackTabIndicator} aria-hidden="true" />
+                            </button>
+                        );
+                    })}
                 </div>
+            </div>
 
+            {/* KPI summary — real counts for the active track, not illustrative data. */}
+            <div className={styles.metricsRow}>
+                <div className={styles.heroCard}>
+                    <p className={styles.heroEyebrow}>
+                        {isCommercial ? '30+1 Cycle Overview' : 'Household Points Overview'}
+                    </p>
+                    <p className={styles.heroLabel}>
+                        {isCommercial ? 'Pending Free-Cylinder Requests' : 'Points Requested (Pending)'}
+                    </p>
+                    <p className={styles.heroValue}>
+                        {trackSummary
+                            ? (isCommercial ? trackSummary.pending : trackSummary.pendingPoints)
+                            : '—'}
+                    </p>
+                    <div className={styles.heroIcon}>
+                        {isCommercial ? <RotateCw size={26} /> : <Star size={26} fill="currentColor" />}
+                    </div>
+                </div>
+                <div className={styles.metricCard}>
+                    <div className={styles.metricIcon}>
+                        {isCommercial ? <Building2 size={22} /> : <UsersRound size={22} />}
+                    </div>
+                    <div>
+                        <p className={styles.metricLabel}>Pending Requests</p>
+                        <p className={styles.metricValue}>{trackSummary ? trackSummary.pending : '—'}</p>
+                        <p className={styles.metricDetail}>Awaiting your review</p>
+                    </div>
+                </div>
+                <div className={styles.metricCard}>
+                    <div className={`${styles.metricIcon} ${styles.metricIconAmber}`}>
+                        <Clock3 size={22} />
+                    </div>
+                    <div>
+                        <p className={styles.metricLabel}>Approved, Awaiting Pickup</p>
+                        <p className={styles.metricValue}>{trackSummary ? trackSummary.approved : '—'}</p>
+                        <p className={`${styles.metricDetail} ${styles.metricDetailAmber}`}>
+                            {trackSummary ? `${trackSummary.fulfilled} fulfilled to date` : ' '}
+                        </p>
+                    </div>
+                </div>
             </div>
 
             {/* New redemption request. */}
@@ -703,12 +785,12 @@ export default function Rewards() {
                                                 <div className={styles.actionButtons}>
                                                     {/* Review the customer's ledger before deciding (BM-014). */}
                                                     <Button
-                                                        variant="ghost"
+                                                        variant="link"
                                                         size="sm"
                                                         onClick={() => toggleLedger(r.id)}
                                                         disabled={ledgerLoading && ledgerId === r.id}
                                                     >
-                                                        {ledgerId === r.id ? 'Hide' : 'Review'}
+                                                        {ledgerId === r.id ? 'Hide ledger' : 'View ledger'}
                                                     </Button>
                                                     {r.status === 'pending' && (
                                                         <>

@@ -1,5 +1,33 @@
-.headerRow { display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; margin-bottom: 1.25rem; }
+.headerRow { display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; margin-bottom: 0; }
 .trackSwitcher { margin-bottom: 0; }
+
+/* Underline-style track switcher (Household / Commercial), matching the
+   Branch Owner Loyalty Program tab's visual language. */
+.trackTabs { display: flex; gap: 0.5rem; }
+.trackTab { position: relative; min-width: 8rem; padding: 0.25rem 1rem 0.75rem; text-align: left; font-size: 0.875rem; font-weight: 600; color: #6b7280; background: none; border: none; cursor: pointer; transition: color 0.15s; }
+.trackTab:hover { color: #1f2937; }
+.trackTabActive { color: var(--primary); }
+.trackTabIndicator { position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; border-radius: 9999px; background-color: var(--primary); opacity: 0; transition: opacity 0.15s; }
+.trackTabActive .trackTabIndicator { opacity: 1; }
+.trackTabsRow { display: flex; flex-direction: column; gap: 0.75rem; border-bottom: 1px solid var(--border); margin-bottom: 1.5rem; }
+.trackTabsRow > .headerRow { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+
+/* KPI summary row above the queue, mirroring the Loyalty Program tab's
+   hero + supporting metric cards. */
+.metricsRow { display: grid; grid-template-columns: 1fr; gap: 1.25rem; margin-bottom: 1.5rem; }
+@media (min-width: 1024px) { .metricsRow { grid-template-columns: 1.45fr 0.9fr 0.9fr; } }
+.heroCard { position: relative; overflow: hidden; min-height: 10rem; border-radius: 1rem; border: 1px solid #a9d4ee; background: linear-gradient(135deg, #ffffff 0%, #f5faff 55%, #e8f3ff 100%); padding: 1.5rem; box-shadow: var(--shadow); }
+.heroEyebrow { font-size: 1.125rem; font-weight: 600; color: #101828; margin: 0; }
+.heroLabel { margin-top: 1.25rem; font-size: 0.875rem; font-weight: 500; color: #1f2a44; }
+.heroValue { margin-top: 0.25rem; font-size: 2.25rem; font-weight: 700; letter-spacing: -0.01em; color: #101828; }
+.heroIcon { position: absolute; right: 2rem; top: 50%; transform: translateY(-50%); display: flex; align-items: center; justify-content: center; width: 4rem; height: 4rem; border-radius: 9999px; border: 3px solid var(--primary); background-color: #fff; color: var(--primary); box-shadow: 0 0 0 7px rgba(0, 116, 188, 0.1); z-index: 1; }
+.metricCard { display: flex; align-items: center; gap: 1.25rem; min-height: 10rem; border-radius: 1rem; border: 1px solid var(--border); background-color: var(--card); padding: 1.5rem; box-shadow: var(--shadow); }
+.metricIcon { display: flex; align-items: center; justify-content: center; width: 3rem; height: 3rem; flex-shrink: 0; border-radius: 9999px; background-color: #eef6fc; color: var(--primary); }
+.metricIconAmber { background-color: #fffbeb; color: #d97706; }
+.metricLabel { font-size: 0.875rem; font-weight: 500; color: #4b5563; }
+.metricValue { margin-top: 0.5rem; font-size: 1.875rem; font-weight: 600; letter-spacing: -0.01em; color: #101828; }
+.metricDetail { margin-top: 0.25rem; font-size: 0.75rem; font-weight: 500; color: #6b7280; }
+.metricDetailAmber { color: #d97706; }
 
 /* Dual Authorization toggle (BM-013) in the header. */
 .dualAuthToggle { display: inline-flex; align-items: center; gap: 0.5rem; font-size: 0.8125rem; cursor: pointer; user-select: none; }
@@ -17,17 +45,17 @@
 .ledgerTable td { padding: 0.4rem 0.6rem; border-bottom: 1px solid var(--border); }
 .ledgerTable tbody tr:last-child td { border-bottom: none; }
 
-.card { background-color: var(--card); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow); overflow: hidden; margin-bottom: 1.5rem; }
-.cardHeaderFlex { display: flex; justify-content: space-between; align-items: center; padding: 1rem 1.25rem; border-bottom: 1px solid var(--border); gap: 1rem; flex-wrap: wrap; }
-.cardTitle { font-size: 0.9375rem; font-weight: 600; color: var(--foreground); }
+.card { background-color: var(--card); border: 1px solid #e5e7eb; border-radius: 1rem; box-shadow: var(--shadow); overflow: hidden; margin-bottom: 1.5rem; }
+.cardHeaderFlex { display: flex; justify-content: space-between; align-items: center; padding: 1.25rem; border-bottom: 1px solid #f3f4f6; gap: 1rem; flex-wrap: wrap; }
+.cardTitle { font-size: 1.0625rem; font-weight: 600; color: #101828; }
 .cardBody { padding: 1.25rem; }
 
 .tableWrapper { overflow-x: auto; }
 .table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
-.table th { padding: 0.75rem 1rem; text-align: left; font-size: 0.75rem; font-weight: 600; color: var(--muted-foreground); text-transform: uppercase; letter-spacing: 0.04em; border-bottom: 1px solid var(--border); white-space: nowrap; background-color: hsl(40, 15%, 98%); }
-.table td { padding: 0.75rem 1rem; border-bottom: 1px solid var(--border); color: var(--foreground); vertical-align: top; }
+.table th { padding: 0.75rem 1.25rem; text-align: left; font-size: 0.6875rem; font-weight: 600; color: #4b5563; text-transform: uppercase; letter-spacing: 0.04em; border-bottom: 1px solid #f3f4f6; white-space: nowrap; background-color: #f9fafb; }
+.table td { padding: 0.875rem 1.25rem; border-bottom: 1px solid #f3f4f6; color: var(--foreground); vertical-align: top; }
 .table tbody tr:last-child td { border-bottom: none; }
-.table tbody tr:hover { background-color: var(--muted); }
+.table tbody tr:hover { background-color: rgba(0, 116, 188, 0.04); }
 
 .monoText { font-family: var(--font-family-monospace); font-size: 0.8125rem; white-space: nowrap; }
 .boldText { font-weight: 600; }
