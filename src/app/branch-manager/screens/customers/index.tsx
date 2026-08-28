@@ -23,6 +23,9 @@ interface CustomerRow {
     contact_number: string;
     delivery_address: string;
     registration_source: 'staff-created' | 'self-registered';
+    /** Per-track human-readable ID assigned by a DB trigger at insert
+     * (migration 0029): H-00001 for household, C-00001 for commercial. */
+    customer_code: string | null;
     last_order_date: string | null;
     created_at: string;
 }
@@ -283,6 +286,7 @@ export default function Customers({ onViewOrders }: CustomersProps = {}) {
                     <table className={styles.table}>
                         <thead>
                             <tr>
+                                <th>Customer ID</th>
                                 <th>Customer</th>
                                 <th>Phone</th>
                                 <th>Delivery Address</th>
@@ -294,13 +298,13 @@ export default function Customers({ onViewOrders }: CustomersProps = {}) {
                         </thead>
                         <tbody>
                             {loading && (
-                                <tr><td colSpan={7} className={styles.emptyState}>Loading…</td></tr>
+                                <tr><td colSpan={8} className={styles.emptyState}>Loading…</td></tr>
                             )}
                             {!loading && error && (
-                                <tr><td colSpan={7} className={styles.emptyState}>{error}</td></tr>
+                                <tr><td colSpan={8} className={styles.emptyState}>{error}</td></tr>
                             )}
                             {!loading && !error && filtered.length === 0 && (
-                                <tr><td colSpan={7} className={styles.emptyState}>
+                                <tr><td colSpan={8} className={styles.emptyState}>
                                     <UserRound size={20} /> No customers found.
                                 </td></tr>
                             )}
@@ -310,6 +314,7 @@ export default function Customers({ onViewOrders }: CustomersProps = {}) {
                                     className={styles.clickableRow}
                                     onClick={() => openCustomer(c)}
                                 >
+                                    <td className={styles.monoText}>{c.customer_code ?? '—'}</td>
                                     <td>
                                         <div className={styles.nameCell}>
                                             <span className={styles.avatarCircle}>{initials(c.name)}</span>
@@ -367,7 +372,12 @@ export default function Customers({ onViewOrders }: CustomersProps = {}) {
                     <div className={styles.dialogContent} onClick={(e) => e.stopPropagation()}>
                         <div className={styles.dialogHeader}>
                             <div>
-                                <h2 className={styles.dialogTitle}>{selectedCustomer.name}</h2>
+                                <h2 className={styles.dialogTitle}>
+                                    {selectedCustomer.name}
+                                    {selectedCustomer.customer_code && (
+                                        <span className={styles.monoText}> · {selectedCustomer.customer_code}</span>
+                                    )}
+                                </h2>
                                 <p className={styles.dialogSubtitle}>
                                     {formatPHMobile(selectedCustomer.contact_number)} · {selectedCustomer.delivery_address}
                                 </p>

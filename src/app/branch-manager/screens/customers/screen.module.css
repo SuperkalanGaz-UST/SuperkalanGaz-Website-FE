@@ -53,6 +53,7 @@
 
 .boldText { font-weight: 600; }
 .mutedText { color: var(--muted-foreground); font-size: 0.8125rem; }
+.monoText { font-family: var(--font-family-monospace); font-size: 0.8125rem; font-weight: 500; color: var(--muted-foreground); }
 .emptyState { text-align: center; padding: 2rem; color: var(--muted-foreground); }
 
 /* Customer detail dialog — click-through order history + loyalty standing. */

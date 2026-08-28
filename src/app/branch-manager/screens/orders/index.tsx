@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useState } from 'react';
-import { Smartphone, Store, RefreshCw, AlertTriangle } from 'lucide-react';
+import { Smartphone, Store, RefreshCw, AlertTriangle, MoreHorizontal } from 'lucide-react';
 import { toast } from 'sonner';
 import * as z from 'zod';
 import { Badge } from '../../components/Badge';
@@ -10,6 +10,12 @@ import { Tabs, TabsList, TabsTrigger } from '../../components/Tabs';
 import { Form, FormItem, FormLabel, FormControl, FormMessage, useForm } from '../../components/Form';
 import { Input } from '../../components/Input';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '../../components/Select';
+import {
+    DropdownMenu,
+    DropdownMenuTrigger,
+    DropdownMenuContent,
+    DropdownMenuItem,
+} from '../../../components/ui/dropdown-menu';
 import { apiFetch, apiErrorMessage } from '../../../lib/api';
 import { fetchLpgPrices, formatPeso, LpgPrice } from '../../../lib/pricing';
 import { formatPHMobile, normalizePhMobile, toE164PhMobile } from '../../../lib/phMobile';
@@ -27,6 +33,9 @@ interface SRRow {
     // pre-CIM walk-ins created before customer linking existed (customerId is
     // optional server-side).
     customer_id: string | null;
+    // Human-readable per-track ID (H-00001 / C-00001, migration 0029) resolved
+    // server-side from customer_id. null for legacy/unlinked walk-ins.
+    customer_code: string | null;
     order_source: 'Mobile App' | 'Walk-in/Phone';
     // 'Under Review' is set when a lost/undelivered cylinder complaint is logged
     // against this request (BM-US-04, story BM-021) — see the Log Complaint action.
@@ -128,6 +137,39 @@ const getStatusVariant = (status: SRRow['status']) => {
         default: return 'secondary' as const;
     }
 };
+
+/** Ghost icon-sm Button's computed style, inlined here because the Radix
+ * DropdownMenuTrigger renders its own <button> (no ref-forwarding `asChild`
+ * target available on the hand-rolled Button component) — kept visually
+ * identical to every other icon-only button in this table. */
+const menuTriggerStyle: React.CSSProperties = {
+    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+    width: '1.75rem', height: '1.75rem', padding: '0.25rem', borderRadius: '0.375rem',
+    border: 'none', backgroundColor: 'transparent', color: 'inherit', cursor: 'pointer',
+};
+
+/** A row's secondary actions (2+) collapse into this kebab menu instead of a
+ * row of buttons — the single most important action (Assign & Dispatch / Mark
+ * Delivered) stays a visible Button beside it. Radix portals the menu content
+ * to the document body, so it isn't clipped by the table's own
+ * `overflow-x: auto` wrapper (the same reason the rider assignment picker
+ * below uses a native <select> instead of a custom dropdown). */
+function RowActionsMenu({ items }: { items: { label: string; onClick: () => void }[] }) {
+    return (
+        <DropdownMenu>
+            <DropdownMenuTrigger style={menuTriggerStyle} aria-label="More actions">
+                <MoreHorizontal size={16} />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+                {items.map((item) => (
+                    <DropdownMenuItem key={item.label} onSelect={() => item.onClick()}>
+                        {item.label}
+                    </DropdownMenuItem>
+                ))}
+            </DropdownMenuContent>
+        </DropdownMenu>
+    );
+}
 
 interface OrdersProps {
     /** Set by the Customers screen's "View order history" link — seeds the
@@ -1166,25 +1208,36 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                 </div>
                 <div className={styles.tableWrapper}>
                     <table className={styles.table}>
+                        <colgroup>
+                            <col style={{ width: '9%' }} />
+                            <col style={{ width: '8%' }} />
+                            <col style={{ width: '12%' }} />
+                            <col style={{ width: '10%' }} />
+                            <col style={{ width: '10%' }} />
+                            <col style={{ width: '10%' }} />
+                            <col style={{ width: '13%' }} />
+                            <col style={{ width: '12%' }} />
+                            <col style={{ width: '16%' }} />
+                        </colgroup>
                         <thead>
                             <tr>
-                                <th>Source</th><th>Customer Name</th><th>Contact</th>
+                                <th>Source</th><th>Customer ID</th><th>Customer Name</th><th>Contact</th>
                                 <th>Cylinder</th><th>Requested At</th><th>Status</th>
-                                <th className={styles.riderCol}>Rider</th><th className={styles.actionsCol}>Actions</th>
+                                <th>Rider</th><th>Actions</th>
                             </tr>
                         </thead>
                         <tbody>
                             {loading ? (
-                                <tr><td colSpan={8} className={styles.emptyState}>Loading service requests…</td></tr>
+                                <tr><td colSpan={9} className={styles.emptyState}>Loading service requests…</td></tr>
                             ) : error ? (
                                 <tr>
-                                    <td colSpan={8} className={styles.emptyState}>
+                                    <td colSpan={9} className={styles.emptyState}>
                                         <div style={{ marginBottom: '0.75rem' }}>{error}</div>
                                         <Button variant="outline" size="sm" onClick={() => void loadRequests()}>Try again</Button>
                                     </td>
                                 </tr>
                             ) : filteredRequests.length === 0 ? (
-                                <tr><td colSpan={8} className={styles.emptyState}>No service requests found for this view.</td></tr>
+                                <tr><td colSpan={9} className={styles.emptyState}>No service requests found for this view.</td></tr>
                             ) : (
                                 filteredRequests.map(req => (
                                     <React.Fragment key={req.id}>
@@ -1193,14 +1246,15 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                                         <td>
                                             {req.order_source === 'Mobile App' ? (
                                                 <Badge variant="info" style={{ gap: '0.35rem' }}>
-                                                    <Smartphone size={13} /> Mobile App
+                                                    <Smartphone size={20} /> Mobile App
                                                 </Badge>
                                             ) : (
                                                 <Badge variant="secondary" style={{ gap: '0.35rem' }}>
-                                                    <Store size={13} /> Walk-in/Phone
+                                                    <Store size={20} /> Walk-in/Phone
                                                 </Badge>
                                             )}
                                         </td>
+                                        <td className={styles.monoText}>{req.customer_code ?? '—'}</td>
                                         <td className={styles.boldText}>{req.customer_name}</td>
                                         <td>{req.customer_contact}</td>
                                         <td>
@@ -1295,21 +1349,27 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                                                     // Pre-dispatch controls (BM-US-07). Only rendered inside this
                                                     // Pending branch, so Edit/Cancel vanish once the request is
                                                     // Dispatched/Delivered/Cancelled (BM-037). Editor + cancel-confirm
-                                                    // panels open as an expanded row beneath this one.
+                                                    // panels open as an expanded row beneath this one. The primary
+                                                    // action (Assign & Dispatch) stays a visible Button; the rest
+                                                    // collapse into the kebab menu.
                                                     <div className={styles.actionButtons}>
                                                         <Button size="sm" variant="outline" onClick={() => openAssign(req.id)}>Assign &amp; Dispatch</Button>
-                                                        <Button size="sm" variant="ghost" onClick={() => openEdit(req)}>Edit</Button>
-                                                        <Button size="sm" variant="ghost" onClick={() => openCancel(req.id)}>Cancel</Button>
-                                                        {/* BM-011: a Pending request can already be running late
-                                                            (see the SLA at-risk flag above) before it's even dispatched. */}
-                                                        <Button size="sm" variant="ghost" onClick={() => openDelayReason(req.id)}>Delay Reason</Button>
+                                                        <RowActionsMenu items={[
+                                                            { label: 'Edit', onClick: () => openEdit(req) },
+                                                            { label: 'Cancel', onClick: () => openCancel(req.id) },
+                                                            // BM-011: a Pending request can already be running late
+                                                            // (see the SLA at-risk flag above) before it's even dispatched.
+                                                            { label: 'Delay Reason', onClick: () => openDelayReason(req.id) },
+                                                        ]} />
                                                     </div>
                                                 )
                                             ) : req.status === 'Dispatched' || req.status === 'En Route' ? (
                                                 // Out for delivery → let the BM close it out (BM-007), reassign to a
                                                 // closer available rider if it's running late (BM-010), log why
                                                 // (BM-011), or log a lost/undelivered cylinder complaint (BM-US-04)
-                                                // if something already went wrong mid-delivery.
+                                                // if something already went wrong mid-delivery. The primary action
+                                                // (Mark Delivered) stays a visible Button; the rest collapse into
+                                                // the kebab menu.
                                                 <div className={styles.actionButtons}>
                                                     <Button
                                                         size="sm"
@@ -1319,20 +1379,16 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                                                     >
                                                         {deliveringId === req.id ? 'Delivering…' : 'Mark Delivered'}
                                                     </Button>
-                                                    <Button size="sm" variant="outline" onClick={() => openReassign(req.id)}>
-                                                        Reassign
-                                                    </Button>
-                                                    <Button size="sm" variant="ghost" onClick={() => openDelayReason(req.id)}>
-                                                        Delay Reason
-                                                    </Button>
-                                                    <Button size="sm" variant="ghost" onClick={() => openLogComplaint(req.id)}>
-                                                        Log Complaint
-                                                    </Button>
+                                                    <RowActionsMenu items={[
+                                                        { label: 'Reassign', onClick: () => openReassign(req.id) },
+                                                        { label: 'Delay Reason', onClick: () => openDelayReason(req.id) },
+                                                        { label: 'Log Complaint', onClick: () => openLogComplaint(req.id) },
+                                                    ]} />
                                                 </div>
                                             ) : req.status === 'Delivered' ? (
                                                 // Closed → still eligible for a lost/undelivered cylinder complaint
                                                 // (BM-US-04 AC1: "any closed or active" request).
-                                                <Button size="sm" variant="ghost" onClick={() => openLogComplaint(req.id)}>
+                                                <Button size="sm" variant="outline" onClick={() => openLogComplaint(req.id)}>
                                                     Log Complaint
                                                 </Button>
                                             ) : req.status === 'Under Review' ? (
@@ -1349,7 +1405,7 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                                         identity/contact are intentionally NOT editable here. */}
                                     {editingId === req.id && (
                                         <tr className={styles.editorRow}>
-                                            <td colSpan={8}>
+                                            <td colSpan={9}>
                                                 <div className={styles.editorPanel}>
                                                     <span className={styles.editorTitle}>Edit request — {req.customer_name}</span>
                                                     <div className={styles.editorGrid}>
@@ -1409,7 +1465,7 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                                         the reason is a required BM Input, blocked client-side when empty. */}
                                     {cancelConfirmId === req.id && (
                                         <tr className={styles.editorRow}>
-                                            <td colSpan={8}>
+                                            <td colSpan={9}>
                                                 <div className={styles.cancelPanel}>
                                                     <span className={styles.editorTitle}>Cancel request — {req.customer_name}</span>
                                                     <label className={styles.fieldLabel} htmlFor={`cancel-reason-${req.id}`}>Reason for cancellation (required)</label>
@@ -1435,7 +1491,7 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                                         Service Request". Submitting sets the request to Under Review. */}
                                     {logComplaintId === req.id && (
                                         <tr className={styles.editorRow}>
-                                            <td colSpan={8}>
+                                            <td colSpan={9}>
                                                 <div className={styles.cancelPanel}>
                                                     <span className={styles.editorTitle}>Log complaint — {req.customer_name}</span>
                                                     <label className={styles.fieldLabel} htmlFor={`complaint-category-${req.id}`}>Issue type</label>
@@ -1477,7 +1533,7 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                                         uses — same underlying concept, only ever one open at a time. */}
                                     {reassignId === req.id && (
                                         <tr className={styles.editorRow}>
-                                            <td colSpan={8}>
+                                            <td colSpan={9}>
                                                 <div className={styles.cancelPanel}>
                                                     <span className={styles.editorTitle}>
                                                         Reassign — {req.customer_name} (currently {req.rider_id ? (rosterMap[req.rider_id] ?? req.rider_id) : '—'})
@@ -1522,7 +1578,7 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                                     {/* Delay reason panel (BM-US-02, story BM-011): dropdown + optional note. */}
                                     {delayReasonId === req.id && (
                                         <tr className={styles.editorRow}>
-                                            <td colSpan={8}>
+                                            <td colSpan={9}>
                                                 <div className={styles.cancelPanel}>
                                                     <span className={styles.editorTitle}>Log delay reason — {req.customer_name}</span>
                                                     <label className={styles.fieldLabel} htmlFor={`delay-category-${req.id}`}>Reason</label>
