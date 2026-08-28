@@ -553,8 +553,8 @@ export default function VehicleManagementPage() {
             )}
 
             {registrationOpen && (
-                <div className={styles.dialogOverlay} role="presentation">
-                    <form className={`${styles.dialogContent} ${styles.registrationDialog}`} onSubmit={(event) => void handleRegisterVehicle(event)} role="dialog" aria-modal="true" aria-labelledby="register-vehicle-title">
+                <div className={styles.dialogOverlay} role="presentation" onClick={closeRegistrationDialog}>
+                    <form className={`${styles.dialogContent} ${styles.registrationDialog}`} onSubmit={(event) => void handleRegisterVehicle(event)} onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="register-vehicle-title">
                         {registrationStep < vehicleSetupSteps.length ? (
                             <>
                                 <div className={styles.wizardHeader}>
