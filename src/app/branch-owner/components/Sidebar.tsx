@@ -38,7 +38,7 @@ const NAV_ENTRIES: SidebarNavEntry[] = [
     label: 'Customer',
     children: [
       { icon: Star, label: 'Ratings & Reviews', id: 'csat' },
-      { icon: Gift, label: 'Loyalty Program', id: 'loyalty' },
+      { icon: Gift, label: 'Rewards', id: 'loyalty' },
     ],
   },
   {

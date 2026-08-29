@@ -2,12 +2,11 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import {
+  Area,
+  AreaChart,
   Bar,
   BarChart,
-  CartesianGrid,
   Cell,
-  Line,
-  LineChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -20,23 +19,25 @@ import {
   fetchExpenses,
 } from '../../lib/expenses';
 import { Header } from './Header';
+import { KPICard } from './KPICard';
+import { Wallet, Fuel, Wrench, Zap, Package, Building2 } from 'lucide-react';
 
 const CATEGORY_COLORS: Record<ExpenseCategory, string> = {
-  'Gasoline, Fuel & Oil': '#1e3a5f',
-  'Repairs & Maintenance': '#d97706',
-  Utilities: '#0d9488',
-  Communication: '#0891b2',
-  'Branch Supplies': '#7c3aed',
-  'Facility Costs': '#e11d48',
+  'Gasoline, Fuel & Oil': '#007BC1',
+  'Repairs & Maintenance': '#41A3E0',
+  Utilities: '#2E86C1',
+  Communication: '#76B4DD',
+  'Branch Supplies': '#AED6F1',
+  'Facility Costs': '#1a5f8a',
 };
 
 const CATEGORY_STYLES: Record<ExpenseCategory, string> = {
   'Gasoline, Fuel & Oil': 'bg-blue-100 text-blue-900',
-  'Repairs & Maintenance': 'bg-amber-100 text-amber-800',
-  Utilities: 'bg-teal-100 text-teal-800',
-  Communication: 'bg-cyan-100 text-cyan-800',
-  'Branch Supplies': 'bg-violet-100 text-violet-800',
-  'Facility Costs': 'bg-rose-100 text-rose-800',
+  'Repairs & Maintenance': 'bg-sky-100 text-sky-800',
+  Utilities: 'bg-cyan-100 text-cyan-800',
+  Communication: 'bg-blue-50 text-blue-700',
+  'Branch Supplies': 'bg-indigo-100 text-indigo-800',
+  'Facility Costs': 'bg-slate-100 text-slate-800',
 };
 
 interface MonthExpenses {
@@ -71,14 +72,11 @@ function formatDate(value: string): string {
   }).format(new Date(year, month - 1, day));
 }
 
-function CompactKPICard({ title, value, accentColor }: { title: string; value: string; accentColor: string }) {
-  return (
-    <div className="flex min-h-24 flex-col rounded-xl border border-gray-200 bg-white p-4 transition-shadow hover:shadow-sm" style={{ borderLeft: `4px solid ${accentColor}` }}>
-      <div className="mb-2 text-[10px] font-medium uppercase leading-tight tracking-wide text-gray-500">{title}</div>
-      <div className="mt-auto text-2xl font-semibold leading-none text-gray-900">{value}</div>
-    </div>
-  );
-}
+const axisProps = {
+  axisLine: false as const,
+  tickLine: false as const,
+  stroke: '#9ca3af',
+};
 
 export function OperationalExpenses() {
   const [months, setMonths] = useState<MonthExpenses[]>([]);
@@ -141,13 +139,11 @@ export function OperationalExpenses() {
 
   const utilitiesAndCommunication = categoryTotal('Utilities') + categoryTotal('Communication');
   const recentExpenses = currentExpenses.slice(0, 6);
+  const placeholder = loading ? '—' : '';
 
   return (
     <div className="flex-1 overflow-y-auto">
-      <Header
-        title="Operational Expenses"
-        description="Monitor the operational expenses recorded by your Branch Manager."
-      />
+      <Header title="Operational Expenses" />
 
       <div className="space-y-6 p-8">
         {error && (
@@ -163,109 +159,164 @@ export function OperationalExpenses() {
           </div>
         )}
 
-        {!error && <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-6">
-          <CompactKPICard title="Total this month" value={loading ? '—' : formatPeso(currentTotal)} accentColor="#38bdf8" />
-          <CompactKPICard title="Fuel & oil" value={loading ? '—' : formatPeso(categoryTotal('Gasoline, Fuel & Oil'))} accentColor="#1e3a5f" />
-          <CompactKPICard title="Repairs" value={loading ? '—' : formatPeso(categoryTotal('Repairs & Maintenance'))} accentColor="#d97706" />
-          <CompactKPICard title="Utilities & communication" value={loading ? '—' : formatPeso(utilitiesAndCommunication)} accentColor="#0d9488" />
-          <CompactKPICard title="Branch supplies" value={loading ? '—' : formatPeso(categoryTotal('Branch Supplies'))} accentColor="#7c3aed" />
-          <CompactKPICard title="Facility costs" value={loading ? '—' : formatPeso(categoryTotal('Facility Costs'))} accentColor="#e11d48" />
-        </div>}
-
-        {!error && <div className="rounded-lg border border-gray-200 bg-white p-6">
-          <div className="mb-5 flex items-center justify-between">
-            <div>
-              <h3 className="font-semibold text-gray-900">Total Expense Trend</h3>
-              <p className="mt-1 text-xs text-gray-500">Last six months of recorded branch expenses</p>
-            </div>
+        {!error && (
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-6">
+            <KPICard
+              title="Total This Month"
+              value={loading ? placeholder : formatPeso(currentTotal)}
+              icon={<Wallet className="w-4 h-4 text-[#007BC1]" />}
+              accentColor="#007BC1"
+            />
+            <KPICard
+              title="Fuel & Oil"
+              value={loading ? placeholder : formatPeso(categoryTotal('Gasoline, Fuel & Oil'))}
+              icon={<Fuel className="w-4 h-4 text-[#007BC1]" />}
+              accentColor="#007BC1"
+            />
+            <KPICard
+              title="Repairs"
+              value={loading ? placeholder : formatPeso(categoryTotal('Repairs & Maintenance'))}
+              icon={<Wrench className="w-4 h-4 text-[#007BC1]" />}
+              accentColor="#007BC1"
+            />
+            <KPICard
+              title="Utilities & Comms"
+              value={loading ? placeholder : formatPeso(utilitiesAndCommunication)}
+              icon={<Zap className="w-4 h-4 text-[#2E86C1]" />}
+              accentColor="#2E86C1"
+            />
+            <KPICard
+              title="Branch Supplies"
+              value={loading ? placeholder : formatPeso(categoryTotal('Branch Supplies'))}
+              icon={<Package className="w-4 h-4 text-[#2E86C1]" />}
+              accentColor="#2E86C1"
+            />
+            <KPICard
+              title="Facility Costs"
+              value={loading ? placeholder : formatPeso(categoryTotal('Facility Costs'))}
+              icon={<Building2 className="w-4 h-4 text-[#2E86C1]" />}
+              accentColor="#2E86C1"
+            />
           </div>
-          <ResponsiveContainer width="100%" height={280}>
-            <LineChart data={trendData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-              <XAxis dataKey="month" stroke="#9ca3af" style={{ fontSize: '12px' }} />
-              <YAxis stroke="#9ca3af" style={{ fontSize: '12px' }} tickFormatter={(value) => `₱${Math.round(Number(value) / 1000)}k`} />
-              <Tooltip formatter={(value) => [formatPeso(Number(value)), 'Expenses']} />
-              <Line type="monotone" dataKey="amount" stroke="#1e3a5f" strokeWidth={2} dot={{ fill: '#1e3a5f', r: 4 }} activeDot={{ r: 6 }} />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>}
+        )}
 
-        {!error && <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-          <div className="rounded-lg border border-gray-200 bg-white p-6">
-            <h3 className="mb-4 font-semibold text-gray-900">Expenses by Category</h3>
-            <ResponsiveContainer width="100%" height={320}>
-              <BarChart data={categoryData} margin={{ top: 4, right: 4, left: 0, bottom: 45 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                <XAxis dataKey="category" interval={0} angle={-30} textAnchor="end" height={75} tick={{ fontSize: 10, fill: '#64748b' }} />
-                <YAxis stroke="#9ca3af" style={{ fontSize: '11px' }} tickFormatter={(value) => `₱${Math.round(Number(value) / 1000)}k`} />
-                <Tooltip formatter={(value) => [formatPeso(Number(value)), 'Amount']} />
-                <Bar dataKey="amount" fill="#1e3a5f" radius={[3, 3, 0, 0]} />
-              </BarChart>
+        {!error && (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+            <div className="mb-5 flex items-center justify-between">
+              <div>
+                <h3 className="font-semibold text-gray-900">Total Expense Trend</h3>
+                <p className="mt-1 text-xs text-gray-500">Last six months of recorded branch expenses</p>
+              </div>
+            </div>
+            <ResponsiveContainer width="100%" height={280}>
+              <AreaChart data={trendData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="expensesTrendFill" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#007BC1" stopOpacity={0.25} />
+                    <stop offset="100%" stopColor="#007BC1" stopOpacity={0.02} />
+                  </linearGradient>
+                </defs>
+                <XAxis dataKey="month" {...axisProps} style={{ fontSize: '11px' }} tick={{ dy: 4 }} />
+                <YAxis {...axisProps} style={{ fontSize: '11px' }} tickFormatter={(value) => `₱${Math.round(Number(value) / 1000)}k`} width={52} />
+                <Tooltip formatter={(value) => [formatPeso(Number(value)), 'Expenses']} />
+                <Area
+                  type="monotone"
+                  dataKey="amount"
+                  stroke="#007BC1"
+                  strokeWidth={2}
+                  fill="url(#expensesTrendFill)"
+                  dot={false}
+                  activeDot={{ r: 4 }}
+                />
+              </AreaChart>
             </ResponsiveContainer>
           </div>
+        )}
 
-          <div className="rounded-lg border border-gray-200 bg-white p-6">
-            <h3 className="mb-4 font-semibold text-gray-900">Expense Distribution</h3>
-            <ResponsiveContainer width="100%" height={320}>
-              <BarChart data={categoryData} layout="vertical" margin={{ top: 0, right: 20, left: 42, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" horizontal vertical={false} stroke="#f3f4f6" />
-                <XAxis type="number" hide />
-                <YAxis dataKey="category" type="category" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#4b5563' }} width={145} />
-                <Tooltip formatter={(value) => [formatPeso(Number(value)), 'Amount']} />
-                <Bar dataKey="amount" radius={[0, 4, 4, 0]} barSize={16}>
-                  {categoryData.map((entry) => <Cell key={entry.category} fill={entry.color} />)}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>}
-
-        {!error && <div className="rounded-lg border border-gray-200 bg-white p-6">
-          <div className="mb-6 flex items-center justify-between">
-            <div>
-              <h3 className="font-semibold text-gray-900">Expenses Log</h3>
-              <p className="mt-1 text-xs text-gray-500">Current month · database records</p>
+        {!error && (
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+              <h3 className="mb-4 font-semibold text-gray-900">Expenses by Category</h3>
+              <ResponsiveContainer width="100%" height={320}>
+                <BarChart data={categoryData} margin={{ top: 4, right: 4, left: 0, bottom: 45 }}>
+                  <XAxis dataKey="category" interval={0} angle={-30} textAnchor="end" height={75} tick={{ fontSize: 10, fill: '#64748b' }} {...axisProps} />
+                  <YAxis {...axisProps} style={{ fontSize: '11px' }} tickFormatter={(value) => `₱${Math.round(Number(value) / 1000)}k`} width={52} />
+                  <Tooltip formatter={(value) => [formatPeso(Number(value)), 'Amount']} cursor={{ fill: 'rgba(0, 123, 193, 0.06)' }} />
+                  <Bar dataKey="amount" radius={[4, 4, 0, 0]}>
+                    {categoryData.map((entry) => (
+                      <Cell key={entry.category} fill={entry.color} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
             </div>
-            <button
-              type="button"
-              onClick={() => window.dispatchEvent(new CustomEvent('navigate', { detail: 'expenses-log-full' }))}
-              className="text-xs font-medium text-[#007BC1] transition-colors hover:text-[#005a8f]"
-            >
-              View all
-            </button>
-          </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-gray-200">
-                  <th className="pb-3 pr-4 text-left text-[11px] font-medium uppercase tracking-wide text-gray-500">Date</th>
-                  <th className="pb-3 pr-4 text-left text-[11px] font-medium uppercase tracking-wide text-gray-500">Reference no.</th>
-                  <th className="pb-3 pr-4 text-left text-[11px] font-medium uppercase tracking-wide text-gray-500">Category</th>
-                  <th className="pb-3 pr-4 text-left text-[11px] font-medium uppercase tracking-wide text-gray-500">Description</th>
-                  <th className="pb-3 pr-4 text-right text-[11px] font-medium uppercase tracking-wide text-gray-500">Amount</th>
-                  <th className="pb-3 text-left text-[11px] font-medium uppercase tracking-wide text-gray-500">Recorded by</th>
-                </tr>
-              </thead>
-              <tbody>
-                {loading ? (
-                  <tr><td colSpan={6} className="py-10 text-center text-sm text-gray-400">Loading expenses…</td></tr>
-                ) : recentExpenses.length === 0 ? (
-                  <tr><td colSpan={6} className="py-10 text-center text-sm text-gray-400">No expenses have been recorded this month.</td></tr>
-                ) : recentExpenses.map((expense, index) => (
-                  <tr key={expense.id} className={`border-b border-gray-100 ${index % 2 === 1 ? 'bg-gray-50' : ''}`}>
-                    <td className="whitespace-nowrap py-3 pr-4 text-[13px] text-gray-900">{formatDate(expense.expense_date)}</td>
-                    <td className="whitespace-nowrap py-3 pr-4 font-mono text-[13px] text-gray-900">{expense.reference_no ?? '—'}</td>
-                    <td className="whitespace-nowrap py-3 pr-4"><span className={`inline-block rounded-full px-2.5 py-0.5 text-[11px] font-medium ${CATEGORY_STYLES[expense.category]}`}>{expense.category}</span></td>
-                    <td className="max-w-[260px] truncate py-3 pr-4 text-[13px] text-gray-700">{expense.description}</td>
-                    <td className="whitespace-nowrap py-3 pr-4 text-right text-[13px] font-medium text-gray-900">{formatPeso(Number(expense.amount))}</td>
-                    <td className="whitespace-nowrap py-3 text-[13px] text-gray-600">Branch Manager</td>
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+              <h3 className="mb-4 font-semibold text-gray-900">Expense Distribution</h3>
+              <ResponsiveContainer width="100%" height={320}>
+                <BarChart data={categoryData} layout="vertical" margin={{ top: 0, right: 20, left: 42, bottom: 0 }}>
+                  <XAxis type="number" hide />
+                  <YAxis dataKey="category" type="category" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#4b5563' }} width={145} />
+                  <Tooltip formatter={(value) => [formatPeso(Number(value)), 'Amount']} cursor={{ fill: 'rgba(0, 123, 193, 0.06)' }} />
+                  <Bar dataKey="amount" radius={[0, 4, 4, 0]} barSize={16}>
+                    {categoryData.map((entry) => (
+                      <Cell key={entry.category} fill={entry.color} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        )}
+
+        {!error && (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+            <div className="mb-6 flex items-center justify-between">
+              <div>
+                <h3 className="font-semibold text-gray-900">Expenses Log</h3>
+                <p className="mt-1 text-xs text-gray-500">Current month · database records</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => window.dispatchEvent(new CustomEvent('navigate', { detail: 'expenses-log-full' }))}
+                className="text-xs font-medium text-[#007BC1] transition-colors hover:text-[#005a8f]"
+              >
+                View all
+              </button>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-gray-200">
+                    <th className="pb-3 pr-4 text-left text-[11px] font-medium text-gray-600">Date</th>
+                    <th className="pb-3 pr-4 text-left text-[11px] font-medium text-gray-600">Reference no.</th>
+                    <th className="pb-3 pr-4 text-left text-[11px] font-medium text-gray-600">Category</th>
+                    <th className="pb-3 pr-4 text-left text-[11px] font-medium text-gray-600">Description</th>
+                    <th className="pb-3 pr-4 text-right text-[11px] font-medium text-gray-600">Amount</th>
+                    <th className="pb-3 text-left text-[11px] font-medium text-gray-600">Recorded by</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {loading ? (
+                    <tr><td colSpan={6} className="py-10 text-center text-sm text-gray-400">Loading expenses…</td></tr>
+                  ) : recentExpenses.length === 0 ? (
+                    <tr><td colSpan={6} className="py-10 text-center text-sm text-gray-400">No expenses have been recorded this month.</td></tr>
+                  ) : recentExpenses.map((expense, index) => (
+                    <tr key={expense.id} className={`border-b border-gray-100 ${index % 2 === 1 ? 'bg-gray-50' : ''}`}>
+                      <td className="whitespace-nowrap py-3 pr-4 text-[13px] text-gray-900">{formatDate(expense.expense_date)}</td>
+                      <td className="whitespace-nowrap py-3 pr-4 font-mono text-[13px] text-gray-900">{expense.reference_no ?? '—'}</td>
+                      <td className="whitespace-nowrap py-3 pr-4"><span className={`inline-block rounded-full px-2.5 py-0.5 text-[11px] font-medium ${CATEGORY_STYLES[expense.category]}`}>{expense.category}</span></td>
+                      <td className="max-w-[260px] truncate py-3 pr-4 text-[13px] text-gray-700">{expense.description}</td>
+                      <td className="whitespace-nowrap py-3 pr-4 text-right text-[13px] font-medium text-gray-900">{formatPeso(Number(expense.amount))}</td>
+                      <td className="whitespace-nowrap py-3 text-[13px] text-gray-600">Branch Manager</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>}
+        )}
       </div>
     </div>
   );

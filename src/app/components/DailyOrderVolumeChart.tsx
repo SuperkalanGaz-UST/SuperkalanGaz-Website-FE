@@ -19,7 +19,7 @@ export function DailyOrderVolumeChart() {
   const branches = ['All Branches', 'Quezon City', 'Calamba', 'Sta. Rosa'];
 
   return (
-    <div className="bg-white rounded-lg border border-gray-200 p-6">
+    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
       <div className="flex items-center justify-between mb-4">
         <h3 className="font-semibold text-gray-900">Daily Order Volume — All Branches</h3>
         <div className="relative">

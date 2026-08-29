@@ -73,6 +73,7 @@ export function AppSidebar({ entries, activeScreen, onNavigate }: AppSidebarProp
               aria-hidden="true"
               width={80}
               height={57}
+              loading="eager"
               className={`h-auto w-20 object-contain transition-opacity duration-100 ${
                 isExpanded ? 'opacity-0' : 'opacity-100'
               }`}
@@ -86,6 +87,7 @@ export function AppSidebar({ entries, activeScreen, onNavigate }: AppSidebarProp
               aria-hidden="true"
               width={160}
               height={115}
+              loading="eager"
               className={`h-auto w-40 object-contain transition-opacity duration-100 ${
                 isExpanded ? 'opacity-100' : 'opacity-0'
               }`}
@@ -95,7 +97,10 @@ export function AppSidebar({ entries, activeScreen, onNavigate }: AppSidebarProp
         </div>
 
         {isExpanded ? (
-          <nav className="min-h-0 flex-1 overflow-y-auto px-4 pb-4" aria-label="Expanded navigation">
+          <nav
+            className="min-h-0 flex-1 overflow-y-auto px-4 pb-4 scrollbar-hide"
+            aria-label="Expanded navigation"
+          >
             {entries.map((entry) => {
               if (entry.id) {
                 const isActive = activeScreen === entry.id;
@@ -142,7 +147,10 @@ export function AppSidebar({ entries, activeScreen, onNavigate }: AppSidebarProp
             })}
           </nav>
         ) : (
-          <nav className="min-h-0 flex-1 overflow-y-auto px-3 pb-4" aria-label="Compact navigation">
+          <nav
+            className="min-h-0 flex-1 overflow-y-auto px-3 pb-4 scrollbar-hide"
+            aria-label="Compact navigation"
+          >
             <div className="flex flex-col items-center justify-start gap-1">
               {entries.map((entry, index) => {
                 const isActive = entryIsActive(entry, activeScreen);

@@ -8,6 +8,8 @@ export interface KPITrend {
   /**
    * Whether the movement is good news (green) or bad (red). Kept separate
    * from direction because e.g. expenses going down is positive.
+   * NOTE: color is now driven by direction — up = green, down = red —
+   * so `positive` is retained only for semantic tagging and future use.
    */
   positive: boolean;
 }
@@ -26,28 +28,27 @@ interface KPICardProps {
 
 export function KPICard({ title, value, subtitle, icon, alert, accentColor = '#007BC1', trend }: KPICardProps) {
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 relative">
+    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 relative flex flex-col min-h-[120px]">
       {icon && (
         <div
           className="absolute top-4 right-4 w-9 h-9 rounded-full flex items-center justify-center"
-          // 15% alpha of the accent color so the chip stays subtle on white
           style={{ backgroundColor: `${accentColor}26` }}
         >
           {icon}
         </div>
       )}
 
-      <div className={`text-sm font-medium text-gray-500 mb-2 ${icon ? 'pr-12' : ''}`}>{title}</div>
-      <div className={`text-3xl font-semibold leading-none ${alert ? 'text-[#CC1903]' : 'text-gray-900'}`}>
+      <div className={`text-sm font-medium text-gray-500 ${icon ? 'pr-12' : ''}`}>{title}</div>
+      <div className={`text-3xl font-bold mt-2 leading-none ${alert ? 'text-[#CC1903]' : 'text-gray-900'}`}>
         {value}
       </div>
 
-      {subtitle && <div className="text-xs text-gray-500 mt-1.5">{subtitle}</div>}
+      {subtitle && <div className="text-xs text-gray-500 mt-1">{subtitle}</div>}
 
       {trend && (
         <div
-          className={`flex items-center gap-1 text-xs font-medium mt-2.5 ${
-            trend.positive ? 'text-green-600' : 'text-red-600'
+          className={`flex items-center gap-1 text-xs font-medium mt-auto pt-3 ${
+            trend.direction === 'up' ? 'text-green-600' : 'text-red-600'
           }`}
         >
           {trend.direction === 'up' ? (

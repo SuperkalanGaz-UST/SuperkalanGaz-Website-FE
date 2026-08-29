@@ -3,6 +3,7 @@ import { KPICard } from "./KPICard";
 import { DailyOrderVolumeChart } from "./DailyOrderVolumeChart";
 import { OrdersByStatusChart } from "./OrdersByStatusChart";
 import { DeliveryCompletionTable } from "./DeliveryCompletionTable";
+import { ShoppingCart, CheckCircle2, XCircle, Truck } from "lucide-react";
 
 const topCustomers = [
   { name: 'Maria Dela Cruz Santos', branch: 'Quezon City', totalOrders: 18, loyaltyPoints: '18/30', avgRating: 4.2 },
@@ -21,10 +22,34 @@ export function OrderAnalytics() {
 
       <div className="p-8">
         <div className="grid grid-cols-4 gap-6 mb-8">
-          <KPICard title="Total Orders This Month" value="1,847" accentColor="#eab308" />
-          <KPICard title="Total Completed Deliveries" value="1,739" accentColor="#22c55e" />
-          <KPICard title="Total Cancelled / Failed" value="108" accentColor="#ef4444" />
-          <KPICard title="Avg. Delivery Completion Rate" value="96.4%" accentColor="#1A6FBF" />
+          <KPICard
+            title="Total Orders This Month"
+            value="1,847"
+            icon={<ShoppingCart className="w-4 h-4 text-[#eab308]" />}
+            accentColor="#eab308"
+            subtitle="+6.2% from last month"
+          />
+          <KPICard
+            title="Total Completed Deliveries"
+            value="1,739"
+            icon={<CheckCircle2 className="w-4 h-4 text-[#22c55e]" />}
+            accentColor="#22c55e"
+            subtitle="+4.8% from last month"
+          />
+          <KPICard
+            title="Total Cancelled / Failed"
+            value="108"
+            icon={<XCircle className="w-4 h-4 text-[#ef4444]" />}
+            accentColor="#ef4444"
+            subtitle="-1.5% from last month"
+          />
+          <KPICard
+            title="Avg. Delivery Completion Rate"
+            value="96.4%"
+            icon={<Truck className="w-4 h-4 text-[#1A6FBF]" />}
+            accentColor="#1A6FBF"
+            subtitle="Across all branches"
+          />
         </div>
 
         <div className="grid grid-cols-2 gap-6 mb-8">
@@ -35,7 +60,7 @@ export function OrderAnalytics() {
         <DeliveryCompletionTable />
 
         {/* Top Customers Table */}
-        <div className="bg-white rounded-lg border border-gray-200 p-6 mt-6">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mt-6">
           <div className="flex items-center justify-between mb-4">
             <div>
               <h3 className="font-semibold text-gray-900">Top Customers</h3>

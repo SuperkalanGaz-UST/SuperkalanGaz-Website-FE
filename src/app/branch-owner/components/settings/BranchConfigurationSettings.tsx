@@ -141,14 +141,12 @@ export function BranchConfigurationSettings() {
                 aria-checked={form.dualAuth}
                 aria-label="Require dual authorization for redemptions"
                 onClick={() => updateField('dualAuth', !form.dualAuth)}
-                className={`relative mt-0.5 inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${
-                  form.dualAuth ? 'bg-[#007BC1]' : 'bg-gray-300'
-                }`}
+                className={`relative mt-0.5 inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${form.dualAuth ? 'bg-[#007BC1]' : 'bg-gray-300'
+                  }`}
               >
                 <span
-                  className={`inline-block h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${
-                    form.dualAuth ? 'translate-x-6' : 'translate-x-1'
-                  }`}
+                  className={`inline-block h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${form.dualAuth ? 'translate-x-6' : 'translate-x-1'
+                    }`}
                 />
               </button>
             </div>

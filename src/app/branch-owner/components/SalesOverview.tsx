@@ -1,8 +1,11 @@
 import { useState } from 'react';
 import { Header } from './Header';
 import { KPICard } from './KPICard';
-import { ArrowUp } from 'lucide-react';
-import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
+import { TrendingUp, ShoppingBag, ArrowUpRight } from 'lucide-react';
+import {
+  AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
+  PieChart, Pie, Cell, Legend
+} from 'recharts';
 
 const monthlyRevenueData = [
   { month: 'Dec', revenue: 198000 },
@@ -20,14 +23,14 @@ const quarterlyRevenueData = [
 ];
 
 const revenueByTankData = [
-  { size: '2.7kg', revenue: 120000 },
-  { size: '5kg', revenue: 98500 },
-  { size: '11kg', revenue: 66000 },
+  { size: '2.7kg', revenue: 120000, color: '#007BC1' },
+  { size: '5kg', revenue: 98500, color: '#41A3E0' },
+  { size: '11kg', revenue: 66000, color: '#76B4DD' },
 ];
 
 const ordersByTankData = [
-  { name: '2.7kg', value: 52, color: '#1e3a5f' },
-  { name: '5kg', value: 31, color: '#007BC1' },
+  { name: '2.7kg', value: 52, color: '#007BC1' },
+  { name: '5kg', value: 31, color: '#41A3E0' },
   { name: '11kg', value: 17, color: '#76B4DD' },
 ];
 
@@ -52,6 +55,14 @@ const salesData = [
   { id: '18', date: 'Apr 24, 2026', receipt: 'RCP-0018', customer: 'Luna Santos', orders: 2, spent: 2200, paid: 'Paid' },
 ];
 
+const axisProps = {
+  axisLine: false as const,
+  tickLine: false as const,
+  stroke: '#9ca3af',
+};
+
+const pesoTooltip = (v: number | string) => [`₱${Number(v).toLocaleString()}`, 'Revenue'];
+
 export function SalesOverview() {
   const [chartView, setChartView] = useState<'monthly' | 'quarterly'>('monthly');
 
@@ -68,29 +79,33 @@ export function SalesOverview() {
       </div>
 
       <div className="p-8">
-
         <div className="grid grid-cols-3 gap-6 mb-8">
           <KPICard
             title="Total Revenue This Month"
             value="₱284,500"
+            icon={<TrendingUp className="w-4 h-4 text-[#007BC1]" />}
             accentColor="#007BC1"
+            trend={{ text: "+12.4% from last month", direction: "up", positive: true }}
           />
           <KPICard
             title="Total Orders Completed"
             value="274"
+            icon={<ShoppingBag className="w-4 h-4 text-[#007BC1]" />}
             accentColor="#007BC1"
+            trend={{ text: "+8.3% from last month", direction: "up", positive: true }}
           />
           <KPICard
             title="Revenue vs Last Month"
             value="+12.4%"
-            icon={<ArrowUp className="w-5 h-5 text-green-600" />}
+            icon={<ArrowUpRight className="w-4 h-4 text-[#22c55e]" />}
             accentColor="#22c55e"
+            trend={{ text: "Compared to Apr 2026", direction: "up", positive: true }}
           />
         </div>
 
-        <div className="bg-white rounded-lg border border-gray-200 p-6 mb-8">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-8">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="font-semibold text-gray-900">Monthly Revenue Trend</h3>
+            <h3 className="font-semibold text-gray-900">Revenue Trend</h3>
             <div className="flex gap-2">
               <button
                 onClick={() => setChartView('monthly')}
@@ -115,31 +130,47 @@ export function SalesOverview() {
             </div>
           </div>
           <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={revenueData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-              <XAxis dataKey={xKey} stroke="#9ca3af" style={{ fontSize: '12px' }} />
-              <YAxis stroke="#9ca3af" style={{ fontSize: '12px' }} tickFormatter={(value) => `₱${(value / 1000).toFixed(0)}k`} />
-              <Tooltip formatter={(value) => `₱${Number(value).toLocaleString()}`} />
-              <Line type="monotone" dataKey="revenue" stroke="#1e3a5f" strokeWidth={2} dot={{ fill: '#1e3a5f', r: 4 }} />
-            </LineChart>
+            <AreaChart data={revenueData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+              <defs>
+                <linearGradient id="salesRevenueFill" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#007BC1" stopOpacity={0.25} />
+                  <stop offset="100%" stopColor="#007BC1" stopOpacity={0.02} />
+                </linearGradient>
+              </defs>
+              <XAxis dataKey={xKey} {...axisProps} style={{ fontSize: '11px' }} tick={{ dy: 4 }} />
+              <YAxis {...axisProps} style={{ fontSize: '11px' }} tickFormatter={(value) => `₱${(value / 1000).toFixed(0)}k`} width={52} />
+              <Tooltip formatter={pesoTooltip} />
+              <Area
+                type="monotone"
+                dataKey="revenue"
+                stroke="#007BC1"
+                strokeWidth={2}
+                fill="url(#salesRevenueFill)"
+                dot={false}
+                activeDot={{ r: 4 }}
+              />
+            </AreaChart>
           </ResponsiveContainer>
         </div>
 
         <div className="grid grid-cols-2 gap-6 mb-8">
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
             <h3 className="font-semibold text-gray-900 mb-4">Revenue by LPG Tank Size</h3>
             <ResponsiveContainer width="100%" height={250}>
-              <BarChart data={revenueByTankData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                <XAxis dataKey="size" stroke="#9ca3af" style={{ fontSize: '12px' }} />
-                <YAxis stroke="#9ca3af" style={{ fontSize: '12px' }} tickFormatter={(value) => `₱${(value / 1000).toFixed(0)}k`} />
-                <Tooltip formatter={(value) => `₱${Number(value).toLocaleString()}`} />
-                <Bar dataKey="revenue" fill="#1e3a5f" radius={[4, 4, 0, 0]} />
+              <BarChart data={revenueByTankData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+                <XAxis dataKey="size" {...axisProps} style={{ fontSize: '11px' }} tick={{ dy: 4 }} />
+                <YAxis {...axisProps} style={{ fontSize: '11px' }} tickFormatter={(value) => `₱${(value / 1000).toFixed(0)}k`} width={52} />
+                <Tooltip formatter={pesoTooltip} cursor={{ fill: 'rgba(0, 123, 193, 0.06)' }} />
+                <Bar dataKey="revenue" radius={[4, 4, 0, 0]}>
+                  {revenueByTankData.map((entry) => (
+                    <Cell key={entry.size} fill={entry.color} />
+                  ))}
+                </Bar>
               </BarChart>
             </ResponsiveContainer>
           </div>
 
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
             <h3 className="font-semibold text-gray-900 mb-4">Orders by Tank Size</h3>
             <ResponsiveContainer width="100%" height={250}>
               <PieChart>
@@ -151,22 +182,25 @@ export function SalesOverview() {
                   outerRadius={80}
                   paddingAngle={2}
                   dataKey="value"
+                  stroke="none"
                 >
                   {ordersByTankData.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={entry.color} />
                   ))}
                 </Pie>
+                <Tooltip formatter={(value) => [`${value} Orders`, 'Volume']} />
                 <Legend
                   verticalAlign="bottom"
                   height={36}
-                  formatter={(value, entry: any) => `${value} - ${entry.payload.value}%`}
+                  formatter={(value, entry: any) => <span className="text-sm font-medium text-gray-700">{`${value} - ${entry.payload.value}%`}</span>}
+                  iconType="circle"
                 />
               </PieChart>
             </ResponsiveContainer>
           </div>
         </div>
 
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
           <div className="flex justify-between items-center mb-6">
             <h3 className="font-semibold text-gray-900">Sales</h3>
             <a 

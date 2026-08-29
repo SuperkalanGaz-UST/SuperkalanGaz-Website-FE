@@ -241,7 +241,7 @@ function downloadCsv(report: LoadedReport, branch: string, period: string): void
   if (report.type === 'csat') {
     const data = report.data;
     rows.push(
-      ['CSAT Summary'],
+      ['Customer Satisfaction'],
       ['Average rating', data.averageStars],
       ['Responses', data.totalResponses],
       ['Delivered Service Requests', data.deliveredRequests],
@@ -254,7 +254,7 @@ function downloadCsv(report: LoadedReport, branch: string, period: string): void
   } else {
     const data = report.data;
     rows.push(
-      ['SLA Compliance'],
+      ['Performance Metrics'],
       ['Overall compliance', data.overallComplianceRate],
       ['Service Requests', data.totalServiceRequests],
       ['Evaluated', data.evaluatedRequests],
@@ -705,7 +705,7 @@ export function ReportGeneration() {
     );
   };
 
-  const reportTitle = preview.type === 'csat' ? 'CSAT Summary' : 'SLA Compliance';
+  const reportTitle = preview.type === 'csat' ? 'Customer Satisfaction' : 'Performance Metrics';
   const exportLabel = `Export ${exportFormat.toUpperCase()}`;
 
   return (
@@ -726,8 +726,8 @@ export function ReportGeneration() {
                 <legend className="mb-3 text-xs font-semibold text-gray-800">Report type</legend>
                 <div className="space-y-2.5">
                   {([
-                    ['csat', 'CSAT Summary'],
-                    ['sla', 'SLA Compliance'],
+                    ['csat', 'Customer Satisfaction'],
+                    ['sla', 'Performance Metrics'],
                   ] as const).map(([value, label]) => {
                     const selected = draftType === value;
                     return (

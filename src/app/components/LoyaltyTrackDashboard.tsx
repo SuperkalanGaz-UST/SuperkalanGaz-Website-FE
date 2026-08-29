@@ -371,9 +371,8 @@ export function LoyaltyTrackDashboard({ scopeLabel }: LoyaltyTrackDashboardProps
                 aria-selected={isActive}
                 aria-controls={`${track}-loyalty-panel`}
                 onClick={() => setActiveTrack(track)}
-                className={`relative min-w-32 px-4 pb-3 pt-1 text-left text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#007BC1] focus-visible:ring-offset-2 ${
-                  isActive ? 'text-[#007BC1]' : 'text-gray-500 hover:text-gray-800'
-                }`}
+                className={`relative min-w-32 px-4 pb-3 pt-1 text-left text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#007BC1] focus-visible:ring-offset-2 ${isActive ? 'text-[#007BC1]' : 'text-gray-500 hover:text-gray-800'
+                  }`}
               >
                 {label}
                 <span
