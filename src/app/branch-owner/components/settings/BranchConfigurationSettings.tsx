@@ -31,11 +31,13 @@ const numberFieldClassName =
 
 /** Combined loyalty and inventory controls, always scoped to the selected BO branch. */
 export function BranchConfigurationSettings() {
-  const { selectedBranch } = useBranch();
+  const { selectedBranch, selectedBranchId } = useBranch();
   const [savedByBranch, setSavedByBranch] = useState<Record<string, BranchConfiguration>>({});
   const savedConfiguration = useMemo(
-    () => savedByBranch[selectedBranch] ?? defaultConfiguration,
-    [savedByBranch, selectedBranch],
+    () =>
+      (selectedBranchId ? savedByBranch[selectedBranchId] : undefined) ??
+      defaultConfiguration,
+    [savedByBranch, selectedBranchId],
   );
   const [form, setForm] = useState<BranchConfiguration>(savedConfiguration);
   const [saving, setSaving] = useState(false);
@@ -47,8 +49,11 @@ export function BranchConfigurationSettings() {
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
+      if (!selectedBranchId) return;
       try {
-        const response = await apiFetch('/loyalty/settings');
+        const response = await apiFetch(
+          `/loyalty/settings?branchId=${encodeURIComponent(selectedBranchId)}`,
+        );
         const data = await response.json();
         if (!response.ok) throw new Error(apiErrorMessage(data, 'Failed to load loyalty settings'));
         if (cancelled) return;
@@ -70,13 +75,17 @@ export function BranchConfigurationSettings() {
     };
     void load();
     return () => { cancelled = true; };
-  }, [selectedBranch]);
+  }, [selectedBranchId]);
 
   const updateField = <K extends keyof BranchConfiguration>(field: K, value: BranchConfiguration[K]) => {
     setForm((current) => ({ ...current, [field]: value }));
   };
 
   const handleSave = async () => {
+    if (!selectedBranchId) {
+      toast.error('Select an active branch before saving settings.');
+      return;
+    }
     const pointRates = Object.fromEntries(
       Object.entries(form.pointRates).map(([size, value]) => [size, Number(value)]),
     );
@@ -86,13 +95,16 @@ export function BranchConfigurationSettings() {
     }
     setSaving(true);
     try {
-      const response = await apiFetch('/loyalty/settings', {
-        method: 'PATCH',
-        body: JSON.stringify({ dualAuth: form.dualAuth, pointRates }),
-      });
+      const response = await apiFetch(
+        `/loyalty/settings?branchId=${encodeURIComponent(selectedBranchId)}`,
+        {
+          method: 'PATCH',
+          body: JSON.stringify({ dualAuth: form.dualAuth, pointRates }),
+        },
+      );
       const data = await response.json();
       if (!response.ok) throw new Error(apiErrorMessage(data, 'Failed to save loyalty settings'));
-      setSavedByBranch((current) => ({ ...current, [selectedBranch]: form }));
+      setSavedByBranch((current) => ({ ...current, [selectedBranchId]: form }));
       toast.success(`Loyalty settings saved for ${selectedBranch}.`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to save loyalty settings');
@@ -109,7 +121,11 @@ export function BranchConfigurationSettings() {
     <div id="branch-settings-panel" role="tabpanel" className="mx-auto max-w-7xl">
       <div className="mb-5 flex items-center gap-2 rounded-xl border border-[#B9DFF4] bg-[#EFF8FD] px-4 py-3 text-sm text-gray-700">
         <LockKeyhole className="h-4 w-4 shrink-0 text-[#007BC1]" aria-hidden="true" />
-        Settings apply to <span className="font-semibold text-gray-900">{selectedBranch}</span> only.
+        Settings apply to{' '}
+        <span className="font-semibold text-gray-900">
+          {selectedBranch || 'no active branch'}
+        </span>{' '}
+        only.
       </div>
 
       <div className="grid gap-6 xl:grid-cols-2">
@@ -272,7 +288,7 @@ export function BranchConfigurationSettings() {
         <button
           type="button"
           onClick={handleSave}
-          disabled={saving}
+          disabled={saving || !selectedBranchId}
           className="h-10 rounded-lg bg-[#007BC1] px-5 text-sm font-medium text-white transition hover:bg-[#0068A4]"
         >
           {saving ? 'Saving…' : 'Save branch settings'}

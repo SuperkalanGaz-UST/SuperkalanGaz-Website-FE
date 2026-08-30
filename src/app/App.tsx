@@ -128,7 +128,7 @@ export default function App() {
   const requestLogout = () => setShowLogoutConfirm(true);
 
   const handlePasswordReset = async () => {
-    // A recovery link creates a temporary authenticated session. End it after
+    // A verified recovery code creates a temporary authenticated session. End it after
     // the password changes so the user deliberately signs in with the new one.
     await supabase.auth.signOut();
     passwordRecoveryRef.current = false;
@@ -190,7 +190,11 @@ export default function App() {
           {account.role === 'franchise-admin' && <FranchiseAdminApp />}
           {account.role === 'branch-owner' && (
             // Remount when the branch set changes so BranchProvider re-initializes.
-            <BranchOwnerApp key={account.branches.join('|')} branches={account.branches} />
+            <BranchOwnerApp
+              key={`${account.branchIds.join('|')}::${account.branches.join('|')}`}
+              branchIds={account.branchIds}
+              branches={account.branches}
+            />
           )}
           {account.role === 'branch-manager' && <BranchManagerApp />}
 

@@ -1,0 +1,17 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": [
+          "<APPLE_TEAM_ID>.ph.superkalan.crm"
+        ],
+        "components": [
+          {
+            "/": "/delivery-rider-invitation",
+            "comment": "Open Delivery Rider invitations in the Superkalan Gaz app"
+          }
+        ]
+      }
+    ]
+  }
+}

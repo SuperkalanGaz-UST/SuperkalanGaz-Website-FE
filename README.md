@@ -64,11 +64,29 @@ Users live in Supabase Auth. Log in by **username** (mapped internally to
 ## How auth & users work
 
 - **`auth.users`** (Supabase) is the source of truth for identity and passwords.
-- CRM claims—`role`, `branches`, `username`, `display_name`, `phone`, and `status`—live in
-  each Auth user's service-role-managed **`app_metadata`**. There is no `public.profiles`
-  mirror or signup trigger.
+- CRM claims—`role`, `branch_ids`, display-only `branches`, `username`, `display_name`,
+  `phone`, and `status`—live in each Auth user's service-role-managed **`app_metadata`**.
+  There is no `public.profiles` mirror or signup trigger.
+- `branch_ids` is the authorization scope. A Branch Owner may have multiple UUIDs and uses
+  the header branch selector to choose one active context at a time; branch names never
+  authorize access. A Branch Manager has exactly one UUID.
 - **Creating new users:** the Branch Owner's *User Management* screen posts to `/api/users`,
   on the NestJS backend, which calls the Supabase Auth Admin API and writes the claims.
+
+### Authentication email delivery
+
+The shared Supabase project uses separate templates for separate proofs of identity:
+
+- **Confirm signup:** include `{{ .Token }}` only. Customer email verification uses a
+  six-digit code in mobile.
+- **Reset password:** include `{{ .Token }}` only. Mobile and web password recovery use a
+  six-digit code and never send a recovery link.
+- **Invite user:** include a link whose target is `{{ .ConfirmationURL }}`. Invitation-only
+  Franchise Administrator and Delivery Rider provisioning continues through a single-use,
+  expiring link.
+
+Set the Email OTP length to `6` in **Supabase Dashboard → Authentication → Sign In / Providers
+→ Email** so both clients match the hosted Auth configuration.
 
 Relevant files:
 

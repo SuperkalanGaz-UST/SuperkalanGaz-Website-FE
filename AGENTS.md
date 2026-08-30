@@ -90,23 +90,35 @@ Sections below are tagged `[api]`, `[web]`, `[mobile]`, or `[all]` where they ap
 - Isolation is enforced **at the application layer** via **NestJS guards reading JWT
   claims** — **NOT** Postgres Row-Level Security and **NOT** physical partitioning.
 - **Implication for you:** the database will not stop a cross-branch read. *You* must. Every
-  repository/service query for branch-owned data must apply the `branch_id` derived from the
-  authenticated principal. Do not trust a `branch_id` sent from the client body/params for
-  scoping; derive it from the verified JWT.
+  repository/service query for branch-owned data must apply a `branch_id` contained in the
+  authenticated principal's protected `app_metadata.branch_ids`. A Branch Owner may select
+  one active branch UUID from that authorized set as request context; the guard must validate
+  membership and inject the authorized context before a service uses it. Client input may
+  narrow verified scope but must never widen it or be trusted directly. For a Branch Owner,
+  the API also intersects those UUID claims with live `core.branches.owner_id` rows for that
+  Auth user, so the client must treat `/branches/assigned` as the effective branch list.
 - **Do not claim or comment that isolation is "DB-enforced."** It is guard-enforced. Accurate
   comments matter — this is a panel-defense point.
 
 Scoping by role (see §7 for full permissions):
 - **SA:** cross-branch governance and audit read visibility (no operational writes).
 - **FA:** cross-branch read visibility (no operational writes).
-- **BO / BM:** strictly their own `branch_id`.
+- **BO:** strictly one of their assigned `branch_ids`; a BO may own one or more branches.
+- **BM:** strictly their single assigned `branch_id`.
 - **Customer:** their own records only.
+
+For every Branch Owner action or branch-specific view, send the explicit UUID selected from
+`/branches/assigned` when the owner has multiple assignments. Never default a multi-branch owner
+to the first claim entry, and never use a branch name as selection state or an authorization key.
 
 ---
 
 ## 6. Database Conventions `[api]`
 
 - **7 schemas:** `core`, `cim`, `srd`, `fleet`, `loyalty`, `csat`, `inventory` (25 tables).
+- **Supabase Auth branch scope:** authorization uses protected UUIDs in
+  `app_metadata.branch_ids`. Branch names are display-only and must never be used by the
+  client or API as authorization handles.
 - **UUID primary keys** everywhere.
 - **No foreign-key constraints in the schema.** Referential integrity is enforced in the
   **NestJS service layer**. When writing services, validate referenced records exist and
@@ -124,13 +136,16 @@ Scoping by role (see §7 for full permissions):
 | ---- | --------- | ------ | ----------- |
 | **Super Administrator (SA)** | Web | Top-level governance; directly invite, resend, revoke, deactivate, and reactivate Franchise Administrator accounts; approve or reject FA-submitted SLA-threshold, price-configuration, and Branch Owner-reassignment requests; review immutable Franchise Administrator account, price-change, Branch Owner-change, approval, and security activity logs; cross-branch read visibility | Set or know an invited user's password; expose invitation credentials; submit or approve their own governance request; mutate audit history; perform operational writes; process service requests; dispatch; approve redemptions |
 | **Franchise Administrator (FA)** | Web | Cross-branch read visibility; submit system-wide SLA-threshold, price-configuration, and Branch Owner-reassignment requests for SA approval; perform initial branch and Branch Owner onboarding; manage other branch accounts | Create, invite, approve, deactivate, or reactivate Franchise Administrator accounts; approve governance requests; mutate audit history; perform operational writes; process service requests; dispatch; approve redemptions |
-| **Branch Owner (BO)** | Web | Configure **their branch only**: loyalty merchandise catalog, point rates, threshold values *within FA-set bounds*, Dual-Authorization toggle; view branch analytics | Process daily orders; dispatch; cross-branch access |
+| **Branch Owner (BO)** | Web | Own one or more assigned branches; select one authorized branch context at a time; configure that branch's loyalty merchandise catalog, point rates, threshold values *within FA-set bounds*, and Dual-Authorization toggle; view analytics for assigned branches | Process daily orders; dispatch; access any branch outside `branch_ids` |
 | **Branch Manager (BM)** | Web | **Day-to-day ops for their branch:** create/process service requests, prepare authorized Delivery Riders for dispatch, offer/dispatch service requests, assign branch vehicles, approve loyalty redemptions | Authorize Delivery Rider identity or branch membership; change SLA thresholds; act outside own branch |
-| **Delivery Rider (DR)** | **Mobile only** | Accept a Branch Owner invitation, manage availability after activation, accept or decline assigned service-request offers, and update delivery milestones | Choose or change authoritative `branch_id`; browse or claim unoffered requests; access another branch or staff governance screens |
+| **Delivery Rider (DR)** | **Web or mobile onboarding; mobile operations** | Accept a Branch Owner invitation through the dedicated registration flow, then use mobile to manage availability, accept or decline assigned service-request offers, and update delivery milestones | Access a web operations dashboard; choose or change authoritative `branch_id`; browse or claim unoffered requests; access another branch or staff governance screens |
 | **Customer (CU)** | **Mobile only** | Place orders, track delivery status *milestones*, submit CSAT | Access web dashboard; see live GPS coordinates |
 
 Hard constraints:
 - **BO and BM are always separate people.** Do not merge these roles or share a session.
+- **Branch Owner ownership is one-to-many.** A Branch Owner may own one or more branches;
+  each branch has exactly one active Branch Owner. A Branch Manager remains assigned to
+  exactly one branch. Store authorization as UUIDs, not editable branch names.
 - **SA and FA are governance roles with no operational write actions.** FA proposes
   system-wide SLA-threshold and price-configuration changes and Branch Owner reassignments;
   SA makes the approval decision. Initial branch/Branch Owner onboarding remains an FA
@@ -151,7 +166,12 @@ Hard constraints:
   must record actor, action, affected record, before/after values where applicable,
   timestamp, and reason where the action requires one.
 - **Delivery Rider provisioning is invitation-only.** A Branch Owner supplies the intended
-  identity; the API binds a single-use, expiring invitation to the Owner's JWT-derived branch.
+  identity; the API binds a single-use, expiring invitation to the server-validated active
+  branch selected from the Owner's JWT-derived `branch_ids`.
+- **Delivery Rider web access is registration-only.** The dedicated public, token-gated web
+  route may review the locked invitation, create the password, verify the PH mobile number,
+  and accept activation. It must then direct the Delivery Rider to mobile and must not expose
+  Delivery Rider operations or any staff dashboard.
 - **Invitation acceptance is the authorization.** Only the API writes protected `driver`,
   invitation-bound `branch_id`, and active claims to `app_metadata`. No Branch Manager
   approval or applicant-selected branch is allowed.
@@ -179,8 +199,9 @@ Hard constraints:
 4. **CSAT Feedback & Analytics** — post-delivery star ratings, complaint (Incident) logging,
    average response-time tracking.
 5. **Fleet Management** — Delivery Rider roster and vehicle assignment plus GPS via SinoTrack
-   ST-901 → Traccar → API. Delivery Riders use mobile for registration, availability, offer
-   acceptance, and milestones; live coordinates still come only from installed hardware
+   ST-901 → Traccar → API. Delivery Riders may register through the invitation-authorized web
+   or mobile flow, but use mobile for availability, offer acceptance, and milestones; live
+   coordinates still come only from installed hardware
    through Traccar. Hardware-dependent live GPS may be sprint-deferred.
 
 ### 8a. Loyalty Program Rules `[api] [web]`
@@ -203,13 +224,14 @@ Shared workflow:
 ### 8b. Delivery Rider invitation and branch activation `[api] [web] [mobile]`
 
 1. The Branch Owner issues a single-use, expiring invitation bound to the intended identity
-   and the Owner's JWT-derived branch.
-2. The invitee registers in mobile, verifies the invited identity, and sets their password;
-   the branch is not applicant-selectable.
+   and the server-validated active branch selected from the Owner's JWT-derived `branch_ids`.
+2. The invitee registers through the dedicated web page or mobile flow, verifies the invited
+   identity, and sets their password; the branch is not applicant-selectable.
 3. The API consumes the invitation, writes protected Delivery Rider role/branch claims, and records
    immutable attribution to the Branch Owner.
-4. The Rider appears Offline and unassigned. The Branch Manager manages vehicle readiness,
-   but cannot authorize identity or branch membership.
+4. Web registration ends with a mobile-app handoff. The Delivery Rider appears Offline and
+   unassigned. The Branch Manager manages vehicle readiness, but cannot authorize identity
+   or branch membership.
 
 ---
 
@@ -276,6 +298,8 @@ propose an in-scope alternative.
 ### `[web]`
 - App Router (Next.js). Server components for data fetch where sensible.
 - Role-gate every screen against §7; the UI must not render actions a role can't perform.
+- The public Delivery Rider invitation route is the sole Delivery Rider web surface. It is
+  token-gated, registration-only, and ends with an app handoff after activation.
 - Talk to the API only; no direct DB access from the web app.
 - **No backend lives in this repo.** All backend logic, API endpoints, database access, and
   Supabase Auth administration belong in **`superkalan-crm-api`**. Do not create Next.js API
@@ -368,3 +392,13 @@ integrity (no FK constraints).
 **DRIFT NOTE:** this util exists as identical copies in web and mobile. When AGENTS.md is
 split per-repo, this convention must be duplicated into each repo's file (or kept in a shared
 root file all agents read), not left in only one.
+
+<!-- BEGIN:nextjs-agent-rules -->
+
+# This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+
+<!-- END:nextjs-agent-rules -->

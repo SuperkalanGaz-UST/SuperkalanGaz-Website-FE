@@ -24,10 +24,11 @@ import { SalesFull } from './components/SalesFull';
 import { ExpensesLogFull } from './components/ExpensesLogFull';
 import { BranchProvider, useBranch } from './contexts/BranchContext';
 
-export type Branch = 'Quezon City Branch' | 'Makati Branch' | 'Mandaluyong Branch';
+export type Branch = string;
 
 interface BranchOwnerAppProps {
-  /** Branches assigned to the authenticated Branch Owner (from login). */
+  /** Protected UUID scope plus display labels from the authenticated session. */
+  branchIds: string[];
   branches: Branch[];
 }
 
@@ -47,7 +48,7 @@ function BranchContentTransition({ children }: { children: ReactNode }) {
   );
 }
 
-export function BranchOwnerApp({ branches }: BranchOwnerAppProps) {
+export function BranchOwnerApp({ branchIds, branches }: BranchOwnerAppProps) {
   const [activeScreen, setActiveScreen] = useState('dashboard');
 
   useEffect(() => {
@@ -61,7 +62,12 @@ export function BranchOwnerApp({ branches }: BranchOwnerAppProps) {
   }, []);
 
   return (
-    <BranchProvider initialBranches={branches}>
+    <BranchProvider
+      initialBranches={branchIds.flatMap((id, index) => {
+        const name = branches[index];
+        return name ? [{ id, name, geofence: null }] : [];
+      })}
+    >
       <div className="flex h-screen bg-gray-50">
         <Sidebar activeScreen={activeScreen} onNavigate={setActiveScreen} />
 

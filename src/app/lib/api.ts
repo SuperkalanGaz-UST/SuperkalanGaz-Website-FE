@@ -33,6 +33,23 @@ export async function apiFetch(path: string, init: RequestInit = {}): Promise<Re
 }
 
 /**
+ * Public NestJS request for high-entropy, expiring invitation capabilities.
+ * It deliberately skips Supabase session restoration; the API validates the
+ * invitation token and derives every protected identity/branch value itself.
+ */
+export async function apiPublicFetch(
+  path: string,
+  init: RequestInit = {},
+): Promise<Response> {
+  const headers = new Headers(init.headers);
+  if (init.body && !headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json');
+  }
+
+  return fetch(`${BASE_URL}/api${path}`, { ...init, headers });
+}
+
+/**
  * NestJS reports errors as { message: string | string[] } (validation errors
  * arrive as an array); older-style handlers used { error }. Normalize both.
  */

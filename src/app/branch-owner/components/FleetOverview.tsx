@@ -19,6 +19,7 @@ const BranchOwnerFleetMap = dynamic(
 export function FleetOverview() {
   const {
     selectedBranch,
+    selectedBranchId,
     assignedBranches,
     assignedBranchesLoading,
     assignedBranchesError,
@@ -35,7 +36,7 @@ export function FleetOverview() {
   const outsideGeofence = riders.filter(r => r.status === 'outside-geofence').length;
   const pastCurfew = 0;
   const assignedBranch = assignedBranches?.find(
-    (branch) => branch.name === selectedBranch,
+    (branch) => branch.id === selectedBranchId,
   );
   const geofence = assignedBranch?.geofence ?? null;
   const positionedRiders = useMemo(
@@ -86,9 +87,6 @@ export function FleetOverview() {
             }`}
           >
             Delivery Rider Access
-            <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
-              API pending
-            </span>
           </button>
         </div>
 

@@ -13,13 +13,12 @@ import {
   type AssignedBranch,
 } from '../../lib/branchGeofence';
 
-type Branch = 'Quezon City Branch' | 'Makati Branch' | 'Mandaluyong Branch';
-
 interface BranchContextType {
-  selectedBranch: Branch;
-  setSelectedBranch: (branch: Branch) => void;
-  availableBranches: Branch[];
-  setAvailableBranches: (branches: Branch[]) => void;
+  selectedBranch: string;
+  selectedBranchId: string | null;
+  setSelectedBranchId: (branchId: string) => void;
+  availableBranches: string[];
+  availableBranchOptions: AssignedBranch[];
   assignedBranches: AssignedBranch[] | null;
   assignedBranchesLoading: boolean;
   assignedBranchesError: string | null;
@@ -31,30 +30,40 @@ const BranchContext = createContext<BranchContextType | undefined>(undefined);
 
 interface BranchProviderProps {
   children: ReactNode;
-  initialBranches?: Branch[];
+  initialBranches?: AssignedBranch[];
 }
 
-export function BranchProvider({ children, initialBranches = ['Quezon City Branch'] }: BranchProviderProps) {
-  const [selectedBranch, setSelectedBranchState] = useState<Branch>(initialBranches[0]);
+export function BranchProvider({ children, initialBranches = [] }: BranchProviderProps) {
+  const [selectedBranchId, setSelectedBranchIdState] = useState<string | null>(
+    initialBranches[0]?.id || null,
+  );
   const [isBranchSwitching, setIsBranchSwitching] = useState(false);
   const branchAnimationTimer = useRef<number | null>(null);
-  const [availableBranches, setAvailableBranches] = useState<Branch[]>(initialBranches);
+  const [availableBranchOptions, setAvailableBranchOptions] =
+    useState<AssignedBranch[]>(initialBranches);
   const [assignedBranches, setAssignedBranches] = useState<AssignedBranch[] | null>(null);
   const [assignedBranchesLoading, setAssignedBranchesLoading] = useState(true);
   const [assignedBranchesError, setAssignedBranchesError] = useState<string | null>(null);
 
-  const setSelectedBranch = useCallback((branch: Branch) => {
-    if (branch === selectedBranch) return;
+  const selectedBranch =
+    availableBranchOptions.find((branch) => branch.id === selectedBranchId)?.name ??
+    availableBranchOptions[0]?.name ??
+    '';
+  const availableBranches = availableBranchOptions.map((branch) => branch.name);
+
+  const setSelectedBranchId = useCallback((branchId: string) => {
+    if (branchId === selectedBranchId) return;
+    if (!availableBranchOptions.some((branch) => branch.id === branchId)) return;
     if (branchAnimationTimer.current !== null) {
       window.clearTimeout(branchAnimationTimer.current);
     }
     setIsBranchSwitching(true);
-    setSelectedBranchState(branch);
+    setSelectedBranchIdState(branchId);
     branchAnimationTimer.current = window.setTimeout(() => {
       setIsBranchSwitching(false);
       branchAnimationTimer.current = null;
     }, 60);
-  }, [selectedBranch]);
+  }, [availableBranchOptions, selectedBranchId]);
 
   const refreshAssignedBranches = useCallback(async () => {
     const controller = new AbortController();
@@ -69,20 +78,25 @@ export function BranchProvider({ children, initialBranches = ['Quezon City Branc
         const message = apiErrorMessage(data, 'Could not load the assigned geofences.');
         setAssignedBranches(null);
         setAssignedBranchesError(message);
-        if (
-          response.status === 403 &&
-          (message === 'No active branch is assigned to this account' ||
-            message === 'Caller has no active branch')
-        ) {
-          // Do not keep displaying a stale JWT branch name after the API has
-          // confirmed that it no longer maps to a live branch record.
-          setAvailableBranches([]);
-        }
+        // Do not keep a claim-derived selection after the authoritative API
+        // failed to validate it. The shell remains visible, but branch writes
+        // stay unavailable until a successful refresh resolves live UUIDs.
+        setAvailableBranchOptions([]);
+        setSelectedBranchIdState(null);
         return;
       }
-      setAssignedBranches(assignedBranchesFrom(data));
+      const resolved = assignedBranchesFrom(data);
+      setAssignedBranches(resolved);
+      setAvailableBranchOptions(resolved);
+      setSelectedBranchIdState((current) =>
+        current && resolved.some((branch) => branch.id === current)
+          ? current
+          : resolved[0]?.id ?? null,
+      );
     } catch {
       setAssignedBranches(null);
+      setAvailableBranchOptions([]);
+      setSelectedBranchIdState(null);
       setAssignedBranchesError(
         controller.signal.aborted
           ? 'The geofence request timed out.'
@@ -108,9 +122,10 @@ export function BranchProvider({ children, initialBranches = ['Quezon City Branc
   return (
     <BranchContext.Provider value={{
       selectedBranch,
-      setSelectedBranch,
+      selectedBranchId,
+      setSelectedBranchId,
       availableBranches,
-      setAvailableBranches,
+      availableBranchOptions,
       assignedBranches,
       assignedBranchesLoading,
       assignedBranchesError,

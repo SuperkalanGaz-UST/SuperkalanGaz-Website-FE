@@ -557,8 +557,8 @@ export function ReportGeneration() {
   const account = useAccount();
   const {
     selectedBranch,
+    selectedBranchId,
     availableBranches,
-    assignedBranches,
     assignedBranchesLoading,
     assignedBranchesError,
   } = useBranch();
@@ -574,10 +574,6 @@ export function ReportGeneration() {
   const [toast, setToast] = useState<string | null>(null);
   const toastTimer = useRef<number | null>(null);
 
-  const selectedBranchId = useMemo(
-    () => assignedBranches?.find((branch) => branch.name === selectedBranch)?.id,
-    [assignedBranches, selectedBranch],
-  );
   const needsResolvedBranch = availableBranches.length > 1;
   const previewPeriod = useMemo(() => monthDetails(preview.month), [preview.month]);
   const maxMonth = currentMonthValue();

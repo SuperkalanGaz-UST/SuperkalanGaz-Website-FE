@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, CheckCircle2, Eye, EyeOff, Mail } from 'lucide-react';
+import { InputOTP, InputOTPGroup, InputOTPSlot } from './ui/input-otp';
 import {
   Account,
   activateFranchiseAdminInvitation,
@@ -9,6 +10,7 @@ import {
   ROLE_LABELS,
   signIn,
   updatePassword,
+  verifyPasswordResetCode,
 } from '../lib/auth';
 
 interface LoginProps {
@@ -30,7 +32,9 @@ export function Login({
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [forgotPassword, setForgotPassword] = useState(false);
-  const [resetLinkSent, setResetLinkSent] = useState(false);
+  const [resetCodeSent, setResetCodeSent] = useState(false);
+  const [resetCode, setResetCode] = useState('');
+  const [notice, setNotice] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showNewPassword, setShowNewPassword] = useState(false);
@@ -63,15 +67,46 @@ export function Login({
     }
 
     setLoading(true);
-    const redirectTo = `${window.location.origin}${window.location.pathname}`;
-    const { error: resetError } = await requestPasswordReset(username, redirectTo);
+    const { error: resetError } = await requestPasswordReset(username);
     setLoading(false);
 
     if (resetError) {
       setError(resetError);
     } else {
-      setResetLinkSent(true);
+      setResetCode('');
+      setResetCodeSent(true);
     }
+  };
+
+  const handleVerifyResetCode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setNotice('');
+    if (!/^\d{6}$/.test(resetCode)) {
+      setError('Enter the complete 6-digit reset code.');
+      return;
+    }
+
+    setLoading(true);
+    const { error: verificationError } = await verifyPasswordResetCode(username, resetCode);
+    setLoading(false);
+    if (verificationError) setError(verificationError);
+    // Success emits PASSWORD_RECOVERY. App keeps that temporary session out of
+    // every staff dashboard and returns this card in new-password mode.
+  };
+
+  const handleResendResetCode = async () => {
+    setError('');
+    setNotice('');
+    setLoading(true);
+    const { error: resetError } = await requestPasswordReset(username);
+    setLoading(false);
+    if (resetError) {
+      setError(resetError);
+      return;
+    }
+    setResetCode('');
+    setNotice('A new reset code has been sent.');
   };
 
   const handlePasswordReset = async (e: React.FormEvent) => {
@@ -125,7 +160,9 @@ export function Login({
 
   const returnToLogin = () => {
     setForgotPassword(false);
-    setResetLinkSent(false);
+    setResetCodeSent(false);
+    setResetCode('');
+    setNotice('');
     setError('');
   };
 
@@ -286,22 +323,66 @@ export function Login({
     }
 
     if (forgotPassword) {
-      if (resetLinkSent) {
+      if (resetCodeSent) {
         return (
           <div className="py-6 text-center">
             <Mail className="mx-auto mb-5 h-12 w-12 text-[#007BC1]" aria-hidden="true" />
             <h1 className="text-3xl font-bold text-gray-900">Check your email</h1>
             <p className="mt-3 text-sm leading-6 text-gray-600">
-              If an account matches the username or email you entered, we sent it a password reset link.
+              Enter the 6-digit password reset code sent to your email.
             </p>
-            <button
-              type="button"
-              onClick={returnToLogin}
-              className="mt-8 inline-flex items-center gap-2 text-sm font-medium text-[#007BC1] hover:text-[#006399]"
-            >
-              <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-              Back to login
-            </button>
+            <form onSubmit={handleVerifyResetCode} className="mt-8">
+              <label className="sr-only" htmlFor="password-reset-code">
+                Password reset code
+              </label>
+              <InputOTP
+                id="password-reset-code"
+                maxLength={6}
+                value={resetCode}
+                onChange={(value) => {
+                  setResetCode(value.replace(/\D/g, '').slice(0, 6));
+                  setError('');
+                }}
+                containerClassName="justify-center"
+                autoFocus
+              >
+                <InputOTPGroup>
+                  {Array.from({ length: 6 }, (_, index) => (
+                    <InputOTPSlot key={index} index={index} className="h-12 w-11 text-base" />
+                  ))}
+                </InputOTPGroup>
+              </InputOTP>
+
+              {error && <p className="mt-4 text-sm text-red-600" role="alert">{error}</p>}
+              {notice && <p className="mt-4 text-sm text-emerald-600" role="status">{notice}</p>}
+
+              <button
+                type="submit"
+                disabled={loading || resetCode.length !== 6}
+                className="mt-6 w-full rounded-md bg-[#007BC1] py-3.5 text-base font-medium text-white transition-colors hover:bg-[#006399] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {loading ? 'Verifying code…' : 'Verify code'}
+              </button>
+            </form>
+
+            <div className="mt-5 flex items-center justify-center gap-4 text-sm">
+              <button
+                type="button"
+                disabled={loading}
+                onClick={() => void handleResendResetCode()}
+                className="font-medium text-[#007BC1] hover:text-[#006399] disabled:opacity-60"
+              >
+                Resend code
+              </button>
+              <button
+                type="button"
+                onClick={returnToLogin}
+                className="inline-flex items-center gap-1 font-medium text-gray-600 hover:text-[#007BC1]"
+              >
+                <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+                Back to login
+              </button>
+            </div>
           </div>
         );
       }
@@ -318,7 +399,7 @@ export function Login({
           </button>
           <h1 className="text-3xl font-bold text-gray-900">Forgot password?</h1>
           <p className="mt-3 mb-8 text-sm leading-6 text-gray-600">
-            Enter your username or account email and we’ll send you a reset link.
+            Enter your username or account email and we’ll send you a 6-digit reset code.
           </p>
           <form onSubmit={handleForgotPassword}>
             <div className="mb-6">
@@ -346,7 +427,7 @@ export function Login({
               disabled={loading}
               className="w-full bg-[#007BC1] text-white py-3.5 rounded-md font-medium hover:bg-[#006399] transition-colors text-base disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              {loading ? 'Sending reset link…' : 'Send reset link'}
+              {loading ? 'Sending reset code…' : 'Send reset code'}
             </button>
           </form>
         </>

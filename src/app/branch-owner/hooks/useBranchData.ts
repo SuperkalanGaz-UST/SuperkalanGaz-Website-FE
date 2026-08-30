@@ -117,5 +117,6 @@ export function useBranchData() {
     csatTrendData: [] as { month: string; score: number }[],
   };
 
-  return branchData[selectedBranch] ?? emptyBranchData;
+  return Object.entries(branchData).find(([name]) => name === selectedBranch)?.[1] ??
+    emptyBranchData;
 }

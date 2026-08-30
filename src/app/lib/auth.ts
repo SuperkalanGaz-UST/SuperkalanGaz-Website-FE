@@ -15,7 +15,7 @@ import { apiErrorMessage, apiFetch } from './api';
 
 export type Role = 'super-admin' | 'franchise-admin' | 'branch-owner' | 'branch-manager';
 
-export type Branch = 'Quezon City Branch' | 'Makati Branch' | 'Mandaluyong Branch';
+export type Branch = string;
 
 export interface Account {
   id: string;
@@ -27,13 +27,9 @@ export interface Account {
   status: 'Active' | 'Inactive';
   /** Branches this account can see. SA/FA read across branches; BO/BM are scoped to their own. */
   branches: Branch[];
+  /** Authoritative protected UUID scope; branch names above are display-only. */
+  branchIds: string[];
 }
-
-export const ALL_BRANCHES: Branch[] = [
-  'Quezon City Branch',
-  'Makati Branch',
-  'Mandaluyong Branch',
-];
 
 /** Email domain used to derive a login email from a username. */
 export const LOGIN_EMAIL_DOMAIN = 'superkalan.com';
@@ -111,6 +107,9 @@ export function accountFromUser(user: User, usernameFallback?: string): SignInRe
   const branches = Array.isArray(claims.branches)
     ? claims.branches.filter((branch): branch is string => typeof branch === 'string')
     : [];
+  const branchIds = Array.isArray(claims.branch_ids)
+    ? claims.branch_ids.filter((branchId): branchId is string => typeof branchId === 'string')
+    : [];
 
   return {
     account: {
@@ -122,6 +121,7 @@ export function accountFromUser(user: User, usernameFallback?: string): SignInRe
       phone: typeof claims.phone === 'string' ? claims.phone : null,
       status: 'Active',
       branches: Array.from(new Set(branches)) as Branch[],
+      branchIds: Array.from(new Set(branchIds)),
     },
     error: null,
   };
@@ -151,27 +151,42 @@ export async function signIn(username: string, password: string): Promise<SignIn
 }
 
 /**
- * Sends Supabase's single-use recovery link to the email behind the supplied
- * username. Supabase deliberately returns success for unknown accounts as well,
- * so the welcome page cannot be used to discover valid staff logins.
+ * Sends Supabase's recovery OTP to the email behind the supplied username.
+ * Supabase deliberately returns success for unknown accounts as well, so the
+ * login page cannot be used to discover valid staff accounts.
  */
-export async function requestPasswordReset(
-  username: string,
-  redirectTo: string,
-): Promise<AuthActionResult> {
+export async function requestPasswordReset(username: string): Promise<AuthActionResult> {
   const email = usernameToEmail(username);
-  const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
+  const { error } = await supabase.auth.resetPasswordForEmail(email);
 
   return {
-    error: error ? 'Could not send the reset link. Please try again later.' : null,
+    error: error ? 'Could not send the reset code. Please try again later.' : null,
   };
 }
 
-/** Updates the password for the recovery session created by Supabase's email link. */
+/** Exchanges the emailed code for the temporary session used only for recovery. */
+export async function verifyPasswordResetCode(
+  username: string,
+  token: string,
+): Promise<AuthActionResult> {
+  const email = usernameToEmail(username);
+  const { data, error } = await supabase.auth.verifyOtp({
+    email,
+    token,
+    type: 'recovery',
+  });
+  return {
+    error: error || !data.session
+      ? 'This reset code is invalid or has expired. Request a new code.'
+      : null,
+  };
+}
+
+/** Updates the password for the session created by a verified recovery code. */
 export async function updatePassword(password: string): Promise<AuthActionResult> {
   const { error } = await supabase.auth.updateUser({ password });
   return {
-    error: error ? 'This reset link is invalid or has expired. Request a new link.' : null,
+    error: error ? 'Your recovery session expired. Request a new reset code.' : null,
   };
 }
 
