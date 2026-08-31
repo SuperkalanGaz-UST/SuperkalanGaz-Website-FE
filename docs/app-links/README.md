@@ -14,6 +14,11 @@ PH mobile verification, and acceptance sequence through the NestJS API. After
 activation, the web page directs the Delivery Rider to the mobile app; it never
 provides a Delivery Rider operations dashboard.
 
+If Supabase falls back to the configured Site URL after verifying the email, the
+web root recognizes the protected pending `driver` session and redirects to
+`/delivery-rider-invitation?session=verified`. The API accepts that session only
+on invitation-activation endpoints; it cannot access Delivery Rider operations.
+
 ## Deployment values
 
 1. Set `APP_LINK_HOST` in the mobile build environment to the HTTPS hostname.

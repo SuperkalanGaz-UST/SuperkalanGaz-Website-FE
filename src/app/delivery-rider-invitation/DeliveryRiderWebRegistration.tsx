@@ -18,24 +18,23 @@ import {
   Phone,
   RefreshCw,
   ShieldCheck,
-  Smartphone,
   UserRound,
 } from 'lucide-react';
 import {
   acceptDeliveryRiderInvitation,
+  clearDeliveryRiderWebSession,
   createDeliveryRiderAccount,
   getDeliveryRiderInvitation,
-  sendDeliveryRiderMobileCode,
-  verifyDeliveryRiderMobile,
   type DeliveryRiderInvitation,
+  type DeliveryRiderRegistrationCredential,
 } from '@/app/lib/deliveryRiderRegistration';
 import styles from './page.module.css';
 
-type RegistrationStep = 'details' | 'password' | 'mobile' | 'review' | 'success';
+type RegistrationStep = 'details' | 'password' | 'review' | 'success';
 
 interface DeliveryRiderWebRegistrationProps {
   token: string | null;
-  openAppUrl: string | null;
+  sessionMode: boolean;
   androidDownloadUrl: string | null;
   iosDownloadUrl: string | null;
 }
@@ -45,11 +44,6 @@ function displayMobile(value: string): string {
   return digits.length === 10
     ? `+63 ${digits.slice(0, 3)} ${digits.slice(3, 6)} ${digits.slice(6)}`
     : value;
-}
-
-function maskedMobile(value: string): string {
-  const formatted = displayMobile(value);
-  return formatted.length > 4 ? `${formatted.slice(0, -4)}••••` : formatted;
 }
 
 function displayExpiry(value: string): string {
@@ -84,12 +78,12 @@ function LockedField({
 }
 
 function Progress({ step }: { step: RegistrationStep }) {
-  const current = step === 'password' ? 1 : step === 'mobile' ? 2 : step === 'review' ? 3 : 0;
+  const current = step === 'password' ? 1 : step === 'review' ? 2 : 0;
   if (current === 0) return null;
 
   return (
-    <div className={styles.progress} aria-label={`Registration step ${current} of 3`}>
-      {['Password', 'Mobile', 'Activate'].map((label, index) => {
+    <div className={styles.progress} aria-label={`Registration step ${current} of 2`}>
+      {['Password', 'Accept'].map((label, index) => {
         const number = index + 1;
         const complete = number < current;
         const active = number === current;
@@ -108,30 +102,32 @@ function Progress({ step }: { step: RegistrationStep }) {
 
 export function DeliveryRiderWebRegistration({
   token,
-  openAppUrl,
+  sessionMode,
   androidDownloadUrl,
   iosDownloadUrl,
 }: DeliveryRiderWebRegistrationProps) {
   const [invitation, setInvitation] = useState<DeliveryRiderInvitation | null>(null);
   const [step, setStep] = useState<RegistrationStep>('details');
-  const [loading, setLoading] = useState(Boolean(token));
+  const [loading, setLoading] = useState(Boolean(token || sessionMode));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [code, setCode] = useState('');
-  const [codeSent, setCodeSent] = useState(false);
 
+  const credential = useMemo<DeliveryRiderRegistrationCredential | null>(
+    () => token ? { mode: 'token', token } : sessionMode ? { mode: 'session' } : null,
+    [sessionMode, token],
+  );
   const hasDownloadUrl = Boolean(androidDownloadUrl || iosDownloadUrl);
   const expiry = useMemo(() => invitation ? displayExpiry(invitation.expiresAt) : '', [invitation]);
 
   const loadInvitation = useCallback(async () => {
-    if (!token) return;
+    if (!credential) return;
     setLoading(true);
     setError('');
     try {
-      const loaded = await getDeliveryRiderInvitation(token);
+      const loaded = await getDeliveryRiderInvitation(credential);
       setInvitation(loaded);
       setStep('details');
     } catch (loadError) {
@@ -140,7 +136,7 @@ export function DeliveryRiderWebRegistration({
     } finally {
       setLoading(false);
     }
-  }, [token]);
+  }, [credential]);
 
   useEffect(() => {
     void loadInvitation();
@@ -152,28 +148,11 @@ export function DeliveryRiderWebRegistration({
       return;
     }
     setError('');
-    if (invitation.mobileVerified) setStep('review');
-    else if (invitation.accountCreated) setStep('mobile');
-    else setStep('password');
-  };
-
-  const sendMobileCode = async () => {
-    if (!token) return;
-    setBusy(true);
-    setError('');
-    try {
-      await sendDeliveryRiderMobileCode(token);
-      setCode('');
-      setCodeSent(true);
-    } catch (sendError) {
-      setError(sendError instanceof Error ? sendError.message : 'Could not send the verification code.');
-    } finally {
-      setBusy(false);
-    }
+    setStep(invitation.accountCreated ? 'review' : 'password');
   };
 
   const createAccount = async () => {
-    if (!token || !invitation) return;
+    if (!credential || !invitation) return;
     if (password.length < 8) {
       setError('Use at least 8 characters for your password.');
       return;
@@ -186,15 +165,9 @@ export function DeliveryRiderWebRegistration({
     setBusy(true);
     setError('');
     try {
-      await createDeliveryRiderAccount(token, password);
+      await createDeliveryRiderAccount(credential, password);
       setInvitation({ ...invitation, accountCreated: true });
-      setStep('mobile');
-      try {
-        await sendDeliveryRiderMobileCode(token);
-        setCodeSent(true);
-      } catch (sendError) {
-        setError(sendError instanceof Error ? sendError.message : 'Your account was created, but the verification code could not be sent.');
-      }
+      setStep('review');
     } catch (createError) {
       setError(createError instanceof Error ? createError.message : 'Could not create the Delivery Rider account.');
     } finally {
@@ -202,34 +175,16 @@ export function DeliveryRiderWebRegistration({
     }
   };
 
-  const verifyMobile = async () => {
-    if (!token || !invitation) return;
-    if (!/^\d{6}$/.test(code)) {
-      setError('Enter the complete 6-digit verification code.');
-      return;
-    }
-    setBusy(true);
-    setError('');
-    try {
-      await verifyDeliveryRiderMobile(token, code);
-      setInvitation({ ...invitation, mobileVerified: true });
-      setStep('review');
-    } catch (verifyError) {
-      setError(verifyError instanceof Error ? verifyError.message : 'Could not verify the PH mobile number.');
-    } finally {
-      setBusy(false);
-    }
-  };
-
   const acceptInvitation = async () => {
-    if (!token) return;
+    if (!credential) return;
     setBusy(true);
     setError('');
     try {
-      await acceptDeliveryRiderInvitation(token);
+      await acceptDeliveryRiderInvitation(credential);
+      await clearDeliveryRiderWebSession().catch(() => undefined);
       setStep('success');
     } catch (acceptError) {
-      setError(acceptError instanceof Error ? acceptError.message : 'Could not activate the Delivery Rider account.');
+      setError(acceptError instanceof Error ? acceptError.message : 'Could not accept the Delivery Rider invitation.');
     } finally {
       setBusy(false);
     }
@@ -241,7 +196,7 @@ export function DeliveryRiderWebRegistration({
   };
 
   const registrationContent = () => {
-    if (!token) {
+    if (!credential) {
       return (
         <div className={styles.statePanel}>
           <ShieldCheck size={34} aria-hidden="true" />
@@ -288,7 +243,6 @@ export function DeliveryRiderWebRegistration({
           <div className={styles.expiryNote}><Clock3 size={16} />Invitation expires {expiry}</div>
           {error ? <div className={styles.errorBanner}>{error}</div> : null}
           <button className={styles.primaryButton} type="button" onClick={continueFromDetails}>Continue registration<ArrowRight size={18} /></button>
-          {openAppUrl ? <a className={styles.textLink} href={openAppUrl}><Smartphone size={16} />Continue in the mobile app instead</a> : null}
         </>
       );
     }
@@ -298,9 +252,9 @@ export function DeliveryRiderWebRegistration({
         <>
           <button className={styles.backButton} type="button" onClick={backToDetails}><ArrowLeft size={17} />Invitation details</button>
           <Progress step={step} />
-          <p className={styles.eyebrow}>Step 1 of 3</p>
+          <p className={styles.eyebrow}>Step 1 of 2</p>
           <h1 id="invitation-title">Create your password</h1>
-          <p className={styles.lead}>This password is private. The Branch Owner and Branch Manager cannot see or reset it.</p>
+          <p className={styles.lead}>Choose a private password for your Delivery Rider account. You will verify your PH mobile number in the app after registration.</p>
           <div className={styles.formFields}>
             <label className={styles.inputGroup}>
               <span>Password</span>
@@ -320,47 +274,18 @@ export function DeliveryRiderWebRegistration({
       );
     }
 
-    if (step === 'mobile') {
-      return (
-        <>
-          <button className={styles.backButton} type="button" onClick={backToDetails}><ArrowLeft size={17} />Invitation details</button>
-          <Progress step={step} />
-          <p className={styles.eyebrow}>Step 2 of 3</p>
-          <h1 id="invitation-title">Verify your PH mobile number</h1>
-          <p className={styles.lead}>{codeSent ? `Enter the 6-digit code sent to ${maskedMobile(invitation.mobile)}.` : `Send a verification code to ${maskedMobile(invitation.mobile)}.`}</p>
-          <div className={styles.mobileCard}><span className={styles.mobilePrefix}>+63</span><span>{displayMobile(invitation.mobile).replace(/^\+63\s?/, '')}</span><LockKeyhole size={15} aria-label="Locked" /></div>
-          {codeSent ? (
-            <label className={styles.inputGroup}>
-              <span>Verification code</span>
-              <input className={styles.otpInput} autoComplete="one-time-code" inputMode="numeric" maxLength={6} onChange={(event) => { setCode(event.target.value.replace(/\D/g, '').slice(0, 6)); setError(''); }} placeholder="000000" value={code} />
-            </label>
-          ) : null}
-          {error ? <div className={styles.errorBanner}>{error}</div> : null}
-          {codeSent ? (
-            <>
-              <button className={styles.primaryButton} type="button" disabled={busy} onClick={() => void verifyMobile()}>{busy ? <Loader2 className={styles.spinner} size={18} /> : <ShieldCheck size={18} />}{busy ? 'Verifying…' : 'Verify number'}</button>
-              <button className={styles.textButton} type="button" disabled={busy} onClick={() => void sendMobileCode()}>Resend verification code</button>
-            </>
-          ) : (
-            <button className={styles.primaryButton} type="button" disabled={busy} onClick={() => void sendMobileCode()}>{busy ? <Loader2 className={styles.spinner} size={18} /> : <Phone size={18} />}{busy ? 'Sending code…' : 'Send verification code'}</button>
-          )}
-        </>
-      );
-    }
-
     if (step === 'review') {
       return (
         <>
           <button className={styles.backButton} type="button" onClick={backToDetails}><ArrowLeft size={17} />Invitation details</button>
           <Progress step={step} />
-          <p className={styles.eyebrow}>Step 3 of 3</p>
+          <p className={styles.eyebrow}>Step 2 of 2</p>
           <h1 id="invitation-title">Accept your branch invitation</h1>
-          <p className={styles.lead}>Both identity checks are complete. Accepting activates one Delivery Rider membership for the locked branch below.</p>
+          <p className={styles.lead}>Your email is verified and your password is set. Accept the invitation below, then verify your PH mobile number when you sign in to the app.</p>
           <div className={styles.reviewCard}><div><span>Role</span><strong>Delivery Rider</strong></div><div><span>Authorized branch</span><strong>{invitation.branchName}</strong></div></div>
-          <div className={styles.verifiedPill}><CheckCircle2 size={16} />Email and PH mobile verified</div>
+          <div className={styles.verifiedPill}><CheckCircle2 size={16} />Email verified and password created</div>
           {error ? <div className={styles.errorBanner}>{error}</div> : null}
-          <button className={styles.primaryButton} type="button" disabled={busy} onClick={() => void acceptInvitation()}>{busy ? <Loader2 className={styles.spinner} size={18} /> : <Check size={18} />}{busy ? 'Activating your account…' : 'Accept invitation'}</button>
-          <p className={styles.finePrint}>No second Branch Manager approval is required.</p>
+          <button className={styles.primaryButton} type="button" disabled={busy} onClick={() => void acceptInvitation()}>{busy ? <Loader2 className={styles.spinner} size={18} /> : <Check size={18} />}{busy ? 'Accepting invitation…' : 'Accept invitation'}</button>
         </>
       );
     }
@@ -368,10 +293,10 @@ export function DeliveryRiderWebRegistration({
     return (
       <div className={styles.successPanel}>
         <div className={styles.successIcon}><Check size={34} aria-hidden="true" /></div>
-        <p className={styles.eyebrow}>Registration complete</p>
-        <h1 id="invitation-title">Your Delivery Rider account is ready</h1>
-        <p className={styles.lead}>Sign in to the Superkalan Gaz mobile app with {invitation.email} and the password you created. Your account begins Offline and without a vehicle assignment.</p>
-        <a className={styles.primaryButton} href="superkalan://"><Smartphone size={18} />Open Superkalan Gaz</a>
+        <p className={styles.eyebrow}>Account created</p>
+        <h1 id="invitation-title">Continue in the mobile app</h1>
+        <p className={styles.lead}>Sign in with {invitation.email} and the password you created. The app will ask you to verify your PH mobile number before opening the Delivery Rider workspace.</p>
+        <a className={styles.primaryButton} href="superkalan://"><Phone size={18} />Open Superkalan Gaz</a>
         {hasDownloadUrl ? (
           <div className={styles.storeButtons}>
             {androidDownloadUrl ? <a href={androidDownloadUrl} rel="noreferrer"><Download size={17} />Download for Android</a> : null}
@@ -386,24 +311,9 @@ export function DeliveryRiderWebRegistration({
     <main className={styles.page}>
       <div className={styles.backdrop} aria-hidden="true" />
       <section className={styles.shell} aria-labelledby="invitation-title">
-        <aside className={styles.sidePanel}>
-          <div className={styles.brand}>
-            <span className={styles.logoWrap}><Image src="/logo%20only.png" alt="" width={28} height={33} priority /></span>
-            <span>Superkalan Gaz</span>
-          </div>
-          <div className={styles.sideCopy}>
-            <span className={styles.sideIcon}><ShieldCheck size={26} /></span>
-            <p className={styles.sideEyebrow}>Invitation-authorized onboarding</p>
-            <h2>Register securely from your laptop or mobile device.</h2>
-            <p>Your email, PH mobile number, role, and branch remain bound to the Branch Owner&apos;s invitation.</p>
-          </div>
-          <ul className={styles.assurances}>
-            <li><CheckCircle2 size={17} />Single-use invitation</li>
-            <li><CheckCircle2 size={17} />Locked branch authorization</li>
-            <li><CheckCircle2 size={17} />Private password creation</li>
-          </ul>
-          <p className={styles.sideFooter}>Delivery operations remain available only in the mobile app.</p>
-        </aside>
+        <div className={styles.brandPanel}>
+          <Image src="/superkalan-gaz.png" alt="Superkalan Gaz" width={380} height={260} priority />
+        </div>
         <div className={styles.formPanel}>{registrationContent()}</div>
       </section>
     </main>

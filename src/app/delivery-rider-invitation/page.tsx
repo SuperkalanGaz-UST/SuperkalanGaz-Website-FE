@@ -36,14 +36,11 @@ export default async function DeliveryRiderInvitationPage({
   const params = await searchParams;
   const candidate = singleValue(params.token).trim();
   const token = INVITATION_TOKEN.test(candidate) ? candidate : null;
-  const openAppUrl = token
-    ? `superkalan://delivery-rider-invitation?token=${encodeURIComponent(token)}`
-    : null;
-
+  const sessionMode = !token && singleValue(params.session) === 'verified';
   return (
     <DeliveryRiderWebRegistration
       token={token}
-      openAppUrl={openAppUrl}
+      sessionMode={sessionMode}
       androidDownloadUrl={safeDownloadUrl(process.env.MOBILE_APP_ANDROID_DOWNLOAD_URL)}
       iosDownloadUrl={safeDownloadUrl(process.env.MOBILE_APP_IOS_DOWNLOAD_URL)}
     />

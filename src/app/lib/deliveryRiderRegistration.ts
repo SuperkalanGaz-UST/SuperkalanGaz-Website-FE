@@ -1,4 +1,9 @@
-import { apiErrorMessage, apiPublicFetch } from './api';
+import { apiErrorMessage, apiFetch, apiPublicFetch } from './api';
+import { supabase } from './supabase/client';
+
+export type DeliveryRiderRegistrationCredential =
+  | { mode: 'token'; token: string }
+  | { mode: 'session' };
 
 export interface DeliveryRiderInvitation {
   invitationId: string;
@@ -23,48 +28,51 @@ async function responseData<T>(response: Response, fallback: string): Promise<T>
 }
 
 export async function getDeliveryRiderInvitation(
-  token: string,
+  credential: DeliveryRiderRegistrationCredential,
 ): Promise<DeliveryRiderInvitation> {
-  const response = await apiPublicFetch(
-    `/delivery-rider-invitations/acceptance?token=${encodeURIComponent(token)}`,
-  );
+  const response = credential.mode === 'session'
+    ? await apiFetch('/delivery-rider-invitations/session/acceptance')
+    : await apiPublicFetch(
+        `/delivery-rider-invitations/acceptance?token=${encodeURIComponent(credential.token)}`,
+      );
   return responseData(response, 'This invitation is unavailable.');
 }
 
 export async function createDeliveryRiderAccount(
-  token: string,
+  credential: DeliveryRiderRegistrationCredential,
   password: string,
 ): Promise<ApiResult> {
-  const response = await apiPublicFetch('/delivery-rider-invitations/account', {
+  const request = credential.mode === 'session' ? apiFetch : apiPublicFetch;
+  const path = credential.mode === 'session'
+    ? '/delivery-rider-invitations/session/account'
+    : '/delivery-rider-invitations/account';
+  const body = credential.mode === 'session'
+    ? { password }
+    : { token: credential.token, password };
+  const response = await request(path, {
     method: 'POST',
-    body: JSON.stringify({ token, password }),
+    body: JSON.stringify(body),
   });
   return responseData(response, 'Could not create the Delivery Rider account.');
 }
 
-export async function sendDeliveryRiderMobileCode(token: string): Promise<ApiResult> {
-  const response = await apiPublicFetch('/delivery-rider-invitations/mobile-code', {
-    method: 'POST',
-    body: JSON.stringify({ token }),
-  });
-  return responseData(response, 'Could not send the verification code.');
-}
-
-export async function verifyDeliveryRiderMobile(
-  token: string,
-  code: string,
+export async function acceptDeliveryRiderInvitation(
+  credential: DeliveryRiderRegistrationCredential,
 ): Promise<ApiResult> {
-  const response = await apiPublicFetch('/delivery-rider-invitations/verify-mobile', {
+  const request = credential.mode === 'session' ? apiFetch : apiPublicFetch;
+  const path = credential.mode === 'session'
+    ? '/delivery-rider-invitations/session/accept'
+    : '/delivery-rider-invitations/accept';
+  const response = await request(path, {
     method: 'POST',
-    body: JSON.stringify({ token, code }),
+    ...(credential.mode === 'token'
+      ? { body: JSON.stringify({ token: credential.token }) }
+      : {}),
   });
-  return responseData(response, 'The verification code could not be confirmed.');
+  return responseData(response, 'Could not accept the Delivery Rider invitation.');
 }
 
-export async function acceptDeliveryRiderInvitation(token: string): Promise<ApiResult> {
-  const response = await apiPublicFetch('/delivery-rider-invitations/accept', {
-    method: 'POST',
-    body: JSON.stringify({ token }),
-  });
-  return responseData(response, 'Could not activate the Delivery Rider account.');
+/** Delivery Riders have no web workspace, so registration ends the browser session. */
+export async function clearDeliveryRiderWebSession(): Promise<void> {
+  await supabase.auth.signOut({ scope: 'local' });
 }

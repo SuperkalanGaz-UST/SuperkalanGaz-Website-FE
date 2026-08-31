@@ -97,8 +97,28 @@ interface RiderRow {
     name: string;
     plate: string;
     status: 'Available' | 'On Delivery' | 'Maintenance Due' | 'Offline';
+    operational_location: {
+        latitude: number;
+        longitude: number;
+        accuracyM: number | null;
+        capturedAt: string;
+        receivedAt: string;
+        source: 'phone';
+    } | null;
     created_at: string;
 }
+
+/** Phone GPS freshness for dispatch only. Vehicle geofencing/PMS continues to
+ * use SinoTrack ST-901 data received through Traccar on the Fleet surface. */
+const operationalLocationLabel = (rider: RiderRow): string => {
+    if (!rider.operational_location) return 'GPS unavailable';
+    const receivedAt = new Date(rider.operational_location.receivedAt);
+    if (Number.isNaN(receivedAt.getTime())) return 'GPS unavailable';
+    const ageMinutes = Math.max(0, Math.floor((Date.now() - receivedAt.getTime()) / 60_000));
+    if (ageMinutes === 0) return 'GPS just now';
+    if (ageMinutes < 15) return `GPS ${ageMinutes}m ago`;
+    return 'GPS stale';
+};
 
 // Walk-in/phone intake. The server sets order_source ("Walk-in/Phone"), branchId,
 // and status automatically, so those are never sent from the client.
@@ -1319,7 +1339,7 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                                                     >
                                                         <option value="" disabled>Select rider…</option>
                                                         {availableRiders.map(r => (
-                                                            <option key={r.id} value={r.id}>{r.name} ({r.plate})</option>
+                                                            <option key={r.id} value={r.id}>{r.name} ({r.plate}) · {operationalLocationLabel(r)}</option>
                                                         ))}
                                                     </select>
                                                 )
@@ -1553,7 +1573,7 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                                                         >
                                                             <option value="" disabled>Select rider…</option>
                                                             {availableRiders.map(r => (
-                                                                <option key={r.id} value={r.id}>{r.name} ({r.plate})</option>
+                                                                <option key={r.id} value={r.id}>{r.name} ({r.plate}) · {operationalLocationLabel(r)}</option>
                                                             ))}
                                                         </select>
                                                     )}

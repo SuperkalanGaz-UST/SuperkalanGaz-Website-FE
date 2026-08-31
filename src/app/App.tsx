@@ -12,6 +12,7 @@ import { AccountProvider } from './contexts/AccountContext';
 import {
   Account,
   accountFromUser,
+  isPendingDeliveryRiderInvitation,
   isPendingFranchiseAdminInvitation,
   signOut,
 } from './lib/auth';
@@ -68,6 +69,13 @@ export default function App() {
       if (!session || passwordRecoveryRef.current) {
         setAccount(null);
         setAuthReady(true);
+        return;
+      }
+
+      if (isPendingDeliveryRiderInvitation(session.user)) {
+        setAccount(null);
+        setAuthReady(false);
+        window.location.replace('/delivery-rider-invitation?session=verified');
         return;
       }
 

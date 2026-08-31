@@ -67,8 +67,10 @@ Sections below are tagged `[api]`, `[web]`, `[mobile]`, or `[all]` where they ap
   API only supplies CRM-owned coordinates/geofences. Geocoding is not currently
   implemented and must be treated as a separate future decision.
 - **Mobile:** React Native + Expo (Customer and Delivery Rider role-gated experiences).
-- **GPS:** **SinoTrack ST-901** hardware devices → **Traccar** (self-hosted middleware) →
-  ingested by the API. These are two distinct things; never conflate them (§10).
+- **GPS has two separate sources.** SinoTrack ST-901 → Traccar → API is authoritative
+  vehicle telemetry for Fleet geofencing and PMS. Delivery Rider phone GPS → Expo app →
+  branch-scoped NestJS API supplies foreground operational location for Service Request
+  and dispatch workflows. Never conflate the sources (§10).
 - **Edge:** NGINX reverse proxy in front of the API.
 - **Architecture style:** **Modular monolith** using NestJS's native module system.
   **No microservices.** RESTful, 3-tier.
@@ -169,12 +171,14 @@ Hard constraints:
   identity; the API binds a single-use, expiring invitation to the server-validated active
   branch selected from the Owner's JWT-derived `branch_ids`.
 - **Delivery Rider web access is registration-only.** The dedicated public, token-gated web
-  route may review the locked invitation, create the password, verify the PH mobile number,
-  and accept activation. It must then direct the Delivery Rider to mobile and must not expose
-  Delivery Rider operations or any staff dashboard.
-- **Invitation acceptance is the authorization.** Only the API writes protected `driver`,
-  invitation-bound `branch_id`, and active claims to `app_metadata`. No Branch Manager
-  approval or applicant-selected branch is allowed.
+  route reviews the locked invitation, creates the password, and records final invitation
+  acceptance. It then directs the Delivery Rider to mobile; PH mobile verification and all
+  Delivery Rider operations remain in the app.
+  A verified pending `driver` Supabase session returned to the web root must be routed into
+  this registration flow, following the Franchise Administrator invitation pattern.
+- **Invitation acceptance is the authorization.** The web calls the API to consume the
+  invitation but leaves the account pending. The API activates it only after app-based PH
+  mobile verification. No Branch Manager approval or applicant-selected branch is allowed.
 - **Customers see delivery status milestones only — never live GPS coordinates.**
 
 ---
@@ -198,11 +202,11 @@ Hard constraints:
 3. **Loyalty Program Monitoring (LPM)** — see §8a. Two **separate** tracks; never merge.
 4. **CSAT Feedback & Analytics** — post-delivery star ratings, complaint (Incident) logging,
    average response-time tracking.
-5. **Fleet Management** — Delivery Rider roster and vehicle assignment plus GPS via SinoTrack
-   ST-901 → Traccar → API. Delivery Riders may register through the invitation-authorized web
-   or mobile flow, but use mobile for availability, offer acceptance, and milestones; live
-   coordinates still come only from installed hardware
-   through Traccar. Hardware-dependent live GPS may be sprint-deferred.
+5. **Fleet Management** — Delivery Rider roster, vehicle assignment, geofencing, and PMS.
+   SinoTrack ST-901 → Traccar → API is authoritative for vehicle geofencing and PMS.
+   Separately, foreground Delivery Rider phone location may be shown in Branch Manager
+   Service Request/dispatch views. Never use phone coordinates on the Fleet geofence/PMS map
+   or label them as SinoTrack/Traccar telemetry.
 
 ### 8a. Loyalty Program Rules `[api] [web]`
 
@@ -225,13 +229,13 @@ Shared workflow:
 
 1. The Branch Owner issues a single-use, expiring invitation bound to the intended identity
    and the server-validated active branch selected from the Owner's JWT-derived `branch_ids`.
-2. The invitee registers through the dedicated web page or mobile flow, verifies the invited
-   identity, and sets their password; the branch is not applicant-selectable.
+2. The invitee registers through the dedicated web page, verifies the invited email, and sets
+   their password; the branch is not applicant-selectable.
 3. The API consumes the invitation, writes protected Delivery Rider role/branch claims, and records
    immutable attribution to the Branch Owner.
-4. Web registration ends with a mobile-app handoff. The Delivery Rider appears Offline and
-   unassigned. The Branch Manager manages vehicle readiness, but cannot authorize identity
-   or branch membership.
+4. Web acceptance ends with a mobile-app handoff. After app sign-in and PH mobile
+   verification, the API activates the account and creates the Delivery Rider as Offline and
+   unassigned. The Branch Manager cannot authorize identity or branch membership.
 
 ---
 
@@ -308,7 +312,10 @@ propose an in-scope alternative.
 
 ### `[mobile]`
 - Expo with separate, role-gated Customer and Delivery Rider navigation. No SA/FA/BO/BM screens.
-- Customers see delivery milestones only; Delivery Rider actions do not replace hardware GPS.
+- Branch Manager dispatch views may show freshness for the branch-scoped operational phone
+  location returned by NestJS. Fleet geofencing and PMS views use only SinoTrack ST-901 data
+  received through Traccar.
+- Customers see delivery milestones only and never receive phone or vehicle coordinates.
 
 ---
 

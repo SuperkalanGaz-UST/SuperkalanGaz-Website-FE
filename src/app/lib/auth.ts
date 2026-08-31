@@ -80,6 +80,11 @@ export function isPendingFranchiseAdminInvitation(user: User): boolean {
   return claims.role === 'franchise-admin' && claims.status === 'Pending';
 }
 
+export function isPendingDeliveryRiderInvitation(user: User): boolean {
+  const claims = (user.app_metadata ?? {}) as Record<string, unknown>;
+  return claims.role === 'driver' && claims.status === 'Pending';
+}
+
 /**
  * Builds the UI account from the authenticated Supabase user. This is shared by
  * fresh sign-in and page-refresh restoration so both paths enforce the same

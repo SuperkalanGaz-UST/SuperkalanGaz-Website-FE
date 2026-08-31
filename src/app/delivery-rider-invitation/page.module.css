@@ -10,9 +10,9 @@
   display: grid;
   place-items: center;
   overflow: hidden;
-  padding: 34px;
+  padding: 48px;
   color: var(--ink);
-  background: #edf6fa;
+  background: #e8e8e8;
   font-family: Poppins, Arial, sans-serif;
 }
 
@@ -21,21 +21,28 @@
   inset: 0;
   z-index: -1;
   background:
-    radial-gradient(circle at 10% 10%, rgba(33, 165, 216, 0.2), transparent 32%),
-    radial-gradient(circle at 92% 85%, rgba(8, 127, 189, 0.13), transparent 30%),
-    linear-gradient(145deg, #f9fcfd 0%, #e7f3f8 100%);
+    radial-gradient(ellipse at 18% 112%, #7bc2ed 0 24%, transparent 24.5%),
+    radial-gradient(ellipse at 64% 116%, #a8d5f2 0 34%, transparent 34.5%),
+    radial-gradient(ellipse at 100% 112%, #d4e8f7 0 42%, transparent 42.5%);
 }
 
 .shell {
-  width: min(100%, 1080px);
-  min-height: 680px;
+  width: min(100%, 1120px);
   display: grid;
-  grid-template-columns: minmax(310px, 0.82fr) minmax(480px, 1.18fr);
-  overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.86);
-  border-radius: 30px;
-  background: #fff;
-  box-shadow: 0 30px 90px rgba(22, 71, 98, 0.18);
+  grid-template-columns: minmax(360px, 1fr) minmax(420px, 460px);
+  align-items: center;
+  gap: 80px;
+}
+
+.brandPanel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.brandPanel img {
+  width: min(100%, 390px);
+  height: auto;
 }
 
 .sidePanel {
@@ -149,8 +156,11 @@
   display: flex;
   flex-direction: column;
   justify-content: center;
-  padding: 48px 54px;
+  min-height: 590px;
+  padding: 46px 42px;
+  border-radius: 24px;
   background: #fff;
+  box-shadow: 0 18px 50px rgba(44, 62, 76, 0.18);
 }
 
 .eyebrow {
@@ -333,7 +343,7 @@
 .progress {
   position: relative;
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   margin: 0 0 30px;
 }
 
@@ -621,8 +631,13 @@
   }
 
   .shell {
-    width: min(100%, 650px);
+    width: min(100%, 520px);
     grid-template-columns: 1fr;
+    gap: 22px;
+  }
+
+  .brandPanel img {
+    width: 230px;
   }
 
   .sidePanel {
@@ -651,7 +666,7 @@
   }
 
   .formPanel {
-    min-height: 610px;
+    min-height: 570px;
     padding: 40px;
   }
 }
@@ -663,7 +678,11 @@
   }
 
   .shell {
-    border-radius: 22px;
+    gap: 14px;
+  }
+
+  .brandPanel img {
+    width: 190px;
   }
 
   .sidePanel {
@@ -684,8 +703,9 @@
   }
 
   .formPanel {
-    min-height: 600px;
+    min-height: 560px;
     padding: 30px 22px;
+    border-radius: 20px;
   }
 
   .lockedGrid,
