@@ -5,12 +5,7 @@
 .headerRow { display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; }
 .headerActions { display: flex; align-items: center; gap: 0.5rem; }
 
-/* KPI summary row, matching the Franchise Admin Customer directory's
-   colored-left-border metric cards — real counts, not illustrative. */
-.metricsRow { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1.25rem; margin-bottom: 1.75rem; }
-.metricCardSmall { background-color: var(--card); border: 1px solid #e5e7eb; border-left-width: 4px; border-radius: 0.75rem; padding: 1.1rem 1.25rem; }
-.metricValueSmall { font-size: 1.5rem; font-weight: 700; color: #101828; }
-.metricLabelSmall { margin-top: 0.25rem; font-size: 0.75rem; color: #6b7280; }
+
 
 .filterBar { display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem 1.25rem; flex-wrap: wrap; }
 .sourceSelect { height: 2.25rem; padding: 0.3rem 0.6rem; border: 1px solid var(--border); border-radius: 0.375rem; background-color: var(--card); color: var(--foreground); font-size: 0.8125rem; min-width: 160px; }

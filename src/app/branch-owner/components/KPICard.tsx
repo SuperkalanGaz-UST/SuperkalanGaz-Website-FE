@@ -28,7 +28,7 @@ interface KPICardProps {
 
 export function KPICard({ title, value, subtitle, icon, alert, accentColor = '#007BC1', trend }: KPICardProps) {
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 relative flex flex-col min-h-[120px]">
+    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 relative flex flex-col min-h-[120px] h-full">
       {icon && (
         <div
           className="absolute top-4 right-4 w-9 h-9 rounded-full flex items-center justify-center"
@@ -48,7 +48,7 @@ export function KPICard({ title, value, subtitle, icon, alert, accentColor = '#0
       {trend && (
         <div
           className={`flex items-center gap-1 text-xs font-medium mt-auto pt-3 ${
-            trend.direction === 'up' ? 'text-green-600' : 'text-red-600'
+            trend.positive ? 'text-green-600' : 'text-red-600'
           }`}
         >
           {trend.direction === 'up' ? (

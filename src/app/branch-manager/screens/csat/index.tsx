@@ -1,8 +1,9 @@
 'use client';
 
 import React, { useCallback, useEffect, useState } from 'react';
-import { RefreshCw, Star, MessageSquare, AlertTriangle, Flag } from 'lucide-react';
+import { RefreshCw, Star, MessageSquare, AlertTriangle, Flag, AlertCircle, CheckCircle } from 'lucide-react';
 import { toast } from 'sonner';
+import { KPICard } from '../../../components/KPICard';
 import { Badge } from '../../components/Badge';
 import { Button } from '../../components/Button';
 import { Tabs, TabsList, TabsTrigger } from '../../components/Tabs';
@@ -145,8 +146,8 @@ export default function Csat() {
     const [view, setView] = useState('ratings');
 
     const [resolution, setResolution] = useState('Open');
-    // Low-CSAT band only by default (BM-038); the toggle widens to every rating.
-    const [lowOnly, setLowOnly] = useState(true);
+    // Show all ratings by default; the toggle narrows to the complaint band.
+    const [lowOnly, setLowOnly] = useState(false);
     const [ratings, setRatings] = useState<RatingRow[]>([]);
     const [summary, setSummary] = useState<SummaryRow | null>(null);
     const [loading, setLoading] = useState(true);
@@ -299,26 +300,33 @@ export default function Csat() {
             {view === 'ratings' && (
             <>
             {/* KPI tiles — Open Complaints is the figure BM-041 watches decrement. */}
-            <div className={styles.summaryGrid}>
-                <div className={`${styles.summaryCard} ${styles.summaryAccent}`}>
-                    <div className={styles.summaryLabel}>Open Complaints</div>
-                    <div className={styles.summaryValue}>{summary ? summary.open_count : '—'}</div>
-                </div>
-                <div className={styles.summaryCard}>
-                    <div className={styles.summaryLabel}>Low CSAT Open (1–3★)</div>
-                    <div className={styles.summaryValue}>{summary ? summary.low_csat_open_count : '—'}</div>
-                </div>
-                <div className={styles.summaryCard}>
-                    <div className={styles.summaryLabel}>Resolved</div>
-                    <div className={styles.summaryValue}>{summary ? summary.resolved_count : '—'}</div>
-                </div>
-                <div className={styles.summaryCard}>
-                    <div className={styles.summaryLabel}>Average Rating</div>
-                    <div className={styles.summaryValue}>
-                        {summary?.average_stars != null ? summary.average_stars.toFixed(2) : '—'}
-                        {summary?.average_stars != null && <span className={styles.summaryUnit}> / 5</span>}
-                    </div>
-                </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                <KPICard
+                    title="Open Complaints"
+                    value={summary ? summary.open_count.toString() : '—'}
+                    icon={<AlertTriangle className="w-4 h-4 text-[#ef4444]" />}
+                    accentColor="#ef4444"
+                    alert={true}
+                />
+                <KPICard
+                    title="Low CSAT Open (1–3★)"
+                    value={summary ? summary.low_csat_open_count.toString() : '—'}
+                    icon={<AlertCircle className="w-4 h-4 text-[#f59e0b]" />}
+                    accentColor="#f59e0b"
+                />
+                <KPICard
+                    title="Resolved"
+                    value={summary ? summary.resolved_count.toString() : '—'}
+                    icon={<CheckCircle className="w-4 h-4 text-[#16A34A]" />}
+                    accentColor="#16A34A"
+                />
+                <KPICard
+                    title="Average Rating"
+                    value={summary?.average_stars != null ? summary.average_stars.toFixed(2) : '—'}
+                    subtitle={summary?.average_stars != null ? "out of 5" : undefined}
+                    icon={<Star className="w-4 h-4 text-[#f59e0b]" />}
+                    accentColor="#f59e0b"
+                />
             </div>
 
             <div className={styles.card}>

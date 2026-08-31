@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { RefreshCw, Search, UserRound, X, Coins, Boxes, Users } from 'lucide-react';
+import { KPICard } from '../../../components/KPICard';
 import { Badge } from '../../components/Badge';
 import { Progress } from '../../components/Progress';
 import { Pagination } from '../../../components/Pagination';
@@ -219,23 +220,31 @@ export default function Customers({ onViewOrders }: CustomersProps = {}) {
     return (
         <div>
             {/* KPI summary — real counts over the currently loaded directory. */}
-            <div className={styles.metricsRow}>
-                <div className={styles.metricCardSmall} style={{ borderLeftColor: '#007BC1' }}>
-                    <div className={styles.metricValueSmall}>{metrics.total}</div>
-                    <div className={styles.metricLabelSmall}>Total Customers</div>
-                </div>
-                <div className={styles.metricCardSmall} style={{ borderLeftColor: '#f59e0b' }}>
-                    <div className={styles.metricValueSmall}>{metrics.staffCreated}</div>
-                    <div className={styles.metricLabelSmall}>Staff-created</div>
-                </div>
-                <div className={styles.metricCardSmall} style={{ borderLeftColor: '#22c55e' }}>
-                    <div className={styles.metricValueSmall}>{metrics.selfRegistered}</div>
-                    <div className={styles.metricLabelSmall}>Self-registered</div>
-                </div>
-                <div className={styles.metricCardSmall} style={{ borderLeftColor: '#a855f7' }}>
-                    <div className={styles.metricValueSmall}>{metrics.withOrder}</div>
-                    <div className={styles.metricLabelSmall}>With at Least One Order</div>
-                </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                <KPICard
+                    title="Total Customers"
+                    value={metrics.total.toString()}
+                    icon={<Users className="w-4 h-4 text-[#007BC1]" />}
+                    accentColor="#007BC1"
+                />
+                <KPICard
+                    title="Staff-created"
+                    value={metrics.staffCreated.toString()}
+                    icon={<UserRound className="w-4 h-4 text-[#f59e0b]" />}
+                    accentColor="#f59e0b"
+                />
+                <KPICard
+                    title="Self-registered"
+                    value={metrics.selfRegistered.toString()}
+                    icon={<UserRound className="w-4 h-4 text-[#22c55e]" />}
+                    accentColor="#22c55e"
+                />
+                <KPICard
+                    title="With at Least One Order"
+                    value={metrics.withOrder.toString()}
+                    icon={<Boxes className="w-4 h-4 text-[#a855f7]" />}
+                    accentColor="#a855f7"
+                />
             </div>
 
             <div className={styles.card}>

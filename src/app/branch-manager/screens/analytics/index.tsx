@@ -2,10 +2,11 @@
 
 import React, { useState, useMemo } from "react";
 import { toast } from "sonner";
-import { TrendingUp, TrendingDown, Settings2, AlertCircle, Target } from "lucide-react";
+import { TrendingUp, TrendingDown, Settings2, AlertCircle, Target, ShoppingCart, Truck, Star, Gift } from "lucide-react";
 import { z } from "zod";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Line, LineChart, Pie, PieChart, ReferenceLine, XAxis, YAxis, Cell } from "recharts";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../components/Select";
+import { KPICard } from "../../../components/KPICard";
 import { Badge } from "../../components/Badge";
 import { Button } from "../../components/Button";
 import { Input } from "../../components/Input";
@@ -105,27 +106,39 @@ export default function AnalyticsPage() {
                 </div>
             </header>
 
-            <div className={styles.kpiGrid}>
-                <div className={styles.kpiCard}>
-                    <div className={styles.kpiHeader}><span className={styles.kpiLabel}>Total Orders This Period</span><span className={`${styles.kpiTrend} ${styles.trendUp}`}><TrendingUp size={16} /> 12%</span></div>
-                    <div className={styles.kpiValue}>{Intl.NumberFormat("en-PH").format(totalOrders)}</div>
-                    <div className={styles.kpiSubtext}>Est. Revenue: ₱{Intl.NumberFormat("en-PH").format(revenueEst)}</div>
-                </div>
-                <div className={styles.kpiCard}>
-                    <div className={styles.kpiHeader}><span className={styles.kpiLabel}>Delivery Completion Rate</span><span className={`${styles.kpiTrend} ${styles.trendUp}`}><TrendingUp size={16} /> 2.1%</span></div>
-                    <div className={styles.kpiValue}>96.8%</div>
-                    <div className={styles.kpiSubtext}>Vs 94.7% previous period</div>
-                </div>
-                <div className={styles.kpiCard}>
-                    <div className={styles.kpiHeader}><span className={styles.kpiLabel}>Avg CSAT Score</span><span className={`${styles.kpiTrend} ${styles.trendDown}`}><TrendingDown size={16} /> 0.1</span></div>
-                    <div className={styles.kpiValue}>4.3 <span className={styles.kpiValueSuffix}>/ 5.0</span></div>
-                    <div className={styles.kpiSubtext}>Below target of 4.5</div>
-                </div>
-                <div className={styles.kpiCard}>
-                    <div className={styles.kpiHeader}><span className={styles.kpiLabel}>Loyalty Redemptions</span><span className={`${styles.kpiTrend} ${styles.trendUp}`}><TrendingUp size={16} /> 3</span></div>
-                    <div className={styles.kpiValue}>8</div>
-                    <div className={styles.kpiSubtext}>30th-order rewards claimed</div>
-                </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                <KPICard
+                    title="Total Orders This Period"
+                    value={Intl.NumberFormat("en-PH").format(totalOrders)}
+                    subtitle={`Est. Revenue: ₱${Intl.NumberFormat("en-PH").format(revenueEst)}`}
+                    icon={<ShoppingCart className="w-4 h-4 text-[#007BC1]" />}
+                    accentColor="#007BC1"
+                    trend={{ text: '+12% from last period', direction: 'up', positive: true }}
+                />
+                <KPICard
+                    title="Delivery Completion Rate"
+                    value="96.8%"
+                    subtitle="Vs 94.7% previous period"
+                    icon={<Truck className="w-4 h-4 text-[#16A34A]" />}
+                    accentColor="#16A34A"
+                    trend={{ text: '+2.1% from last period', direction: 'up', positive: true }}
+                />
+                <KPICard
+                    title="Avg CSAT Score"
+                    value="4.3"
+                    subtitle="Below target of 4.5"
+                    icon={<Star className="w-4 h-4 text-[#f59e0b]" />}
+                    accentColor="#f59e0b"
+                    trend={{ text: '-0.1 from last period', direction: 'down', positive: false }}
+                />
+                <KPICard
+                    title="Loyalty Redemptions"
+                    value="8"
+                    subtitle="30th-order rewards claimed"
+                    icon={<Gift className="w-4 h-4 text-[#9333EA]" />}
+                    accentColor="#9333EA"
+                    trend={{ text: '+3 from last period', direction: 'up', positive: true }}
+                />
             </div>
 
             <div className={styles.chartGrid}>

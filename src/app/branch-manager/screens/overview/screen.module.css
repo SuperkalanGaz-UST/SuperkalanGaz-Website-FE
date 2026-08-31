@@ -1,14 +1,7 @@
 .pageTitle { font-size: 1.5rem; font-weight: 700; color: var(--foreground); margin-bottom: 0.25rem; }
 .pageSubtitle { font-size: 0.9rem; color: var(--muted-foreground); margin-bottom: 1.5rem; }
 
-/* KPI Grid */
-.kpiGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
-.kpiCard { background-color: var(--card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 1.25rem; box-shadow: var(--shadow); }
-.kpiAccent { border-left: 3px solid var(--accent); }
-.kpiTitle { font-size: 0.8rem; font-weight: 500; color: var(--muted-foreground); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.5rem; }
-.kpiValue { font-size: 2rem; font-weight: 700; color: var(--foreground); line-height: 1; }
-.kpiValueWithIcon { font-size: 2rem; font-weight: 700; color: var(--foreground); line-height: 1; display: flex; align-items: center; gap: 0.4rem; }
-.starIcon { color: hsl(35, 85%, 50%); }
+
 
 /* Content Grid */
 .contentGrid { display: grid; grid-template-columns: 1fr 340px; gap: 1.5rem; }

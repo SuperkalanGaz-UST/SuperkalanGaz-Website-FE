@@ -1,56 +1,63 @@
-import { useState, useMemo } from 'react';
+'use client';
+
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Header } from './Header';
 import { Pagination } from './Pagination';
-import { Select } from './Select';
-import { ArrowLeft, Search } from 'lucide-react';
-
-const fullComplaintData = [
-  { complaintId: 'CMP-001', customer: 'Pedro Penduko', issueSummary: 'Late delivery - order arrived 1 hour past scheduled time', status: 'Resolved', responseTime: '2 hrs' },
-  { complaintId: 'CMP-002', customer: 'Ana Reyes', issueSummary: 'Wrong LPG tank size delivered', status: 'Pending', responseTime: '45 mins' },
-  { complaintId: 'CMP-003', customer: 'Carlos Miguel', issueSummary: 'Rider did not call upon arrival', status: 'Resolved', responseTime: '1.5 hrs' },
-  { complaintId: 'CMP-004', customer: 'Sofia Cruz', issueSummary: 'Payment receipt not provided', status: 'Pending', responseTime: '30 mins' },
-  { complaintId: 'CMP-005', customer: 'Juan Dela Cruz', issueSummary: 'Delivery address was incorrect', status: 'Resolved', responseTime: '3 hrs' },
-  { complaintId: 'CMP-006', customer: 'Maria Santos', issueSummary: 'Tank was not properly sealed', status: 'Resolved', responseTime: '1 hr' },
-  { complaintId: 'CMP-007', customer: 'Lola Basyang', issueSummary: 'Rider was rude', status: 'Pending', responseTime: '20 mins' },
-  { complaintId: 'CMP-008', customer: 'Kainan ni Aling Nena', issueSummary: 'Late night delivery outside operating hours', status: 'Resolved', responseTime: '2.5 hrs' },
-  { complaintId: 'CMP-009', customer: 'Rita Lopez', issueSummary: 'Overcharged on invoice', status: 'Resolved', responseTime: '4 hrs' },
-  { complaintId: 'CMP-010', customer: 'Ben Reyes', issueSummary: 'Tank leaked after installation', status: 'Pending', responseTime: '15 mins' },
-  { complaintId: 'CMP-011', customer: 'Diana Cruz', issueSummary: 'No confirmation call before delivery', status: 'Resolved', responseTime: '1.5 hrs' },
-  { complaintId: 'CMP-012', customer: 'Edgar Santos', issueSummary: 'Delivery van blocked driveway', status: 'Resolved', responseTime: '45 mins' },
-];
+import { ArrowLeft, RefreshCw, Search } from 'lucide-react';
+import { apiFetch } from '../../lib/api';
+import { useBranch } from '../contexts/BranchContext';
+import { RatingRow, RatingStars, formatDate } from './CSATSatisfaction';
 
 export function ComplaintLogFull({ onBack }: { onBack: () => void }) {
+  const { selectedBranch } = useBranch();
+
+  const [ratings, setRatings] = useState<RatingRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
 
-  const itemsPerPage = 10;
+  const ITEMS_PER_PAGE = 10;
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const r = await apiFetch('/csat/ratings?resolution=all&maxStars=3');
+      const data = await r.json() as { ratings: RatingRow[] };
+      if (!r.ok) throw new Error('Failed to load');
+      setRatings(data.ratings);
+    } catch {
+      setError('Failed to load complaints. Please refresh.');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { void load(); }, [load, selectedBranch]);
 
   const filteredData = useMemo(() => {
-    let data = fullComplaintData;
+    return ratings.filter((row) => {
+      const matchesStatus =
+        filterStatus === 'all' ||
+        row.resolution_status.toLowerCase() === filterStatus;
+      const q = searchQuery.toLowerCase();
+      const matchesSearch =
+        !q ||
+        (row.customer_name ?? '').toLowerCase().includes(q) ||
+        (row.comment ?? '').toLowerCase().includes(q);
+      return matchesStatus && matchesSearch;
+    });
+  }, [ratings, searchQuery, filterStatus]);
 
-    if (searchQuery) {
-      data = data.filter(row =>
-        Object.values(row).some(val =>
-          String(val).toLowerCase().includes(searchQuery.toLowerCase())
-        )
-      );
-    }
+  const totalPages = Math.ceil(filteredData.length / ITEMS_PER_PAGE);
+  const currentData = filteredData.slice(
+    (currentPage - 1) * ITEMS_PER_PAGE,
+    currentPage * ITEMS_PER_PAGE,
+  );
 
-    if (filterStatus !== 'all') {
-      data = data.filter(row => row.status.toLowerCase() === filterStatus.toLowerCase());
-    }
-
-    return data;
-  }, [searchQuery, filterStatus]);
-
-  const totalPages = Math.ceil(filteredData.length / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const endIndex = startIndex + itemsPerPage;
-  const currentData = filteredData.slice(startIndex, endIndex);
-
-  const hasActiveFilters = searchQuery || filterStatus !== 'all';
-
+  const hasFilters = searchQuery || filterStatus !== 'all';
   const clearFilters = () => {
     setSearchQuery('');
     setFilterStatus('all');
@@ -72,28 +79,29 @@ export function ComplaintLogFull({ onBack }: { onBack: () => void }) {
           Back
         </button>
 
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
-          <div className="flex gap-4 mb-6">
-            <div className="flex-1 relative">
-              <Search className="w-5 h-5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+          {/* Filters */}
+          <div className="flex flex-wrap gap-3 mb-6 items-center">
+            <div className="flex-1 min-w-[180px] relative">
+              <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
-                placeholder="Search..."
+                placeholder="Search customer or description…"
                 value={searchQuery}
                 onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#007BC1] focus:border-transparent outline-none text-sm"
+                className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-[#007BC1]"
               />
             </div>
-            <Select
+            <select
               value={filterStatus}
-              onChange={(value) => { setFilterStatus(value); setCurrentPage(1); }}
-              options={[
-                { value: 'all', label: 'All Status' },
-                { value: 'pending', label: 'Pending' },
-                { value: 'resolved', label: 'Resolved' },
-              ]}
-            />
-            {hasActiveFilters && (
+              onChange={(e) => { setFilterStatus(e.target.value); setCurrentPage(1); }}
+              className="text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-[#007BC1]"
+            >
+              <option value="all">All Statuses</option>
+              <option value="open">Open</option>
+              <option value="resolved">Resolved</option>
+            </select>
+            {hasFilters && (
               <button
                 onClick={clearFilters}
                 className="text-sm text-[#007BC1] hover:text-[#005a8f] transition-colors whitespace-nowrap"
@@ -101,35 +109,79 @@ export function ComplaintLogFull({ onBack }: { onBack: () => void }) {
                 Clear filters
               </button>
             )}
+            <button
+              onClick={() => void load()}
+              disabled={loading}
+              className="text-gray-400 hover:text-gray-600 transition-colors disabled:opacity-40 ml-auto"
+              title="Refresh"
+            >
+              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            </button>
           </div>
 
+          {error && <div className="text-sm text-red-500 mb-4">{error}</div>}
+
           <div className="overflow-x-auto">
-            <table className="w-full">
+            <table className="w-full" style={{ tableLayout: 'fixed' }}>
+              <colgroup>
+                <col style={{ width: '160px' }} />
+                <col style={{ width: '130px' }} />
+                <col style={{ width: '110px' }} />
+                <col style={{ minWidth: '180px' }} />
+                <col style={{ width: '110px' }} />
+                <col style={{ width: '180px' }} />
+                <col style={{ width: '110px' }} />
+              </colgroup>
               <thead>
                 <tr className="border-b border-gray-200">
-                  <th className="text-left text-[11px] font-medium text-gray-600 pb-3">Complaint ID</th>
-                  <th className="text-left text-[11px] font-medium text-gray-600 pb-3">Customer Name</th>
-                  <th className="text-left text-[11px] font-medium text-gray-600 pb-3">Issue Summary</th>
-                  <th className="text-left text-[11px] font-medium text-gray-600 pb-3">Status</th>
-                  <th className="text-left text-[11px] font-medium text-gray-600 pb-3">Response Time</th>
+                  <th className="text-left text-[11px] font-medium text-gray-500 pb-3 px-2">Customer / ID</th>
+                  <th className="text-left text-[11px] font-medium text-gray-500 pb-3 px-2">Delivery ID</th>
+                  <th className="text-left text-[11px] font-medium text-gray-500 pb-3 px-2">Rating</th>
+                  <th className="text-left text-[11px] font-medium text-gray-500 pb-3 px-2">Complaint / Desc</th>
+                  <th className="text-left text-[11px] font-medium text-gray-500 pb-3 px-2">Status</th>
+                  <th className="text-left text-[11px] font-medium text-gray-500 pb-3 px-2">Resolution</th>
+                  <th className="text-left text-[11px] font-medium text-gray-500 pb-3 px-2">Resolved At</th>
                 </tr>
               </thead>
               <tbody>
-                {currentData.map((row) => (
-                  <tr key={row.complaintId} className="border-b border-gray-100">
-                    <td className="py-3 text-[13px] text-gray-900">{row.complaintId}</td>
-                    <td className="py-3 text-[13px] text-gray-900">{row.customer}</td>
-                    <td className="py-3 text-[13px] text-gray-600 max-w-md">{row.issueSummary}</td>
-                    <td className="py-3">
-                      <span className={`inline-block px-3 py-1 rounded-full text-[11px] font-medium ${
-                        row.status === 'Resolved'
+                {loading && (
+                  <tr><td colSpan={7} className="py-10 text-center text-sm text-gray-400">Loading…</td></tr>
+                )}
+                {!loading && currentData.length === 0 && (
+                  <tr>
+                    <td colSpan={7} className="py-10 text-center text-sm text-gray-400">
+                      {hasFilters ? 'No complaints match the selected filters.' : 'No complaints on record. 🎉'}
+                    </td>
+                  </tr>
+                )}
+                {!loading && currentData.map((i) => (
+                  <tr key={i.id} className={`border-b border-gray-100 ${i.resolution_status !== 'Resolved' ? 'bg-red-50/40' : ''}`}>
+                    <td className="py-4 px-2 whitespace-nowrap">
+                      <div className="text-[13px] text-gray-900 font-medium">{i.customer_name ?? '—'}</div>
+                      <div className="text-[11px] text-gray-500 font-mono" title={i.customer_id}>{i.customer_id.split('-')[0]}</div>
+                    </td>
+                    <td className="py-4 px-2 text-[13px] text-gray-600 font-mono">
+                      {i.service_request_id.split('-')[0]}
+                    </td>
+                    <td className="py-4 px-2"><RatingStars value={i.stars} /></td>
+                    <td className="py-4 px-2 text-[13px] text-gray-600">
+                      {i.comment ?? <span className="italic text-gray-400">No description</span>}
+                    </td>
+                    <td className="py-4 px-2">
+                      <span className={`inline-block px-2 py-0.5 rounded-full text-[11px] font-medium ${
+                        i.resolution_status === 'Resolved'
                           ? 'bg-green-100 text-green-700'
                           : 'bg-amber-100 text-amber-700'
                       }`}>
-                        {row.status}
+                        {i.resolution_status}
                       </span>
                     </td>
-                    <td className="py-3 text-[13px] text-gray-600">{row.responseTime}</td>
+                    <td className="py-4 px-2 text-[13px] text-gray-600">
+                       {i.resolution_note ?? <span className="italic text-gray-400">—</span>}
+                    </td>
+                    <td className="py-4 px-2 text-[13px] text-gray-500 whitespace-nowrap">
+                      {formatDate(i.resolved_at || '')}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -143,6 +195,12 @@ export function ComplaintLogFull({ onBack }: { onBack: () => void }) {
                 totalPages={totalPages}
                 onPageChange={setCurrentPage}
               />
+            </div>
+          )}
+
+          {!loading && (
+            <div className="mt-3 text-xs text-gray-400 text-right">
+              Showing {currentData.length} of {filteredData.length} complaint{filteredData.length !== 1 ? 's' : ''}
             </div>
           )}
         </div>

@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
-import { Search, ChevronDown, Star, Users } from 'lucide-react';
+import { Search, ChevronDown, Star, Users, Gift, ShoppingCart } from 'lucide-react';
 import { Header } from './Header';
+import { KPICard } from './KPICard';
 import { Pagination } from './Pagination';
 
 const allCustomers = [
@@ -105,19 +106,32 @@ export function CustomerList({ onViewCustomer }: { onViewCustomer: () => void })
       </div>
 
       <div className="p-8">
-        {/* Summary KPI row */}
-        <div className="grid grid-cols-4 gap-5 mb-7">
-          {[
-            { label: 'Total Customers',       value: allCustomers.length,                                         color: '#007BC1' },
-            { label: 'Reward Eligible',        value: allCustomers.filter(c => c.status === 'Reward Eligible').length, color: '#f59e0b' },
-            { label: 'Avg. Orders per Customer', value: (allCustomers.reduce((s, c) => s + c.totalOrders, 0) / allCustomers.length).toFixed(1), color: '#22c55e' },
-            { label: 'Avg. Rating',             value: (allCustomers.reduce((s, c) => s + c.avgRating, 0) / allCustomers.length).toFixed(1) + ' ★', color: '#a855f7' },
-          ].map((k) => (
-            <div key={k.label} className="bg-white rounded-xl border border-gray-200 p-5 border-l-4" style={{ borderLeftColor: k.color }}>
-              <div className="text-2xl font-bold text-gray-900">{k.value}</div>
-              <div className="text-xs text-gray-500 mt-1">{k.label}</div>
-            </div>
-          ))}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-7">
+          <KPICard
+            title="Total Customers"
+            value={allCustomers.length.toString()}
+            icon={<Users className="w-4 h-4 text-[#007BC1]" />}
+            accentColor="#007BC1"
+          />
+          <KPICard
+            title="Reward Eligible"
+            value={allCustomers.filter(c => c.status === 'Reward Eligible').length.toString()}
+            icon={<Gift className="w-4 h-4 text-[#f59e0b]" />}
+            accentColor="#f59e0b"
+          />
+          <KPICard
+            title="Avg. Orders per Customer"
+            value={(allCustomers.reduce((s, c) => s + c.totalOrders, 0) / allCustomers.length).toFixed(1)}
+            icon={<ShoppingCart className="w-4 h-4 text-[#22c55e]" />}
+            accentColor="#22c55e"
+          />
+          <KPICard
+            title="Avg. Rating"
+            value={(allCustomers.reduce((s, c) => s + c.avgRating, 0) / allCustomers.length).toFixed(1)}
+            subtitle="out of 5"
+            icon={<Star className="w-4 h-4 text-[#a855f7]" />}
+            accentColor="#a855f7"
+          />
         </div>
 
         {/* Table card */}

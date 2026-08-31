@@ -1,11 +1,13 @@
 'use client';
 
 import React from 'react';
-import { Flame, Star } from 'lucide-react';
+import { Flame, Star, ShoppingCart, Truck, AlertTriangle } from 'lucide-react';
+import { KPICard } from '../../../components/KPICard';
 import { Badge } from '../../components/Badge';
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '../../components/Chart';
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from 'recharts';
 import styles from './screen.module.css';
+import { apiFetch } from '../../../lib/api';
 
 const MOCK_RECENT_ORDERS = [
     { id: "ORD-1047", customer: "Maria Santos", items: "2x 11kg LPG", status: "Delivered", rider: "J. Reyes", time: "10:15 AM" },
@@ -44,10 +46,42 @@ const getStatusVariant = (status: string) => {
 
 export default function Dashboard() {
     const [mounted, setMounted] = React.useState(false);
+    const [csatScore, setCsatScore] = React.useState<string | null>(null);
+    const [csatTrend, setCsatTrend] = React.useState<{ text: string; direction: 'up' | 'down'; positive: boolean } | undefined>(undefined);
 
     React.useEffect(() => {
         setMounted(true);
     }, []);
+
+    // Fetch live CSAT summary from the branch-scoped API endpoint.
+    // GET /csat/summary is already filtered to the logged-in BM's branch by the JWT.
+    React.useEffect(() => {
+        if (!mounted) return;
+        apiFetch('/csat/summary')
+            .then((res) => res.json())
+            .then((data) => {
+                const summary = data?.summary;
+                if (!summary) return;
+                const avg: number | null = summary.average_stars;
+                if (avg !== null && avg !== undefined) {
+                    setCsatScore(avg.toFixed(1));
+                    // We don't have a prior-period figure from this endpoint, so
+                    // show the count of total ratings as context instead.
+                    const total: number = summary.total_ratings ?? 0;
+                    setCsatTrend({
+                        text: `${total} rating${total !== 1 ? 's' : ''} total`,
+                        direction: 'up',
+                        positive: true,
+                    });
+                } else {
+                    setCsatScore('—');
+                }
+            })
+            .catch(() => {
+                // Non-fatal — fall back to dash
+                setCsatScore('—');
+            });
+    }, [mounted]);
 
     if (!mounted) {
         return <div style={{ minHeight: "100vh", backgroundColor: "var(--background)" }} />;
@@ -55,25 +89,34 @@ export default function Dashboard() {
 
     return (
         <>
-            <div className={styles.kpiGrid}>
-                <div className={styles.kpiCard}>
-                    <h3 className={styles.kpiTitle}>Total Orders Today</h3>
-                    <div className={styles.kpiValue}>47</div>
-                </div>
-                <div className={styles.kpiCard}>
-                    <h3 className={styles.kpiTitle}>Active Deliveries</h3>
-                    <div className={styles.kpiValue}>12</div>
-                </div>
-                <div className={`${styles.kpiCard} ${styles.kpiAccent}`}>
-                    <h3 className={styles.kpiTitle}>Low Stock Alerts</h3>
-                    <div className={styles.kpiValue}>3</div>
-                </div>
-                <div className={styles.kpiCard}>
-                    <h3 className={styles.kpiTitle}>Avg CSAT</h3>
-                    <div className={styles.kpiValueWithIcon}>
-                        4.3 <Star size={24} className={styles.starIcon} fill="currentColor" strokeWidth={0} />
-                    </div>
-                </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                <KPICard
+                    title="Total Orders Today"
+                    value="47"
+                    icon={<ShoppingCart className="w-4 h-4 text-[#007BC1]" />}
+                    accentColor="#007BC1"
+                    trend={{ text: '+5.2% from yesterday', direction: 'up', positive: true }}
+                />
+                <KPICard
+                    title="Active Deliveries"
+                    value="12"
+                    icon={<Truck className="w-4 h-4 text-[#16A34A]" />}
+                    accentColor="#16A34A"
+                />
+                <KPICard
+                    title="Low Stock Alerts"
+                    value="3"
+                    icon={<AlertTriangle className="w-4 h-4 text-[#ef4444]" />}
+                    accentColor="#ef4444"
+                    alert={true}
+                />
+                <KPICard
+                    title="Avg CSAT"
+                    value={csatScore ?? '…'}
+                    icon={<Star className="w-4 h-4 text-[#f59e0b]" />}
+                    accentColor="#f59e0b"
+                    trend={csatTrend}
+                />
             </div>
 
             <div className={styles.contentGrid}>

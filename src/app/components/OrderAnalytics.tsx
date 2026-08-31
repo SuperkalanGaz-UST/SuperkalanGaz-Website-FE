@@ -27,21 +27,21 @@ export function OrderAnalytics() {
             value="1,847"
             icon={<ShoppingCart className="w-4 h-4 text-[#eab308]" />}
             accentColor="#eab308"
-            subtitle="+6.2% from last month"
+            trend={{ text: '+6.2% from last month', direction: 'up', positive: true }}
           />
           <KPICard
             title="Total Completed Deliveries"
             value="1,739"
             icon={<CheckCircle2 className="w-4 h-4 text-[#22c55e]" />}
             accentColor="#22c55e"
-            subtitle="+4.8% from last month"
+            trend={{ text: '+4.8% from last month', direction: 'up', positive: true }}
           />
           <KPICard
             title="Total Cancelled / Failed"
             value="108"
             icon={<XCircle className="w-4 h-4 text-[#ef4444]" />}
             accentColor="#ef4444"
-            subtitle="-1.5% from last month"
+            trend={{ text: '-1.5% from last month', direction: 'down', positive: true }}
           />
           <KPICard
             title="Avg. Delivery Completion Rate"

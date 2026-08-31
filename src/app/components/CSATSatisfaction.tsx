@@ -45,7 +45,7 @@ export function CSATSatisfaction() {
 
         <div className="grid grid-cols-3 gap-6 mb-8">
           {/* Average Rating card — styled to match dashboard KPICard */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 relative flex flex-col min-h-[120px]">
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 relative flex flex-col min-h-[120px] h-full">
             <div
               className="absolute top-4 right-4 w-9 h-9 rounded-full flex items-center justify-center"
               style={{ backgroundColor: '#f59e0b26' }}
@@ -77,14 +77,14 @@ export function CSATSatisfaction() {
             value={currentData.total.toString()}
             icon={<MessageSquare className="w-4 h-4 text-[#f59e0b]" />}
             accentColor="#f59e0b"
-            subtitle="+18 from last month"
+            trend={{ text: '+18 from last month', direction: 'up', positive: true }}
           />
           <KPICard
             title="Open Complaints"
             value={currentData.complaints.toString()}
             icon={<AlertCircle className="w-4 h-4 text-[#ef4444]" />}
             accentColor="#ef4444"
-            subtitle="-1 from last month"
+            trend={{ text: '-1 from last month', direction: 'down', positive: true }}
           />
         </div>
 
