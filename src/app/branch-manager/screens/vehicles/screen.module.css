@@ -58,6 +58,7 @@
 .dialogTitle { font-size: 1.25rem; font-weight: 600; color: var(--foreground); }
 .dialogDescription { font-size: 0.875rem; color: var(--muted-foreground); }
 .dialogFooter { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem; }
+.confirmationDialog { max-width: 480px; }
 
 .registrationDialog { max-width: 760px; padding: 0; gap: 0; overflow-x: hidden; }
 .wizardHeader { display: flex; flex-direction: column; align-items: center; gap: 0.9rem; padding: 1.25rem 1.5rem 0.65rem; }

@@ -67,7 +67,7 @@ const vehicleSetupSteps = [
         imageAlt: "Cartoon showing a magnifying glass over the identifier label on a SinoTrack device",
     },
     {
-        title: "Install the tracker",
+        title: "Install the device",
         description: "Ask a qualified installer to mount and wire the ST-901 using its manual.",
         image: "/fleet/setup/03-install-tracker.jpg",
         imageWidth: 1040,
@@ -91,8 +91,8 @@ const vehicleSetupSteps = [
         imageAlt: "Cartoon showing a delivery motorcycle outdoors receiving GPS signals",
     },
     {
-        title: "Ready to register",
-        description: "Your hardware setup is complete. Continue to enter the vehicle details.",
+        title: "Ready to connect",
+        description: "Your hardware setup is complete. Continue to enter the device ID and connect it to the registered vehicle.",
         image: "/fleet/setup/06-ready-to-register.jpg",
         imageWidth: 1040,
         imageHeight: 440,
@@ -107,15 +107,20 @@ export default function VehicleManagementPage() {
     const [error, setError] = useState<string | null>(null);
 
     const [registrationOpen, setRegistrationOpen] = useState(false);
-    const [registrationStep, setRegistrationStep] = useState(0);
     const [plateNumber, setPlateNumber] = useState("");
-    const [hardwareUniqueId, setHardwareUniqueId] = useState("");
     const [initialOdometerKm, setInitialOdometerKm] = useState("0");
     const [assignedRiderId, setAssignedRiderId] = useState("");
     const [riders, setRiders] = useState<RiderRow[]>([]);
     const [ridersLoading, setRidersLoading] = useState(false);
     const [registrationError, setRegistrationError] = useState<string | null>(null);
     const [registering, setRegistering] = useState(false);
+
+    const [gpsPromptVehicle, setGpsPromptVehicle] = useState<VehicleRow | null>(null);
+    const [gpsSetupVehicle, setGpsSetupVehicle] = useState<VehicleRow | null>(null);
+    const [gpsSetupStep, setGpsSetupStep] = useState(0);
+    const [hardwareUniqueId, setHardwareUniqueId] = useState("");
+    const [gpsSetupError, setGpsSetupError] = useState<string | null>(null);
+    const [connectingGps, setConnectingGps] = useState(false);
 
     const [updateDialogVehicleId, setUpdateDialogVehicleId] = useState<string | null>(null);
     const [odometerValue, setOdometerValue] = useState("");
@@ -157,11 +162,10 @@ export default function VehicleManagementPage() {
     const totalVehicles = vehicles.length;
     const overdueVehicles = vehicles.filter(v => v.status === "maintenance").length;
     const healthyVehicles = vehicles.filter(v => v.status !== "maintenance" && v.km_since_last_pms < v.maintenance_threshold_km * 0.8).length;
-    const activeSetupStep = vehicleSetupSteps[Math.min(registrationStep, vehicleSetupSteps.length - 1)];
+    const activeSetupStep = vehicleSetupSteps[Math.min(gpsSetupStep, vehicleSetupSteps.length - 1)];
 
     const openRegistrationDialog = async () => {
         setRegistrationOpen(true);
-        setRegistrationStep(0);
         setRegistrationError(null);
         setRidersLoading(true);
         try {
@@ -180,26 +184,35 @@ export default function VehicleManagementPage() {
     const closeRegistrationDialog = () => {
         if (registering) return;
         setRegistrationOpen(false);
-        setRegistrationStep(0);
         setPlateNumber("");
-        setHardwareUniqueId("");
         setInitialOdometerKm("0");
         setAssignedRiderId("");
         setRegistrationError(null);
     };
 
+    const openGpsSetup = (vehicle: VehicleRow) => {
+        setGpsPromptVehicle(null);
+        setGpsSetupVehicle(vehicle);
+        setGpsSetupStep(0);
+        setHardwareUniqueId("");
+        setGpsSetupError(null);
+    };
+
+    const closeGpsSetup = () => {
+        if (connectingGps) return;
+        setGpsSetupVehicle(null);
+        setGpsSetupStep(0);
+        setHardwareUniqueId("");
+        setGpsSetupError(null);
+    };
+
     const handleRegisterVehicle = async (event: React.FormEvent<HTMLFormElement>) => {
         event.preventDefault();
         const normalizedPlate = plateNumber.trim().toUpperCase().replace(/\s+/g, ' ');
-        const normalizedHardwareId = hardwareUniqueId.trim();
         const odometerKm = Number(initialOdometerKm);
 
         if (!/^[A-Z0-9]+(?:[ -][A-Z0-9]+)*$/.test(normalizedPlate) || normalizedPlate.length < 2 || normalizedPlate.length > 20) {
             setRegistrationError('Enter a valid plate number using letters, numbers, spaces, or hyphens.');
-            return;
-        }
-        if (!/^[A-Za-z0-9_-]{4,64}$/.test(normalizedHardwareId)) {
-            setRegistrationError('Enter the hardware identifier printed on the SinoTrack device.');
             return;
         }
         if (!Number.isInteger(odometerKm) || odometerKm < 0) {
@@ -214,7 +227,6 @@ export default function VehicleManagementPage() {
                 method: 'POST',
                 body: JSON.stringify({
                     plateNumber: normalizedPlate,
-                    hardwareUniqueId: normalizedHardwareId,
                     initialOdometerKm: odometerKm,
                     ...(assignedRiderId ? { assignedRiderId } : {}),
                 }),
@@ -224,21 +236,53 @@ export default function VehicleManagementPage() {
 
             const created = data.vehicle as VehicleRow;
             setVehicles(prev => [...prev, created].sort((a, b) => a.plate_number.localeCompare(b.plate_number)));
-            if (created.gps_provisioning_status === 'provisioned') {
-                toast.success(`${created.plate_number} registered and its GPS device was provisioned.`);
-            } else {
-                toast.warning(`${created.plate_number} was registered, but GPS provisioning failed. Check that Traccar is reachable.`);
-            }
+            toast.success(`${created.plate_number} was registered.`);
             setRegistrationOpen(false);
-            setRegistrationStep(0);
             setPlateNumber("");
-            setHardwareUniqueId("");
             setInitialOdometerKm("0");
             setAssignedRiderId("");
+            setGpsPromptVehicle(created);
         } catch (err) {
             setRegistrationError(err instanceof Error ? err.message : 'Failed to register vehicle');
         } finally {
             setRegistering(false);
+        }
+    };
+
+    const handleConnectGps = async (event: React.FormEvent<HTMLFormElement>) => {
+        event.preventDefault();
+        if (!gpsSetupVehicle) return;
+
+        const normalizedHardwareId = hardwareUniqueId.trim();
+        if (!/^[A-Za-z0-9_-]{4,64}$/.test(normalizedHardwareId)) {
+            setGpsSetupError('Enter the hardware identifier printed on the SinoTrack ST-901.');
+            return;
+        }
+
+        setConnectingGps(true);
+        setGpsSetupError(null);
+        try {
+            const res = await apiFetch(`/vehicles/${gpsSetupVehicle.id}/gps-provisioning`, {
+                method: 'POST',
+                body: JSON.stringify({ hardwareUniqueId: normalizedHardwareId }),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(apiErrorMessage(data, 'Failed to connect the SinoTrack ST-901'));
+
+            const updated = data.vehicle as VehicleRow;
+            setVehicles(prev => prev.map(vehicle => vehicle.id === updated.id ? updated : vehicle));
+            if (updated.gps_provisioning_status === 'provisioned') {
+                toast.success(`${updated.plate_number} is now connected to its SinoTrack ST-901.`);
+            } else {
+                toast.warning(`${updated.plate_number} remains registered, but Traccar could not complete the connection.`);
+            }
+            setGpsSetupVehicle(null);
+            setGpsSetupStep(0);
+            setHardwareUniqueId("");
+        } catch (err) {
+            setGpsSetupError(err instanceof Error ? err.message : 'Failed to connect the SinoTrack ST-901');
+        } finally {
+            setConnectingGps(false);
         }
     };
 
@@ -404,12 +448,12 @@ export default function VehicleManagementPage() {
                         const isOverdue = vehicle.status === "maintenance";
                         const isWarning = !isOverdue && sinceLastPms >= threshold * 0.8;
                         const gpsBadge = vehicle.gps_provisioning_status === 'provisioned'
-                            ? { label: 'GPS Ready', variant: 'success' as const }
+                            ? { label: 'SinoTrack Connected', variant: 'success' as const }
                             : vehicle.gps_provisioning_status === 'failed'
-                                ? { label: 'GPS Failed', variant: 'destructive' as const }
+                                ? { label: 'Connection Error', variant: 'destructive' as const }
                                 : vehicle.gps_provisioning_status === 'pending'
-                                    ? { label: 'GPS Pending', variant: 'warning' as const }
-                                    : { label: 'GPS Unconfigured', variant: 'secondary' as const };
+                                    ? { label: 'Connecting', variant: 'warning' as const }
+                                    : { label: 'SinoTrack Not Connected', variant: 'secondary' as const };
 
                         return (
                             <div key={vehicle.id} className={styles.vehicleCard}>
@@ -476,6 +520,16 @@ export default function VehicleManagementPage() {
                                     <Button variant="ghost" size="sm" style={{ width: '100%', marginTop: '0.4rem' }} onClick={() => void toggleHistory(vehicle.id)}>
                                         <History size={14} style={{ marginRight: '0.3rem' }} /> {historyVehicleId === vehicle.id ? 'Hide History' : 'View History'}
                                     </Button>
+                                    {vehicle.gps_provisioning_status === 'unconfigured' && (
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            style={{ width: '100%', marginTop: '0.4rem' }}
+                                            onClick={() => openGpsSetup(vehicle)}
+                                        >
+                                            Connect SinoTrack
+                                        </Button>
+                                    )}
                                     {vehicle.gps_provisioning_status === 'failed' && (
                                         <Button
                                             variant="outline"
@@ -485,7 +539,7 @@ export default function VehicleManagementPage() {
                                             onClick={() => void handleRetryGps(vehicle)}
                                         >
                                             <RefreshCw size={14} style={{ marginRight: '0.3rem' }} />
-                                            {retryingGpsId === vehicle.id ? 'Retrying GPS…' : 'Retry GPS Provisioning'}
+                                            {retryingGpsId === vehicle.id ? 'Retrying…' : 'Retry SinoTrack Connection'}
                                         </Button>
                                     )}
                                     {historyVehicleId === vehicle.id && (
@@ -555,14 +609,96 @@ export default function VehicleManagementPage() {
             {registrationOpen && (
                 <div className={styles.dialogOverlay} role="presentation" onClick={closeRegistrationDialog}>
                     <form className={`${styles.dialogContent} ${styles.registrationDialog}`} onSubmit={(event) => void handleRegisterVehicle(event)} onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="register-vehicle-title">
-                        {registrationStep < vehicleSetupSteps.length ? (
+                        <div className={styles.detailsScreen}>
+                            <div className={styles.dialogHeader}>
+                                <span className={styles.stepEyebrow}>Vehicle details</span>
+                                <h2 id="register-vehicle-title" className={styles.dialogTitle}>Register Vehicle</h2>
+                                <p className={styles.dialogDescription}>Add the vehicle to this branch. Connecting a SinoTrack ST-901 is optional and happens after registration.</p>
+                            </div>
+
+                            <div className={styles.formFields}>
+                                <div>
+                                    <label className={styles.fieldLabel} htmlFor="vehicle-plate">Plate Number</label>
+                                    <Input
+                                        id="vehicle-plate"
+                                        value={plateNumber}
+                                        onChange={(event) => setPlateNumber(event.target.value.toUpperCase())}
+                                        placeholder="ABC-1234"
+                                        autoComplete="off"
+                                        maxLength={20}
+                                        autoFocus
+                                    />
+                                </div>
+                                <div>
+                                    <label className={styles.fieldLabel} htmlFor="vehicle-odometer">Current Odometer (km)</label>
+                                    <Input
+                                        id="vehicle-odometer"
+                                        type="number"
+                                        value={initialOdometerKm}
+                                        onChange={(event) => setInitialOdometerKm(event.target.value)}
+                                        min={0}
+                                        step={1}
+                                    />
+                                    <div className={styles.fieldHint}>This becomes the starting PMS baseline.</div>
+                                </div>
+                                <div>
+                                    <label className={styles.fieldLabel} htmlFor="vehicle-rider">Assign Delivery Rider (optional)</label>
+                                    <select
+                                        id="vehicle-rider"
+                                        className={styles.select}
+                                        value={assignedRiderId}
+                                        onChange={(event) => setAssignedRiderId(event.target.value)}
+                                        disabled={ridersLoading}
+                                    >
+                                        <option value="">{ridersLoading ? 'Loading Delivery Riders…' : 'Unassigned'}</option>
+                                        {riders.map(rider => (
+                                            <option key={rider.id} value={rider.id}>
+                                                {rider.name} · {rider.plate} · {rider.status}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                                {registrationError && <div className={styles.fieldError} role="alert">{registrationError}</div>}
+                            </div>
+
+                            <div className={styles.dialogFooter}>
+                                <Button type="button" variant="ghost" onClick={closeRegistrationDialog} disabled={registering}>Cancel</Button>
+                                <Button type="submit" variant="primary" disabled={registering || ridersLoading}>
+                                    {registering ? 'Registering…' : 'Register Vehicle'}
+                                </Button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            )}
+
+            {gpsPromptVehicle && (
+                <div className={styles.dialogOverlay} role="presentation" onClick={() => setGpsPromptVehicle(null)}>
+                    <div className={`${styles.dialogContent} ${styles.confirmationDialog}`} onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="gps-prompt-title">
+                        <div className={styles.dialogHeader}>
+                            <span className={styles.stepEyebrow}>Vehicle registered</span>
+                            <h2 id="gps-prompt-title" className={styles.dialogTitle}>Connect a SinoTrack ST-901?</h2>
+                            <p className={styles.dialogDescription}><strong>{gpsPromptVehicle.plate_number}</strong> is now part of the branch roster. You can connect its SinoTrack device now or do it later from the vehicle card.</p>
+                        </div>
+                        <div className={styles.dialogFooter}>
+                            <Button type="button" variant="ghost" onClick={() => setGpsPromptVehicle(null)}>Do this later</Button>
+                            <Button type="button" variant="primary" onClick={() => openGpsSetup(gpsPromptVehicle)}>Connect SinoTrack</Button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {gpsSetupVehicle && (
+                <div className={styles.dialogOverlay} role="presentation" onClick={closeGpsSetup}>
+                    <form className={`${styles.dialogContent} ${styles.registrationDialog}`} onSubmit={(event) => void handleConnectGps(event)} onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="gps-setup-title">
+                        {gpsSetupStep < vehicleSetupSteps.length ? (
                             <>
                                 <div className={styles.wizardHeader}>
-                                    <h2 id="register-vehicle-title" className={styles.wizardTitle}>Set up your GPS device</h2>
-                                    <ol className={styles.wizardProgress} aria-label="Hardware setup progress">
+                                    <h2 id="gps-setup-title" className={styles.wizardTitle}>Connect a SinoTrack ST-901</h2>
+                                    <ol className={styles.wizardProgress} aria-label="SinoTrack setup progress">
                                         {vehicleSetupSteps.map((step, index) => {
-                                            const completed = index < registrationStep;
-                                            const active = index === registrationStep;
+                                            const completed = index < gpsSetupStep;
+                                            const active = index === gpsSetupStep;
 
                                             return (
                                                 <li
@@ -579,7 +715,7 @@ export default function VehicleManagementPage() {
                                 </div>
 
                                 <section className={styles.setupStepContent} aria-live="polite" aria-labelledby="setup-step-title">
-                                    <span className={styles.stepEyebrow}>Step {registrationStep + 1} of {vehicleSetupSteps.length}</span>
+                                    <span className={styles.stepEyebrow}>Step {gpsSetupStep + 1} of {vehicleSetupSteps.length}</span>
                                     <div className={styles.setupImageFrame}>
                                         <Image
                                             className={styles.setupImage}
@@ -588,7 +724,7 @@ export default function VehicleManagementPage() {
                                             height={activeSetupStep.imageHeight}
                                             sizes="(max-width: 640px) 100vw, 720px"
                                             alt={activeSetupStep.imageAlt}
-                                            priority={registrationStep === 0}
+                                            priority={gpsSetupStep === 0}
                                         />
                                     </div>
                                     <div className={styles.setupCopy}>
@@ -598,19 +734,15 @@ export default function VehicleManagementPage() {
                                 </section>
 
                                 <div className={styles.wizardFooter}>
-                                    {registrationStep === 0 ? (
-                                        <Button type="button" variant="ghost" onClick={closeRegistrationDialog}>Cancel</Button>
+                                    {gpsSetupStep === 0 ? (
+                                        <Button type="button" variant="ghost" onClick={closeGpsSetup}>Cancel</Button>
                                     ) : (
-                                        <Button type="button" variant="ghost" onClick={() => setRegistrationStep(step => step - 1)}>
+                                        <Button type="button" variant="ghost" onClick={() => setGpsSetupStep(step => step - 1)}>
                                             <ArrowLeft size={16} aria-hidden="true" /> Back
                                         </Button>
                                     )}
-                                    <Button
-                                        type="button"
-                                        variant="primary"
-                                        onClick={() => setRegistrationStep(step => step + 1)}
-                                    >
-                                        {registrationStep === vehicleSetupSteps.length - 1 ? 'Enter vehicle details' : 'Next'}
+                                    <Button type="button" variant="primary" onClick={() => setGpsSetupStep(step => step + 1)}>
+                                        {gpsSetupStep === vehicleSetupSteps.length - 1 ? 'Enter device ID' : 'Next'}
                                         <ArrowRight size={16} aria-hidden="true" />
                                     </Button>
                                 </div>
@@ -618,24 +750,11 @@ export default function VehicleManagementPage() {
                         ) : (
                             <div className={styles.detailsScreen}>
                                 <div className={styles.dialogHeader}>
-                                    <span className={styles.stepEyebrow}>Vehicle details</span>
-                                    <h2 id="register-vehicle-title" className={styles.dialogTitle}>Register Vehicle</h2>
-                                    <p className={styles.dialogDescription}>The API will register the vehicle to your branch and provision its SinoTrack ST-901 in Traccar.</p>
+                                    <span className={styles.stepEyebrow}>Device details</span>
+                                    <h2 id="gps-setup-title" className={styles.dialogTitle}>Connect SinoTrack to {gpsSetupVehicle.plate_number}</h2>
+                                    <p className={styles.dialogDescription}>The API will associate this physical device with the registered vehicle and provision it in Traccar.</p>
                                 </div>
-
                                 <div className={styles.formFields}>
-                                    <div>
-                                        <label className={styles.fieldLabel} htmlFor="vehicle-plate">Plate Number</label>
-                                        <Input
-                                            id="vehicle-plate"
-                                            value={plateNumber}
-                                            onChange={(event) => setPlateNumber(event.target.value.toUpperCase())}
-                                            placeholder="ABC-1234"
-                                            autoComplete="off"
-                                            maxLength={20}
-                                            autoFocus
-                                        />
-                                    </div>
                                     <div>
                                         <label className={styles.fieldLabel} htmlFor="vehicle-hardware-id">SinoTrack Hardware ID</label>
                                         <Input
@@ -645,48 +764,19 @@ export default function VehicleManagementPage() {
                                             placeholder="Device IMEI or unique ID"
                                             autoComplete="off"
                                             maxLength={64}
+                                            autoFocus
                                             required
                                         />
-                                        <div className={styles.fieldHint}>Enter the identifier copied from the physical ST-901 label.</div>
+                                        <div className={styles.fieldHint}>Enter the identifier printed on the physical ST-901 label.</div>
                                     </div>
-                                    <div>
-                                        <label className={styles.fieldLabel} htmlFor="vehicle-odometer">Current Odometer (km)</label>
-                                        <Input
-                                            id="vehicle-odometer"
-                                            type="number"
-                                            value={initialOdometerKm}
-                                            onChange={(event) => setInitialOdometerKm(event.target.value)}
-                                            min={0}
-                                            step={1}
-                                        />
-                                        <div className={styles.fieldHint}>This becomes the starting PMS baseline.</div>
-                                    </div>
-                                    <div>
-                                        <label className={styles.fieldLabel} htmlFor="vehicle-rider">Assign Rider (optional)</label>
-                                        <select
-                                            id="vehicle-rider"
-                                            className={styles.select}
-                                            value={assignedRiderId}
-                                            onChange={(event) => setAssignedRiderId(event.target.value)}
-                                            disabled={ridersLoading}
-                                        >
-                                            <option value="">{ridersLoading ? 'Loading riders…' : 'Unassigned'}</option>
-                                            {riders.map(rider => (
-                                                <option key={rider.id} value={rider.id}>
-                                                    {rider.name} · {rider.plate} · {rider.status}
-                                                </option>
-                                            ))}
-                                        </select>
-                                    </div>
-                                    {registrationError && <div className={styles.fieldError} role="alert">{registrationError}</div>}
+                                    {gpsSetupError && <div className={styles.fieldError} role="alert">{gpsSetupError}</div>}
                                 </div>
-
                                 <div className={styles.dialogFooter}>
-                                    <Button type="button" variant="ghost" onClick={() => setRegistrationStep(vehicleSetupSteps.length - 1)} disabled={registering}>
+                                    <Button type="button" variant="ghost" onClick={() => setGpsSetupStep(vehicleSetupSteps.length - 1)} disabled={connectingGps}>
                                         <ArrowLeft size={16} aria-hidden="true" /> Back
                                     </Button>
-                                    <Button type="submit" variant="primary" disabled={registering || ridersLoading}>
-                                        {registering ? 'Registering…' : 'Register Vehicle'}
+                                    <Button type="submit" variant="primary" disabled={connectingGps}>
+                                        {connectingGps ? 'Connecting…' : 'Connect SinoTrack'}
                                     </Button>
                                 </div>
                             </div>
