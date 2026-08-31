@@ -17,6 +17,7 @@ import {
     DropdownMenuItem,
 } from '../../../components/ui/dropdown-menu';
 import { apiFetch, apiErrorMessage } from '../../../lib/api';
+import { DeliveryProofViewer } from '../../../components/DeliveryProofViewer';
 import { fetchLpgPrices, formatPeso, LpgPrice } from '../../../lib/pricing';
 import { formatPHMobile, normalizePhMobile, toE164PhMobile } from '../../../lib/phMobile';
 import styles from './screen.module.css';
@@ -28,6 +29,7 @@ import styles from './screen.module.css';
  */
 interface SRRow {
     id: string;
+    sr_code: string;
     branch_id: string;
     // Link to the CIM customer this request was raised for. null for legacy /
     // pre-CIM walk-ins created before customer linking existed (customerId is
@@ -1408,13 +1410,25 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                                             ) : req.status === 'Delivered' ? (
                                                 // Closed → still eligible for a lost/undelivered cylinder complaint
                                                 // (BM-US-04 AC1: "any closed or active" request).
-                                                <Button size="sm" variant="outline" onClick={() => openLogComplaint(req.id)}>
-                                                    Log Complaint
-                                                </Button>
+                                                <div className={styles.actionButtons}>
+                                                    <DeliveryProofViewer
+                                                        serviceRequestId={req.id}
+                                                        serviceRequestCode={req.sr_code}
+                                                    />
+                                                    <Button size="sm" variant="outline" onClick={() => openLogComplaint(req.id)}>
+                                                        Log Complaint
+                                                    </Button>
+                                                </div>
                                             ) : req.status === 'Under Review' ? (
                                                 // A complaint has already been logged (BM-021) — no further BM
                                                 // action is defined for this journey (no resolve/close AC exists).
-                                                <span className={styles.mutedText}>Complaint logged</span>
+                                                <div className={styles.actionButtons}>
+                                                    <DeliveryProofViewer
+                                                        serviceRequestId={req.id}
+                                                        serviceRequestCode={req.sr_code}
+                                                    />
+                                                    <span className={styles.mutedText}>Complaint logged</span>
+                                                </div>
                                             ) : (
                                                 <span className={styles.mutedText}>—</span>
                                             )}

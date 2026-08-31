@@ -88,14 +88,12 @@ function popupContent(rider: Rider): HTMLDivElement {
   return content;
 }
 
-function makeMarker(rider: Rider, onSelect: (id: string) => void): Marker {
+function makeMarker(rider: Rider): Marker {
   const element = document.createElement('button');
   element.type = 'button';
   element.title = `${rider.name} — ${statusLabel(rider.status)}`;
   element.setAttribute('aria-label', element.title);
   element.style.cssText = `width:20px;height:20px;padding:0;border-radius:50%;border:3px solid white;background:${markerColor(rider.status)};box-shadow:0 2px 7px rgba(0,0,0,.4);cursor:pointer`;
-  element.addEventListener('click', () => onSelect(rider.id));
-
   return new Marker({ element, anchor: 'center' })
     .setLngLat(toLngLat([rider.lat, rider.lng]))
     .setPopup(new Popup({ offset: 14 }).setDOMContent(popupContent(rider)));
@@ -105,12 +103,11 @@ function syncRiderMarkers(
   map: MapLibreMap,
   riders: Rider[],
   markers: Map<string, Marker>,
-  onSelect: (id: string) => void,
 ): void {
   markers.forEach((marker) => marker.remove());
   markers.clear();
   riders.forEach((rider) => {
-    const marker = makeMarker(rider, onSelect).addTo(map);
+    const marker = makeMarker(rider).addTo(map);
     markers.set(rider.id, marker);
   });
 }
@@ -118,24 +115,18 @@ function syncRiderMarkers(
 interface BranchOwnerFleetMapProps {
   geofence: BranchGeofence;
   riders: Rider[];
-  selectedRider: string | null;
-  onSelectRider: (id: string) => void;
 }
 
 export function BranchOwnerFleetMap({
   geofence,
   riders,
-  selectedRider,
-  onSelectRider,
 }: BranchOwnerFleetMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const markersRef = useRef(new Map<string, Marker>());
   const ridersRef = useRef(riders);
-  const onSelectRef = useRef(onSelectRider);
   const geofenceRef = useRef(geofence);
   ridersRef.current = riders;
-  onSelectRef.current = onSelectRider;
   geofenceRef.current = geofence;
 
   useEffect(() => {
@@ -181,7 +172,6 @@ export function BranchOwnerFleetMap({
         map,
         ridersRef.current,
         markers,
-        (id) => onSelectRef.current(id),
       );
     });
 
@@ -208,23 +198,17 @@ export function BranchOwnerFleetMap({
       map,
       riders,
       markersRef.current,
-      (id) => onSelectRef.current(id),
     );
   }, [riders]);
 
-  useEffect(() => {
-    if (!selectedRider) return;
-    const rider = riders.find((candidate) => candidate.id === selectedRider);
-    const marker = markersRef.current.get(selectedRider);
-    if (!rider || !marker) return;
-
-    mapRef.current?.flyTo({
-      center: toLngLat([rider.lat, rider.lng]),
-      zoom: 16,
-      duration: 700,
-    });
-    if (!marker.getPopup()?.isOpen()) marker.togglePopup();
-  }, [riders, selectedRider]);
-
-  return <div ref={containerRef} className="h-full w-full" />;
+  return (
+    <div className="relative h-full w-full">
+      <div ref={containerRef} className="h-full w-full" />
+      {riders.length === 0 && (
+        <div className="pointer-events-none absolute inset-x-4 bottom-4 rounded-lg bg-white/95 px-4 py-3 text-center text-xs text-gray-600 shadow-sm">
+          Vehicle positions are unavailable. This map shows the assigned branch geofence only.
+        </div>
+      )}
+    </div>
+  );
 }

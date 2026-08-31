@@ -3,12 +3,10 @@ import { KPICard } from "./KPICard";
 import { DailyOrderVolumeChart } from "./DailyOrderVolumeChart";
 import { OrdersByStatusChart } from "./OrdersByStatusChart";
 import { DeliveryCompletionTable } from "./DeliveryCompletionTable";
-import { useBranch } from "../contexts/BranchContext";
+import { DeliveryProofRecords } from "./DeliveryProofRecords";
 import { ShoppingCart, CheckCircle2, XCircle } from "lucide-react";
 
 export function OrderAnalytics() {
-  const { selectedBranch } = useBranch();
-
   return (
     <div className="flex-1 overflow-y-auto">
       <div style={{ position: 'static' }}>
@@ -46,6 +44,7 @@ export function OrderAnalytics() {
         </div>
 
         <DeliveryCompletionTable />
+        <DeliveryProofRecords />
       </div>
     </div>
   );

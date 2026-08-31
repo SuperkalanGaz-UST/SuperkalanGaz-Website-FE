@@ -1,15 +1,85 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { Header } from './Header';
 import { KPICard } from './KPICard';
-import { Users, Navigation, AlertTriangle, Clock, ChevronDown, Loader2 } from 'lucide-react';
+import { Users, Navigation, AlertTriangle, Clock, Loader2 } from 'lucide-react';
 import { useBranch } from '../contexts/BranchContext';
-import {
-  FLEET_ACTIVITY,
-  FLEET_RIDERS,
-  positionFleetRiders,
+import type {
+  FleetRider,
+  PositionedFleetRider,
 } from '../../lib/fleetPresentationData';
+import { apiErrorMessage, apiFetch } from '../../lib/api';
 import { DeliveryRiderAccess } from './DeliveryRiderAccess';
+
+type ApiRiderStatus = 'Available' | 'On Delivery' | 'Maintenance Due' | 'Offline';
+
+interface ApiRiderRow {
+  id: string;
+  branch_id: string;
+  name: string;
+  plate: string;
+  status: ApiRiderStatus;
+  created_at: string;
+  updated_at: string;
+  current_order: string | null;
+}
+
+interface BranchOwnerFleetRider extends FleetRider {
+  apiStatus: ApiRiderStatus;
+}
+
+function isApiRiderStatus(value: unknown): value is ApiRiderStatus {
+  return (
+    value === 'Available' ||
+    value === 'On Delivery' ||
+    value === 'Maintenance Due' ||
+    value === 'Offline'
+  );
+}
+
+function isApiRiderRow(value: unknown): value is ApiRiderRow {
+  if (!value || typeof value !== 'object') return false;
+  const row = value as Record<string, unknown>;
+  return (
+    typeof row.id === 'string' &&
+    typeof row.branch_id === 'string' &&
+    typeof row.name === 'string' &&
+    typeof row.plate === 'string' &&
+    isApiRiderStatus(row.status) &&
+    typeof row.created_at === 'string' &&
+    typeof row.updated_at === 'string' &&
+    (row.current_order === null || typeof row.current_order === 'string')
+  );
+}
+
+function toFleetStatus(status: ApiRiderStatus): FleetRider['status'] {
+  return status === 'Available' || status === 'On Delivery' ? 'active' : 'inactive';
+}
+
+function formatStatus(status: ApiRiderStatus): string {
+  switch (status) {
+    case 'Available':
+      return 'Available';
+    case 'On Delivery':
+      return 'On Delivery';
+    case 'Maintenance Due':
+      return 'Maintenance Due';
+    case 'Offline':
+      return 'Offline';
+  }
+}
+
+function formatRelativeTime(iso: string): string {
+  const timestamp = new Date(iso).getTime();
+  if (!Number.isFinite(timestamp)) return 'Unknown';
+
+  const minutes = Math.max(0, Math.floor((Date.now() - timestamp) / 60_000));
+  if (minutes < 1) return 'Just now';
+  if (minutes < 60) return `${minutes} min ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} hr ago`;
+  return `${Math.floor(hours / 24)}d ago`;
+}
 
 const BranchOwnerFleetMap = dynamic(
   () => import('./BranchOwnerFleetMap').then((module) => module.BranchOwnerFleetMap),
@@ -25,30 +95,79 @@ export function FleetOverview() {
     assignedBranchesError,
     refreshAssignedBranches,
   } = useBranch();
-  const [selectedRider, setSelectedRider] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'overview' | 'access'>('overview');
-  
-  // State for filtering activity log by driver
-  const [activityFilter, setActivityFilter] = useState<string>('all');
-
-  const riders = FLEET_RIDERS;
-  const activeRiders = riders.filter(r => r.status === 'active').length;
-  const outsideGeofence = riders.filter(r => r.status === 'outside-geofence').length;
-  const pastCurfew = 0;
+  const [riders, setRiders] = useState<BranchOwnerFleetRider[]>([]);
+  const [ridersLoading, setRidersLoading] = useState(true);
+  const [ridersError, setRidersError] = useState<string | null>(null);
+  const [ridersRefreshKey, setRidersRefreshKey] = useState(0);
   const assignedBranch = assignedBranches?.find(
     (branch) => branch.id === selectedBranchId,
   );
   const geofence = assignedBranch?.geofence ?? null;
-  const positionedRiders = useMemo(
-    () => geofence ? positionFleetRiders(riders, geofence) : [],
-    [geofence, riders],
-  );
+  const activeRiders = riders.filter((rider) => rider.status === 'active').length;
 
-  // Memoized filter logic for the activity log
-  const filteredActivityLog = useMemo(() => {
-    if (activityFilter === 'all') return FLEET_ACTIVITY;
-    return FLEET_ACTIVITY.filter(log => log.rider === activityFilter);
-  }, [activityFilter]);
+  const loadRiders = useCallback(async (signal: AbortSignal) => {
+    if (!selectedBranchId) {
+      setRiders([]);
+      setRidersError(null);
+      setRidersLoading(false);
+      return;
+    }
+
+    setRidersLoading(true);
+    setRidersError(null);
+
+    try {
+      const response = await apiFetch(
+        `/riders?branchId=${encodeURIComponent(selectedBranchId)}`,
+        { signal },
+      );
+      const data: unknown = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(apiErrorMessage(data, 'Could not load the Delivery Rider roster.'));
+      }
+
+      const rawRiders =
+        data && typeof data === 'object' && Array.isArray((data as { riders?: unknown }).riders)
+          ? (data as { riders: unknown[] }).riders
+          : [];
+      const mapped = rawRiders.filter(isApiRiderRow).map((rider) => ({
+        id: rider.id,
+        name: rider.name,
+        plateNumber: rider.plate,
+        status: toFleetStatus(rider.status),
+        apiStatus: rider.status,
+        currentOrder: rider.current_order,
+        lastUpdated: formatRelativeTime(rider.updated_at || rider.created_at),
+      }));
+      setRiders(mapped);
+    } catch (error) {
+      if (signal.aborted) return;
+      setRiders([]);
+      setRidersError(error instanceof Error ? error.message : 'Could not load the Delivery Rider roster.');
+    } finally {
+      if (!signal.aborted) setRidersLoading(false);
+    }
+  }, [selectedBranchId]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 5_000);
+    void loadRiders(controller.signal);
+    return () => {
+      window.clearTimeout(timeout);
+      controller.abort();
+    };
+  }, [loadRiders, ridersRefreshKey]);
+
+  // Positions are intentionally empty until the API receives authoritative
+  // SinoTrack ST-901 → Traccar vehicle telemetry. Never place riders at a
+  // fabricated point inside the branch geofence.
+  const positionedRiders: PositionedFleetRider[] = [];
+
+  const refreshRiders = useCallback(() => {
+    setRidersRefreshKey((current) => current + 1);
+  }, []);
 
   return (
     <div className="flex-1 overflow-y-auto">
@@ -107,13 +226,15 @@ export function FleetOverview() {
           />
           <KPICard
             title="Outside Geofence"
-            value={String(outsideGeofence)}
+            value="—"
+            subtitle="Awaiting vehicle telemetry"
             icon={<AlertTriangle className="w-5 h-5 text-orange-500" />}
             accentColor="#f59e0b"
           />
           <KPICard
             title="Past Curfew"
-            value={String(pastCurfew)}
+            value="—"
+            subtitle="Curfew data unavailable"
             icon={<Clock className="w-5 h-5 text-red-600" />}
             accentColor="#ef4444"
           />
@@ -122,10 +243,10 @@ export function FleetOverview() {
         <div className="grid grid-cols-3 gap-6 mb-8">
           <div className="col-span-2 bg-white rounded-lg border border-gray-200 p-6">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold text-gray-900">Live GPS Tracking</h3>
+              <h3 className="font-semibold text-gray-900">Vehicle GPS Tracking</h3>
               <div className="flex items-center gap-2">
-                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                <span className="text-xs text-gray-500">Live Updates</span>
+                <div className="w-2 h-2 bg-gray-400 rounded-full"></div>
+                <span className="text-xs text-gray-500">Telemetry unavailable</span>
               </div>
             </div>
             <div className="relative bg-gray-100 rounded-lg overflow-hidden" style={{ height: '500px' }}>
@@ -153,8 +274,6 @@ export function FleetOverview() {
                 <BranchOwnerFleetMap
                   geofence={geofence}
                   riders={positionedRiders}
-                  selectedRider={selectedRider}
-                  onSelectRider={setSelectedRider}
                 />
               ) : (
                 <div className="flex h-full items-center justify-center px-8 text-center text-sm text-gray-500">
@@ -167,16 +286,25 @@ export function FleetOverview() {
           <div className="bg-white rounded-lg border border-gray-200 p-6">
             <h3 className="font-semibold text-gray-900 mb-4">Delivery Rider Roster</h3>
             <div className="space-y-3" style={{ maxHeight: '500px', overflowY: 'auto' }}>
-              {riders.map((rider) => (
-                <div
-                  key={rider.id}
-                  onClick={() => setSelectedRider(rider.id)}
-                  className={`p-3 rounded-lg border cursor-pointer transition-all ${
-                    selectedRider === rider.id
-                      ? 'border-[#007BC1] bg-blue-50'
-                      : 'border-gray-200 hover:border-gray-300'
-                  }`}
-                >
+              {ridersLoading ? (
+                <div className="py-10 text-center text-sm text-gray-500">Loading Delivery Riders…</div>
+              ) : ridersError ? (
+                <div className="flex flex-col items-center gap-3 py-10 text-center text-sm text-red-600">
+                  <span>{ridersError}</span>
+                  <button
+                    type="button"
+                    onClick={refreshRiders}
+                    className="rounded-md bg-white px-3 py-1.5 text-xs font-semibold text-[#007BC1] shadow-sm ring-1 ring-gray-200 transition-colors hover:bg-blue-50"
+                  >
+                    Try again
+                  </button>
+                </div>
+              ) : riders.length === 0 ? (
+                <div className="py-10 text-center text-sm text-gray-500">
+                  No Delivery Riders found in this branch.
+                </div>
+              ) : riders.map((rider) => (
+                <div key={rider.id} className="p-3 rounded-lg border border-gray-200">
                   <div className="flex items-start justify-between mb-2">
                     <div>
                       <div className="text-sm font-medium text-gray-900">{rider.name}</div>
@@ -186,12 +314,10 @@ export function FleetOverview() {
                       className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
                         rider.status === 'active'
                           ? 'bg-green-100 text-green-700'
-                          : rider.status === 'outside-geofence'
-                          ? 'bg-orange-100 text-orange-700'
                           : 'bg-gray-100 text-gray-600'
                       }`}
                     >
-                      {rider.status === 'active' ? 'Active' : rider.status === 'outside-geofence' ? 'Outside' : 'Inactive'}
+                      {formatStatus(rider.apiStatus)}
                     </span>
                   </div>
                   <div className="text-xs text-gray-600 mb-1">
@@ -200,12 +326,6 @@ export function FleetOverview() {
                   <div className="text-[10px] text-gray-400">
                     Updated: {rider.lastUpdated}
                   </div>
-                  {rider.geofenceBreach && (
-                    <div className="mt-2 flex items-center gap-1 text-[10px] text-orange-600">
-                      <AlertTriangle className="w-3 h-3" />
-                      <span>Geofence breach</span>
-                    </div>
-                  )}
                 </div>
               ))}
             </div>
@@ -217,66 +337,45 @@ export function FleetOverview() {
             <h3 className="font-semibold text-gray-900 mb-4">Curfew & Active Alerts</h3>
             <div className="mb-4 pb-4 border-b border-gray-200">
               <div className="text-xs text-gray-500 mb-2">Branch Operating Hours</div>
-              <div className="text-sm text-gray-900 font-medium">6:00 AM — 10:00 PM</div>
-              <div className="text-xs text-gray-500 mt-1">All Delivery Riders must return before curfew</div>
+              <div className="text-sm text-gray-500 font-medium">Not configured</div>
+              <div className="text-xs text-gray-500 mt-1">Curfew settings are not available for this branch.</div>
             </div>
             <div>
               <div className="text-xs text-gray-500 mb-3">Active Geofence Alerts</div>
-              {riders
-                .filter(r => r.geofenceBreach)
-                .map(rider => (
-                  <div key={rider.id} className="flex items-start gap-3 p-3 bg-orange-50 rounded-lg mb-2">
-                    <AlertTriangle className="w-4 h-4 text-orange-500 mt-0.5" />
-                    <div className="flex-1">
-                      <div className="text-sm font-medium text-gray-900">{rider.name}</div>
-                      <div className="text-xs text-gray-600">
-                        Outside geofence boundary — {rider.currentOrder ? `Delivering ${rider.currentOrder}` : 'No active order'}
-                      </div>
-                      <div className="text-[10px] text-gray-500 mt-1">{rider.lastUpdated}</div>
-                    </div>
-                  </div>
-                ))}
-              {riders.filter(r => r.geofenceBreach).length === 0 && (
-                <div className="text-sm text-gray-500">No active alerts</div>
-              )}
+              <div className="flex items-start gap-3 rounded-lg bg-gray-50 p-3">
+                <AlertTriangle className="mt-0.5 h-4 w-4 text-gray-400" />
+                <div className="text-sm text-gray-500">
+                  Geofence alerts will appear when SinoTrack ST-901 vehicle telemetry is available.
+                </div>
+              </div>
             </div>
           </div>
 
           <div className="bg-white rounded-lg border border-gray-200 p-6">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold text-gray-900">Today&apos;s Fleet Activity</h3>
-              
-              {/* Driver Filter Dropdown */}
-              <div className="relative">
-                <select
-                  value={activityFilter}
-                  onChange={(e) => setActivityFilter(e.target.value)}
-                  className="appearance-none bg-gray-50 border border-gray-200 text-gray-700 text-xs rounded-md pl-2 pr-8 py-1.5 focus:ring-[#007BC1] focus:border-[#007BC1] outline-none cursor-pointer"
-                >
-                  <option value="all">All Delivery Riders</option>
-                  {riders.map(r => (
-                    <option key={r.id} value={r.name}>{r.name}</option>
-                  ))}
-                </select>
-                <ChevronDown className="w-3 h-3 text-gray-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
-              </div>
+              <h3 className="font-semibold text-gray-900">Delivery Rider Status</h3>
             </div>
 
             <div className="space-y-3">
-              {filteredActivityLog.length > 0 ? (
-                filteredActivityLog.map((log, index) => (
-                  <div key={index} className="flex gap-3 pb-3 border-b border-gray-100 last:border-0">
-                    <div className="text-xs text-gray-500 w-16 flex-shrink-0">{log.time}</div>
-                    <div className="flex-1">
-                      <div className="text-xs font-medium text-gray-900">{log.rider}</div>
-                      <div className="text-xs text-gray-600">{log.event}</div>
+              {ridersLoading ? (
+                <div className="py-10 text-center text-sm text-gray-500">Loading Delivery Rider status…</div>
+              ) : riders.length === 0 ? (
+                <div className="py-10 text-center text-sm text-gray-500">No rider status to display.</div>
+              ) : (
+                riders.map((rider) => (
+                  <div key={rider.id} className="flex gap-3 border-b border-gray-100 pb-3 last:border-0">
+                    <div className="min-w-0 flex-1">
+                      <div className="text-xs font-medium text-gray-900">{rider.name}</div>
+                      <div className="text-xs text-gray-600">
+                        {rider.currentOrder ? `Current Service Request: ${rider.currentOrder}` : 'No active Service Request'}
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-xs font-medium text-gray-700">{formatStatus(rider.apiStatus)}</div>
+                      <div className="text-[10px] text-gray-400">Updated: {rider.lastUpdated}</div>
                     </div>
                   </div>
                 ))
-              ) : (
-                <div className="text-sm text-gray-400 text-center py-10 italic">
-                  No activity found for this rider today.
-                </div>
               )}
             </div>
           </div>
