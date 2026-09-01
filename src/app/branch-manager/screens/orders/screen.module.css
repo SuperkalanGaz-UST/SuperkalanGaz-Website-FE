@@ -1,13 +1,23 @@
-/* Delayed-delivery journey (BM-US-02): the LIVE at-risk flag (BM-008) and the
-   PERSISTED breach record (BM-012) shown under the status badge. */
-.slaAtRiskTag { display: inline-flex; align-items: center; gap: 0.25rem; margin-top: 0.35rem; padding: 0.1rem 0.4rem; border-radius: 0.25rem; font-size: 0.7rem; font-weight: 600; color: hsl(35, 90%, 30%); background-color: hsl(35, 90%, 94%); }
-.slaBreachedTag { display: inline-flex; align-items: center; gap: 0.25rem; margin-top: 0.35rem; font-size: 0.7rem; color: hsl(4, 75%, 45%); }
+/* Orders owns the content canvas below the shared header. Keeping the visual
+   system here scoped to the screen lets the existing header and sidebar remain
+   unchanged while the request queue gets its own quieter hierarchy. */
+.pageHeader { display: flex; justify-content: flex-end; align-items: center; gap: 0.75rem; min-height: 2.75rem; margin: -0.5rem 0 1rem; }
+.updatedLabel { color: var(--muted-foreground); font-size: 0.75rem; white-space: nowrap; }
+.newRequestButton { box-shadow: 0 6px 14px rgba(0, 116, 188, 0.18); }
 
-.pageHeader { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.5rem; }
-.pageTitle { font-size: 1.5rem; font-weight: 700; color: var(--foreground); margin-bottom: 0.25rem; }
-.pageSubtitle { font-size: 0.9rem; color: var(--muted-foreground); margin-bottom: 0; }
+.metricsGrid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); margin-bottom: 1.5rem; overflow: hidden; background: var(--card); border: 1px solid var(--border); border-radius: 1rem; box-shadow: var(--shadow); }
+.metricItem { display: flex; min-width: 0; align-items: center; gap: 0.8rem; padding: 1rem 1.15rem; border-right: 1px solid #edf1f5; }
+.metricItem:last-child { border-right: none; }
+.metricIcon { display: inline-flex; width: 2.35rem; height: 2.35rem; flex: 0 0 auto; align-items: center; justify-content: center; border-radius: 0.75rem; }
+.metricIconBlue { color: #075bb7; background: #edf5ff; }
+.metricIconAmber { color: #bd6a00; background: #fff6e5; }
+.metricIconGreen { color: #14804a; background: #ebf8f0; }
+.metricCopy { display: flex; min-width: 0; flex-direction: column; }
+.metricLabel { overflow: hidden; color: #344054; font-size: 0.75rem; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.metricValue { margin-top: 0.1rem; color: #101828; font-size: 1.35rem; font-weight: 650; line-height: 1.2; }
+.metricHelper { margin-top: 0.2rem; overflow: hidden; color: var(--muted-foreground); font-size: 0.7rem; text-overflow: ellipsis; white-space: nowrap; }
 
-.card { background-color: var(--card); border: 1px solid #e5e7eb; border-radius: 1rem; box-shadow: var(--shadow); overflow: hidden; margin-bottom: 1.5rem; }
+.card { background-color: var(--card); border: 1px solid var(--border); border-radius: 1rem; box-shadow: var(--shadow); overflow: hidden; margin-bottom: 1.5rem; }
 .cardHeader { padding: 1.25rem; border-bottom: 1px solid #f3f4f6; }
 .cardHeaderFlex { display: flex; justify-content: space-between; align-items: center; padding: 1.25rem; border-bottom: 1px solid #f3f4f6; }
 .cardTitle { font-size: 1.0625rem; font-weight: 600; color: #101828; }
@@ -17,18 +27,45 @@
 .formGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; }
 .formFooter { display: flex; justify-content: flex-end; padding-top: 0.5rem; }
 
-.tabsWrapper { padding: 1rem 1.25rem; border-bottom: 1px solid #f3f4f6; }
+.tabsWrapper { display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; padding: 1rem 1.25rem; border-bottom: 1px solid #f3f4f6; }
+.toolbarTabs { flex: 0 0 auto; }
+.toolbarControls { display: flex; align-items: center; justify-content: flex-end; gap: 0.55rem; min-width: 0; flex: 1 1 420px; }
+.searchField, .dateField { display: flex; height: 2.5rem; align-items: center; gap: 0.35rem; padding: 0 0.7rem; border: 1px solid var(--border); border-radius: 0.5rem; color: var(--muted-foreground); background: var(--card); }
+.searchField { min-width: 230px; flex: 1 1 300px; }
+.dateField { width: 10.5rem; flex: 0 1 10.5rem; }
+.searchField input, .dateField input { height: 2rem; min-width: 0; padding: 0 0.2rem; border: none; background: transparent; color: var(--foreground); box-shadow: none; }
+.searchField input:focus, .dateField input:focus { outline: none; }
 
 /* table-layout: fixed + the <colgroup> in the JSX give every column (including
    the multi-button Actions column) a bounded share of the card's width, so the
    9-column queue fits without a horizontal scrollbar on a normal viewport —
    cell content wraps within its column instead of forcing the table wider. */
 .tableWrapper { overflow-x: auto; }
-.table { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 0.875rem; }
-.table th { padding: 0.75rem 1rem; text-align: left; font-size: 0.6875rem; font-weight: 600; color: #4b5563; text-transform: uppercase; letter-spacing: 0.04em; border-bottom: 1px solid #f3f4f6; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background-color: #f9fafb; }
-.table td { padding: 0.75rem 1rem; border-bottom: 1px solid #f3f4f6; color: var(--foreground); vertical-align: top; overflow-wrap: break-word; }
+.table { width: 100%; min-width: 1120px; table-layout: fixed; border-collapse: collapse; font-size: 0.8125rem; }
+.table th { padding: 0.8rem 0.85rem; text-align: left; font-size: 0.7rem; font-weight: 650; color: #526078; border-bottom: 1px solid #e8edf3; white-space: nowrap; background-color: #f8fafc; }
+.table td { padding: 0.95rem 0.85rem; border-bottom: 1px solid #edf1f5; color: var(--foreground); vertical-align: middle; overflow-wrap: break-word; }
 .table tbody tr:last-child td { border-bottom: none; }
-.table tbody tr:hover { background-color: rgba(0, 116, 188, 0.04); }
+.table tbody tr:hover { background-color: rgba(0, 116, 188, 0.035); }
+
+.requestIdCell, .customerCell { display: table-cell; }
+.requestIdCell { color: #153b6d; font-weight: 600; }
+.customerCell span, .riderCell span { display: block; }
+.customerCell .monoText { margin-top: 0.25rem; font-size: 0.7rem; }
+.contactCell { color: #344054; font-size: 0.78rem; }
+.requestedDate { display: block; color: #475467; line-height: 1.45; }
+.slaCell { min-width: 0; }
+.slaState { display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.75rem; font-weight: 600; white-space: nowrap; }
+.slaMeta { display: block; margin-top: 0.3rem; color: var(--muted-foreground); font-size: 0.68rem; line-height: 1.35; text-transform: capitalize; }
+.slaSuccess { color: #14804a; }
+.slaWarning, .slaDanger { color: #b66a00; }
+.slaInfo { color: #075bb7; }
+.slaNeutral { color: #667085; }
+
+/* Delayed-delivery journey (BM-US-02): the LIVE at-risk flag (BM-008) and the
+   PERSISTED breach record (BM-012) are kept amber so they read as attention
+   states without turning the whole request queue into an error surface. */
+.slaAtRiskTag { display: inline-flex; align-items: center; gap: 0.25rem; margin-top: 0.35rem; padding: 0.1rem 0.4rem; border-radius: 0.25rem; font-size: 0.7rem; font-weight: 600; color: #9a5b00; background-color: #fff6e5; }
+.slaBreachedTag { display: inline-flex; align-items: center; gap: 0.25rem; margin-top: 0.35rem; font-size: 0.7rem; color: #b66a00; }
 
 .monoText { font-family: var(--font-family-monospace); font-size: 0.8125rem; }
 .boldText { font-weight: 600; }
@@ -36,7 +73,7 @@
 .emptyState { text-align: center; padding: 2rem; color: var(--muted-foreground); }
 /* Primary action Button + kebab RowActionsMenu, side by side — never wrap the
    menu below the button. */
-.actionButtons { display: flex; gap: 0.4rem; align-items: center; flex-wrap: nowrap; }
+.actionButtons { display: flex; gap: 0.4rem; align-items: center; flex-wrap: nowrap; white-space: nowrap; }
 
 .riderCell, .actionsCell { vertical-align: top; }
 .assignActions { display: flex; gap: 0.4rem; flex-wrap: wrap; }
@@ -72,3 +109,25 @@
 .editorField { display: flex; flex-direction: column; }
 .editorActions { display: flex; gap: 0.5rem; justify-content: flex-end; align-items: center; }
 .cancelPanel { display: flex; flex-direction: column; gap: 0.5rem; padding: 0.75rem 0.25rem; max-width: 480px; }
+
+@media (max-width: 1180px) {
+    .metricsGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .metricItem:nth-child(2) { border-right: none; }
+    .metricItem:nth-child(-n + 2) { border-bottom: 1px solid #edf1f5; }
+    .toolbarControls { flex-basis: 100%; justify-content: stretch; }
+    .searchField { flex-basis: auto; }
+}
+
+@media (max-width: 680px) {
+    .pageHeader { align-items: stretch; flex-direction: column; margin-top: 0; }
+    .updatedLabel { order: 2; }
+    .newRequestButton { width: 100%; }
+    .metricsGrid { grid-template-columns: 1fr; }
+    .metricItem, .metricItem:nth-child(2) { border-right: none; border-bottom: 1px solid #edf1f5; }
+    .metricItem:last-child { border-bottom: none; }
+    .tabsWrapper { align-items: stretch; }
+    .toolbarTabs { overflow-x: auto; }
+    .toolbarControls { align-items: stretch; flex-direction: column; }
+    .searchField, .dateField { width: 100%; flex: none; }
+    .toolbarControls > button { align-self: flex-start; }
+}

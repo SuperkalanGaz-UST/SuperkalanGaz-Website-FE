@@ -1,7 +1,20 @@
 'use client';
 
 import React, { useCallback, useEffect, useState } from 'react';
-import { Smartphone, Store, RefreshCw, AlertTriangle, MoreHorizontal } from 'lucide-react';
+import {
+    AlertTriangle,
+    CalendarDays,
+    CheckCircle2,
+    ClipboardList,
+    Clock3,
+    MoreHorizontal,
+    Plus,
+    RefreshCw,
+    Search,
+    Smartphone,
+    Store,
+    Truck,
+} from 'lucide-react';
 import { toast } from 'sonner';
 import * as z from 'zod';
 import { Badge } from '../../components/Badge';
@@ -154,10 +167,29 @@ const getStatusVariant = (status: SRRow['status']) => {
         case 'Delivered': return 'success' as const;
         case 'Dispatched': return 'primary' as const;
         case 'En Route': return 'info' as const;
-        case 'Cancelled': return 'destructive' as const;
+        // Cancellation is a closed state, not an error action. Keeping it
+        // neutral avoids making the queue feel like an alert dashboard.
+        case 'Cancelled': return 'secondary' as const;
         case 'Pending': return 'warning' as const;
         default: return 'secondary' as const;
     }
+};
+
+const requestedDateValue = (iso: string) => {
+    const date = new Date(iso);
+    if (Number.isNaN(date.getTime())) return '';
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+};
+
+const getSlaState = (request: SRRow) => {
+    if (request.sla_breached) return { label: 'Breached', className: 'slaDanger' };
+    if (request.sla_at_risk) return { label: 'At risk', className: 'slaWarning' };
+    if (request.delivered_at) return { label: 'On time', className: 'slaSuccess' };
+    if (request.dispatched_at) return { label: 'In progress', className: 'slaInfo' };
+    return { label: 'Awaiting dispatch', className: 'slaNeutral' };
 };
 
 /** Ghost icon-sm Button's computed style, inlined here because the Radix
@@ -167,7 +199,7 @@ const getStatusVariant = (status: SRRow['status']) => {
 const menuTriggerStyle: React.CSSProperties = {
     display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
     width: '1.75rem', height: '1.75rem', padding: '0.25rem', borderRadius: '0.375rem',
-    border: 'none', backgroundColor: 'transparent', color: 'inherit', cursor: 'pointer',
+    border: '1px solid var(--border)', backgroundColor: 'var(--card)', color: 'inherit', cursor: 'pointer',
 };
 
 /** A row's secondary actions (2+) collapse into this kebab menu instead of a
@@ -207,6 +239,7 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
 
     const [activeTab, setActiveTab] = useState('all');
     const [searchQuery, setSearchQuery] = useState(initialSearch ?? '');
+    const [requestedDate, setRequestedDate] = useState('');
     // Re-seed if the BM comes back from Customers with a different name — but
     // only follow actual changes, so it doesn't fight the BM's own typing.
     useEffect(() => {
@@ -981,11 +1014,45 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
 
         const q = searchQuery.toLowerCase();
         const matchesSearch =
+            r.sr_code.toLowerCase().includes(q) ||
+            (r.customer_code ?? '').toLowerCase().includes(q) ||
             r.customer_name.toLowerCase().includes(q) ||
             r.customer_contact.toLowerCase().includes(q);
+        const matchesRequestedDate = !requestedDate || requestedDateValue(r.requested_at) === requestedDate;
 
-        return matchesTab && matchesSearch;
+        return matchesTab && matchesSearch && matchesRequestedDate;
     });
+
+    const summaryMetrics = [
+        {
+            label: 'All requests',
+            value: requests.length,
+            helper: 'Total requests',
+            icon: ClipboardList,
+            tone: 'blue',
+        },
+        {
+            label: 'Pending',
+            value: requests.filter((request) => request.status === 'Pending').length,
+            helper: 'Awaiting processing',
+            icon: Clock3,
+            tone: 'amber',
+        },
+        {
+            label: 'In transit',
+            value: requests.filter((request) => request.status === 'Dispatched' || request.status === 'En Route').length,
+            helper: 'On the way',
+            icon: Truck,
+            tone: 'blue',
+        },
+        {
+            label: 'Completed',
+            value: requests.filter((request) => request.status === 'Delivered').length,
+            helper: 'Successfully delivered',
+            icon: CheckCircle2,
+            tone: 'green',
+        },
+    ] as const;
 
     if (!mounted) {
         return <div style={{ minHeight: '100vh', backgroundColor: 'var(--background)' }} />;
@@ -993,18 +1060,23 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
 
     return (
         <>
-            {/* Title lives in the shared header; keep the primary action right-aligned.
-                The "Last updated" stamp lets the BM confirm the list is live without
-                needing a manual refresh — it advances every time the background poll
-                or a visibilitychange re-fetch completes successfully. */}
-            <div className={styles.pageHeader} style={{ justifyContent: 'flex-end', gap: '0.75rem', alignItems: 'center' }}>
+            {/* The title remains in the shared header. This is only the page-level
+                action row, so the existing header and sidebar stay unchanged. */}
+            <div className={styles.pageHeader}>
                 {lastRefreshed && (
-                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted, #888)', whiteSpace: 'nowrap' }}>
+                    <span className={styles.updatedLabel}>
                         Updated {lastRefreshed.toLocaleTimeString('en-PH', { hour: 'numeric', minute: '2-digit', second: '2-digit' })}
                     </span>
                 )}
                 {!isCreateFormVisible && (
-                    <Button variant="accent" onClick={() => { resetIntake(); setIsCreateFormVisible(true); }}>New Request</Button>
+                    <Button
+                        variant="primary"
+                        className={styles.newRequestButton}
+                        onClick={() => { resetIntake(); setIsCreateFormVisible(true); }}
+                    >
+                        <Plus size={16} strokeWidth={2.25} />
+                        New Request
+                    </Button>
                 )}
             </div>
 
@@ -1079,7 +1151,7 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                                                     onClick={() => setShowCreateCustomer(false)} disabled={creatingCustomer}>
                                                     Cancel
                                                 </Button>
-                                                <Button type="button" variant="accent" size="sm"
+                                                <Button type="button" variant="primary" size="sm"
                                                     onClick={handleCreateCustomer} disabled={creatingCustomer}>
                                                     {creatingCustomer ? 'Registering…' : 'Register & Continue'}
                                                 </Button>
@@ -1195,7 +1267,7 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                                     </FormItem>
                                 </div>
                                 <div className={styles.formFooter}>
-                                    <Button type="submit" size="lg" variant="accent" disabled={submitting || pricesLoading || catalogPrices.length === 0}>
+                                    <Button type="submit" size="lg" variant="primary" disabled={submitting || pricesLoading || catalogPrices.length === 0}>
                                         {submitting ? 'Creating…' : 'Create Request'}
                                     </Button>
                                 </div>
@@ -1205,24 +1277,55 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                 </div>
             )}
 
+            <div className={styles.metricsGrid} aria-label="Service request summary">
+                {summaryMetrics.map((metric) => {
+                    const Icon = metric.icon;
+                    return (
+                        <div key={metric.label} className={styles.metricItem}>
+                            <div className={`${styles.metricIcon} ${styles[`metricIcon${metric.tone[0].toUpperCase()}${metric.tone.slice(1)}`]}`}>
+                                <Icon size={20} strokeWidth={2} />
+                            </div>
+                            <div className={styles.metricCopy}>
+                                <span className={styles.metricLabel}>{metric.label}</span>
+                                <strong className={styles.metricValue}>{loading ? '—' : metric.value}</strong>
+                                <span className={styles.metricHelper}>{metric.helper}</span>
+                            </div>
+                        </div>
+                    );
+                })}
+            </div>
+
             <div className={styles.card}>
-                <div className={styles.tabsWrapper} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                    <Tabs value={activeTab} onValueChange={setActiveTab}>
-                        <TabsList>
-                            <TabsTrigger value="all">All Requests</TabsTrigger>
-                            <TabsTrigger value="pending">Pending</TabsTrigger>
-                            <TabsTrigger value="transit">In Transit</TabsTrigger>
-                            <TabsTrigger value="completed">Completed</TabsTrigger>
-                        </TabsList>
-                    </Tabs>
-                    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                        <div style={{ width: '280px' }}>
+                <div className={styles.tabsWrapper}>
+                    <div className={styles.toolbarTabs}>
+                        <Tabs value={activeTab} onValueChange={setActiveTab}>
+                            <TabsList>
+                                <TabsTrigger value="all">All Requests</TabsTrigger>
+                                <TabsTrigger value="pending">Pending</TabsTrigger>
+                                <TabsTrigger value="transit">In Transit</TabsTrigger>
+                                <TabsTrigger value="completed">Completed</TabsTrigger>
+                            </TabsList>
+                        </Tabs>
+                    </div>
+                    <div className={styles.toolbarControls}>
+                        <label className={styles.searchField}>
+                            <Search size={16} aria-hidden="true" />
                             <Input
-                                placeholder="Search customer or contact..."
+                                aria-label="Search service requests"
+                                placeholder="Search customer, contact, or request ID..."
                                 value={searchQuery}
                                 onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchQuery(e.target.value)}
                             />
-                        </div>
+                        </label>
+                        <label className={styles.dateField}>
+                            <CalendarDays size={16} aria-hidden="true" />
+                            <Input
+                                type="date"
+                                aria-label="Filter by requested date"
+                                value={requestedDate}
+                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setRequestedDate(e.target.value)}
+                            />
+                        </label>
                         <Button variant="outline" size="sm" onClick={() => void loadRequests()} disabled={loading} aria-label="Refresh service requests">
                             <RefreshCw size={14} /> Refresh
                         </Button>
@@ -1235,33 +1338,44 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                             <col style={{ width: '8%' }} />
                             <col style={{ width: '12%' }} />
                             <col style={{ width: '10%' }} />
-                            <col style={{ width: '10%' }} />
+                            <col style={{ width: '9%' }} />
                             <col style={{ width: '10%' }} />
                             <col style={{ width: '13%' }} />
-                            <col style={{ width: '12%' }} />
+                            <col style={{ width: '11%' }} />
+                            <col style={{ width: '10%' }} />
                             <col style={{ width: '16%' }} />
                         </colgroup>
                         <thead>
                             <tr>
-                                <th>Source</th><th>Customer ID</th><th>Customer Name</th><th>Contact</th>
-                                <th>Cylinder</th><th>Requested At</th><th>Status</th>
-                                <th>Rider</th><th>Actions</th>
+                                <th>Source</th><th>Request ID</th><th>Customer</th><th>Contact</th>
+                                <th>Cylinder</th><th>Requested</th><th>SLA</th><th>Status</th>
+                                <th>Delivery Rider</th><th>Actions</th>
                             </tr>
                         </thead>
                         <tbody>
                             {loading ? (
-                                <tr><td colSpan={9} className={styles.emptyState}>Loading service requests…</td></tr>
+                                <tr><td colSpan={10} className={styles.emptyState}>Loading service requests…</td></tr>
                             ) : error ? (
                                 <tr>
-                                    <td colSpan={9} className={styles.emptyState}>
+                                    <td colSpan={10} className={styles.emptyState}>
                                         <div style={{ marginBottom: '0.75rem' }}>{error}</div>
                                         <Button variant="outline" size="sm" onClick={() => void loadRequests()}>Try again</Button>
                                     </td>
                                 </tr>
                             ) : filteredRequests.length === 0 ? (
-                                <tr><td colSpan={9} className={styles.emptyState}>No service requests found for this view.</td></tr>
+                                <tr><td colSpan={10} className={styles.emptyState}>No service requests found for this view.</td></tr>
                             ) : (
-                                filteredRequests.map(req => (
+                                filteredRequests.map(req => {
+                                    const slaState = getSlaState(req);
+                                    const SlaIcon = slaState.label === 'Breached' || slaState.label === 'At risk'
+                                        ? AlertTriangle
+                                        : slaState.label === 'On time'
+                                            ? CheckCircle2
+                                            : slaState.label === 'In progress'
+                                                ? Truck
+                                                : Clock3;
+
+                                    return (
                                     <React.Fragment key={req.id}>
                                     <tr>
                                         {/* order_source is a mandatory tag on every row (SRD channel-level SLA reporting) */}
@@ -1276,9 +1390,16 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                                                 </Badge>
                                             )}
                                         </td>
-                                        <td className={styles.monoText}>{req.customer_code ?? '—'}</td>
-                                        <td className={styles.boldText}>{req.customer_name}</td>
-                                        <td>{req.customer_contact}</td>
+                                        <td className={styles.requestIdCell}>
+                                            <span className={styles.monoText}>{req.sr_code}</span>
+                                        </td>
+                                        <td className={styles.customerCell}>
+                                            <span className={styles.boldText}>{req.customer_name}</span>
+                                            <span className={`${styles.monoText} ${styles.mutedText}`}>
+                                                {req.customer_code ?? 'Legacy record'}
+                                            </span>
+                                        </td>
+                                        <td className={styles.contactCell}>{req.customer_contact}</td>
                                         <td>
                                             <div>{req.quantity}× {req.cylinder_size}</div>
                                             {req.total_amount !== null && (
@@ -1287,23 +1408,22 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                                                 </div>
                                             )}
                                         </td>
-                                        <td className={styles.mutedText}>{formatRequestedAt(req.requested_at)}</td>
+                                        <td>
+                                            <span className={styles.requestedDate}>{formatRequestedAt(req.requested_at)}</span>
+                                        </td>
+                                        <td className={styles.slaCell}>
+                                            <span className={`${styles.slaState} ${styles[slaState.className]}`}>
+                                                <SlaIcon size={14} strokeWidth={2} />
+                                                {slaState.label}
+                                            </span>
+                                            {req.sla_breach_segment && (
+                                                <span className={styles.slaMeta}>
+                                                    {req.sla_breach_segment.replace(/_/g, ' ')}
+                                                </span>
+                                            )}
+                                        </td>
                                         <td>
                                             <Badge variant={getStatusVariant(req.status)}>{req.status}</Badge>
-                                            {/* LIVE at-risk flag (BM-008) — only meaningful while still in-flight;
-                                                distinct from sla_breached below, the PERSISTED record written once
-                                                the delivery closes (BM-012). */}
-                                            {req.sla_at_risk && (
-                                                <div className={styles.slaAtRiskTag}>
-                                                    <AlertTriangle size={12} /> SLA at risk
-                                                </div>
-                                            )}
-                                            {req.sla_breached && (
-                                                <div className={styles.slaBreachedTag} title={req.sla_breached_at ? formatRequestedAt(req.sla_breached_at) : undefined}>
-                                                    <AlertTriangle size={12} /> SLA breached
-                                                    {req.sla_breach_segment && ` (${req.sla_breach_segment.replace(/_/g, ' ')})`}
-                                                </div>
-                                            )}
                                             {/* dispatched_at is the 2nd SLA timestamp; show it once the request leaves Pending */}
                                             {req.dispatched_at && (
                                                 <div className={styles.mutedText} style={{ marginTop: '0.35rem', fontSize: '0.75rem' }}>
@@ -1358,7 +1478,7 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                                                         {availableRiders !== null && availableRiders.length > 0 && (
                                                             <Button
                                                                 size="sm"
-                                                                variant="accent"
+                                                                variant="primary"
                                                                 disabled={!selectedRiderId || dispatchingId === req.id}
                                                                 onClick={() => handleDispatch(req.id)}
                                                             >
@@ -1395,7 +1515,7 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                                                 <div className={styles.actionButtons}>
                                                     <Button
                                                         size="sm"
-                                                        variant="accent"
+                                                        variant="primary"
                                                         disabled={deliveringId === req.id}
                                                         onClick={() => handleDeliver(req.id)}
                                                     >
@@ -1439,7 +1559,7 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                                         identity/contact are intentionally NOT editable here. */}
                                     {editingId === req.id && (
                                         <tr className={styles.editorRow}>
-                                            <td colSpan={9}>
+                                            <td colSpan={10}>
                                                 <div className={styles.editorPanel}>
                                                     <span className={styles.editorTitle}>Edit request — {req.customer_name}</span>
                                                     <div className={styles.editorGrid}>
@@ -1487,7 +1607,7 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                                                     {editError && <p className={styles.fieldError}>{editError}</p>}
                                                     <div className={styles.editorActions}>
                                                         <Button size="sm" variant="ghost" onClick={closeEdit} disabled={savingEditId === req.id}>Cancel</Button>
-                                                        <Button size="sm" variant="accent" onClick={() => handleSaveEdit(req)} disabled={savingEditId === req.id}>
+                                                        <Button size="sm" variant="primary" onClick={() => handleSaveEdit(req)} disabled={savingEditId === req.id}>
                                                             {savingEditId === req.id ? 'Saving…' : 'Save Changes'}
                                                         </Button>
                                                     </div>
@@ -1499,7 +1619,7 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                                         the reason is a required BM Input, blocked client-side when empty. */}
                                     {cancelConfirmId === req.id && (
                                         <tr className={styles.editorRow}>
-                                            <td colSpan={9}>
+                                            <td colSpan={10}>
                                                 <div className={styles.cancelPanel}>
                                                     <span className={styles.editorTitle}>Cancel request — {req.customer_name}</span>
                                                     <label className={styles.fieldLabel} htmlFor={`cancel-reason-${req.id}`}>Reason for cancellation (required)</label>
@@ -1512,7 +1632,7 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                                                     {cancelError && <p className={styles.fieldError}>{cancelError}</p>}
                                                     <div className={styles.editorActions}>
                                                         <Button size="sm" variant="ghost" onClick={closeCancel} disabled={cancellingId === req.id}>Keep Request</Button>
-                                                        <Button size="sm" variant="accent" onClick={() => handleCancelOrder(req.id)} disabled={cancellingId === req.id}>
+                                                        <Button size="sm" variant="outline" onClick={() => handleCancelOrder(req.id)} disabled={cancellingId === req.id}>
                                                             {cancellingId === req.id ? 'Cancelling…' : 'Confirm Cancel'}
                                                         </Button>
                                                     </div>
@@ -1525,7 +1645,7 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                                         Service Request". Submitting sets the request to Under Review. */}
                                     {logComplaintId === req.id && (
                                         <tr className={styles.editorRow}>
-                                            <td colSpan={9}>
+                                            <td colSpan={10}>
                                                 <div className={styles.cancelPanel}>
                                                     <span className={styles.editorTitle}>Log complaint — {req.customer_name}</span>
                                                     <label className={styles.fieldLabel} htmlFor={`complaint-category-${req.id}`}>Issue type</label>
@@ -1554,7 +1674,7 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                                                         <Button size="sm" variant="ghost" onClick={closeLogComplaint} disabled={loggingComplaintId === req.id}>
                                                             Cancel
                                                         </Button>
-                                                        <Button size="sm" variant="accent" onClick={() => handleLogComplaint(req.id)} disabled={loggingComplaintId === req.id}>
+                                                        <Button size="sm" variant="primary" onClick={() => handleLogComplaint(req.id)} disabled={loggingComplaintId === req.id}>
                                                             {loggingComplaintId === req.id ? 'Logging…' : 'Log Complaint'}
                                                         </Button>
                                                     </div>
@@ -1567,7 +1687,7 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                                         uses — same underlying concept, only ever one open at a time. */}
                                     {reassignId === req.id && (
                                         <tr className={styles.editorRow}>
-                                            <td colSpan={9}>
+                                            <td colSpan={10}>
                                                 <div className={styles.cancelPanel}>
                                                     <span className={styles.editorTitle}>
                                                         Reassign — {req.customer_name} (currently {req.rider_id ? (rosterMap[req.rider_id] ?? req.rider_id) : '—'})
@@ -1598,7 +1718,7 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                                                         </Button>
                                                         <Button
                                                             size="sm"
-                                                            variant="accent"
+                                                            variant="primary"
                                                             disabled={!selectedRiderId || reassigningId === req.id}
                                                             onClick={() => handleReassign(req.id)}
                                                         >
@@ -1612,7 +1732,7 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                                     {/* Delay reason panel (BM-US-02, story BM-011): dropdown + optional note. */}
                                     {delayReasonId === req.id && (
                                         <tr className={styles.editorRow}>
-                                            <td colSpan={9}>
+                                            <td colSpan={10}>
                                                 <div className={styles.cancelPanel}>
                                                     <span className={styles.editorTitle}>Log delay reason — {req.customer_name}</span>
                                                     <label className={styles.fieldLabel} htmlFor={`delay-category-${req.id}`}>Reason</label>
@@ -1640,7 +1760,7 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                                                         <Button size="sm" variant="ghost" onClick={closeDelayReason} disabled={loggingDelayReasonId === req.id}>
                                                             Cancel
                                                         </Button>
-                                                        <Button size="sm" variant="accent" onClick={() => handleLogDelayReason(req.id)} disabled={loggingDelayReasonId === req.id}>
+                                                        <Button size="sm" variant="primary" onClick={() => handleLogDelayReason(req.id)} disabled={loggingDelayReasonId === req.id}>
                                                             {loggingDelayReasonId === req.id ? 'Logging…' : 'Log Reason'}
                                                         </Button>
                                                     </div>
@@ -1649,7 +1769,8 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                                         </tr>
                                     )}
                                     </React.Fragment>
-                                ))
+                                    );
+                                })
                             )}
                         </tbody>
                     </table>
