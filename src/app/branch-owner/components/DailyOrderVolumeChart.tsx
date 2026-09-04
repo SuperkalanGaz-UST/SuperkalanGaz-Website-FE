@@ -1,16 +1,6 @@
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
-const data = [
-  { day: 'Mon', orders: 38 },
-  { day: 'Tue', orders: 42 },
-  { day: 'Wed', orders: 35 },
-  { day: 'Thu', orders: 48 },
-  { day: 'Fri', orders: 52 },
-  { day: 'Sat', orders: 45 },
-  { day: 'Sun', orders: 24 },
-];
-
-export function DailyOrderVolumeChart() {
+export function DailyOrderVolumeChart({ data }: { data: { day: string; orders: number }[] }) {
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
       <h3 className="font-semibold text-gray-900 mb-4">Daily Order Volume</h3>

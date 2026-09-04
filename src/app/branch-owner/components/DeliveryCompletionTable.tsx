@@ -1,12 +1,73 @@
+import { useEffect, useState } from 'react';
+import { apiFetch } from '../../lib/api';
+import { useBranch } from '../contexts/BranchContext';
 
-const completionData = [
-  { month: 'January 2026', totalOrders: 268, completed: 260, completionRate: 97.0, slaBreaches: 8 },
-  { month: 'February 2026', totalOrders: 272, completed: 265, completionRate: 97.4, slaBreaches: 7 },
-  { month: 'March 2026', totalOrders: 285, completed: 275, completionRate: 96.5, slaBreaches: 10 },
-  { month: 'April 2026', totalOrders: 290, completed: 282, completionRate: 97.2, slaBreaches: 8 },
-];
+type CompletionRow = {
+  month: string;
+  totalOrders: string;
+  completed: string;
+  completionRate: string;
+  slaBreaches: string;
+};
 
-export function DeliveryCompletionTable() {
+export function DeliveryCompletionTable({
+  totalOrders,
+  completed,
+  completionRate,
+  slaBreaches,
+}: {
+  totalOrders: string;
+  completed: string;
+  completionRate: string;
+  slaBreaches: string;
+}) {
+  const { selectedBranchId } = useBranch();
+  const [completionData, setCompletionData] = useState<CompletionRow[]>([]);
+
+  useEffect(() => {
+    let active = true;
+    if (!selectedBranchId) return () => { active = false; };
+
+    const controller = new AbortController();
+    const now = new Date();
+    const requests = Array.from({ length: now.getMonth() + 1 }, (_, index) => index + 1).map(async (month) => {
+      const year = now.getFullYear();
+      const monthText = String(month).padStart(2, '0');
+      const lastDay = new Date(year, month, 0).getDate();
+      const query = new URLSearchParams({
+        from: `${year}-${monthText}-01`,
+        to: `${year}-${monthText}-${lastDay}`,
+        branchId: selectedBranchId,
+      }).toString();
+      const response = await apiFetch(`/service-requests/reports/branch-owner-dashboard?${query}`, { signal: controller.signal });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) throw new Error('Could not load delivery completion data.');
+      const metrics = data?.metrics;
+      return {
+        month: new Intl.DateTimeFormat('en-PH', { month: 'long', year: 'numeric' }).format(new Date(year, month - 1, 1)),
+        totalOrders: String(metrics?.totalOrders ?? 0),
+        completed: String(metrics?.completedDeliveries ?? 0),
+        completionRate: Number(metrics?.deliveryCompletionRate ?? 0).toFixed(1),
+        slaBreaches: String(metrics?.slaBreaches ?? 0),
+      };
+    });
+    Promise.all(requests).then((rows) => {
+      if (active) setCompletionData(rows.reverse());
+    }).catch(() => {
+      if (active && !controller.signal.aborted) setCompletionData([]);
+    });
+    return () => { active = false; controller.abort(); };
+  }, [selectedBranchId]);
+
+  const fallback = [{
+    month: new Intl.DateTimeFormat('en-PH', { month: 'long', year: 'numeric' }).format(new Date()),
+    totalOrders,
+    completed,
+    completionRate: completionRate.replace('%', ''),
+    slaBreaches,
+  }];
+  const rows = completionData.length > 0 ? completionData : fallback;
+
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
       <div className="flex items-center justify-between mb-4">
@@ -28,7 +89,7 @@ export function DeliveryCompletionTable() {
             </tr>
           </thead>
           <tbody>
-            {completionData.map((row) => (
+            {rows.slice(0, 5).map((row) => (
               <tr key={row.month} className="border-b border-gray-100">
                 <td className="py-3 text-[13px] text-gray-900">{row.month}</td>
                 <td className="py-3 text-[13px] text-gray-600">{row.totalOrders}</td>
@@ -36,7 +97,7 @@ export function DeliveryCompletionTable() {
                 <td className="py-3 text-[13px] font-medium text-gray-900">{row.completionRate}%</td>
                 <td className="py-3">
                   <span className={`inline-block px-3 py-1 rounded-full text-[11px] font-medium ${
-                    row.slaBreaches <= 8 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                    Number(row.slaBreaches) === 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
                   }`}>
                     {row.slaBreaches}
                   </span>

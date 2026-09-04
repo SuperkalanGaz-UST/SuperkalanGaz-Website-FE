@@ -24,9 +24,10 @@ interface KPICardProps {
   /** Tints the icon chip; defaults to brand blue. */
   accentColor?: string;
   trend?: KPITrend;
+  titleClassName?: string;
 }
 
-export function KPICard({ title, value, subtitle, icon, alert, accentColor = '#007BC1', trend }: KPICardProps) {
+export function KPICard({ title, value, subtitle, icon, alert, accentColor = '#007BC1', trend, titleClassName = '' }: KPICardProps) {
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 relative flex flex-col min-h-[120px] h-full">
       {icon && (
@@ -38,7 +39,7 @@ export function KPICard({ title, value, subtitle, icon, alert, accentColor = '#0
         </div>
       )}
 
-      <div className={`text-sm font-medium text-gray-500 ${icon ? 'pr-12' : ''}`}>{title}</div>
+      <div className={`text-sm font-medium text-gray-500 ${icon ? 'pr-12' : ''} ${titleClassName}`}>{title}</div>
       <div className={`text-3xl font-bold mt-2 leading-none ${alert ? 'text-[#CC1903]' : 'text-gray-900'}`}>
         {value}
       </div>

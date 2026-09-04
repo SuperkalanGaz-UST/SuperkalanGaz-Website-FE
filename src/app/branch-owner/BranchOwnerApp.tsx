@@ -15,6 +15,7 @@ import { FleetOverview } from './components/FleetOverview';
 import { UserManagement } from './components/UserManagement';
 import { BranchSettings } from './components/BranchSettings';
 import { DeliveryCompletionFull } from './components/DeliveryCompletionFull';
+import { DeliveryProofRecordsFull } from './components/DeliveryProofRecordsFull';
 import { ComplaintLogFull } from './components/ComplaintLogFull';
 import { PurchaseTrackerFull } from './components/PurchaseTrackerFull';
 import { RedemptionHistoryFull } from './components/RedemptionHistoryFull';
@@ -88,6 +89,7 @@ export function BranchOwnerApp({ branchIds, branches }: BranchOwnerAppProps) {
           {activeScreen === 'expenses-log-full' && <ExpensesLogFull onBack={() => setActiveScreen('operational-expenses')} />}
 
           {activeScreen === 'delivery-completion-full' && <DeliveryCompletionFull onBack={() => setActiveScreen('order-analytics')} />}
+          {activeScreen === 'delivery-proof-full' && <DeliveryProofRecordsFull onBack={() => setActiveScreen('order-analytics')} />}
           {activeScreen === 'complaint-log-full' && <ComplaintLogFull onBack={() => setActiveScreen('csat')} />}
           {activeScreen === 'purchase-tracker-full' && <PurchaseTrackerFull onBack={() => setActiveScreen('loyalty')} />}
           {activeScreen === 'redemption-history-full' && <RedemptionHistoryFull onBack={() => setActiveScreen('loyalty')} />}

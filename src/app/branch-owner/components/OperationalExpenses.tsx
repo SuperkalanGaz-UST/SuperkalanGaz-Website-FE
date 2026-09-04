@@ -166,36 +166,42 @@ export function OperationalExpenses() {
               value={loading ? placeholder : formatPeso(currentTotal)}
               icon={<Wallet className="w-4 h-4 text-[#007BC1]" />}
               accentColor="#007BC1"
+              titleClassName="min-h-[40px]"
             />
             <KPICard
               title="Fuel & Oil"
               value={loading ? placeholder : formatPeso(categoryTotal('Gasoline, Fuel & Oil'))}
               icon={<Fuel className="w-4 h-4 text-[#007BC1]" />}
               accentColor="#007BC1"
+              titleClassName="min-h-[40px]"
             />
             <KPICard
               title="Repairs"
               value={loading ? placeholder : formatPeso(categoryTotal('Repairs & Maintenance'))}
               icon={<Wrench className="w-4 h-4 text-[#007BC1]" />}
               accentColor="#007BC1"
+              titleClassName="min-h-[40px]"
             />
             <KPICard
               title="Utilities & Comms"
               value={loading ? placeholder : formatPeso(utilitiesAndCommunication)}
               icon={<Zap className="w-4 h-4 text-[#2E86C1]" />}
               accentColor="#2E86C1"
+              titleClassName="min-h-[40px]"
             />
             <KPICard
               title="Branch Supplies"
               value={loading ? placeholder : formatPeso(categoryTotal('Branch Supplies'))}
               icon={<Package className="w-4 h-4 text-[#2E86C1]" />}
               accentColor="#2E86C1"
+              titleClassName="min-h-[40px]"
             />
             <KPICard
               title="Facility Costs"
               value={loading ? placeholder : formatPeso(categoryTotal('Facility Costs'))}
               icon={<Building2 className="w-4 h-4 text-[#2E86C1]" />}
               accentColor="#2E86C1"
+              titleClassName="min-h-[40px]"
             />
           </div>
         )}

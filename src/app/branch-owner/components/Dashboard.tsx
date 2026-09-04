@@ -7,54 +7,6 @@ import {
   XAxis, YAxis, Tooltip, ResponsiveContainer,
 } from 'recharts';
 
-// ---------------------------------------------------------------------------
-// Mock chart data — demo values pending API wiring (AGENTS.md §13).
-// ---------------------------------------------------------------------------
-
-/** Hourly earnings across the business day (8 AM – 6 PM). */
-const hourlyEarnings = [
-  { hour: '8 AM', earnings: 2400 },
-  { hour: '9 AM', earnings: 3800 },
-  { hour: '10 AM', earnings: 5200 },
-  { hour: '11 AM', earnings: 6100 },
-  { hour: '12 PM', earnings: 5800 },
-  { hour: '1 PM', earnings: 4200 },
-  { hour: '2 PM', earnings: 3600 },
-  { hour: '3 PM', earnings: 5100 },
-  { hour: '4 PM', earnings: 5900 },
-  { hour: '5 PM', earnings: 4800 },
-  { hour: '6 PM', earnings: 3200 },
-];
-
-/** Month-to-date earnings rolled up by week. */
-const weeklyEarnings = [
-  { week: 'Week 1', earnings: 52400 },
-  { week: 'Week 2', earnings: 61800 },
-  { week: 'Week 3', earnings: 58200 },
-  { week: 'Week 4', earnings: 67400 },
-  { week: 'Week 5', earnings: 44700 },
-];
-
-/**
- * Sales volume by cylinder size. Colors are a validated categorical trio
- * (CVD-checked); identity is never color-alone — every row carries its label.
- */
-const topSellingTanks = [
-  { size: '11 kg', orders: 147, color: '#EA580C' },
-  { size: '5 kg', orders: 89, color: '#16A34A' },
-  { size: '2.7 kg', orders: 48, color: '#9333EA' },
-];
-
-/** Overall order volume per month, scaled to the 75–300 axis window. */
-const orderVolumeTrend = [
-  { month: 'Jan', orders: 118 },
-  { month: 'Feb', orders: 142 },
-  { month: 'Mar', orders: 131 },
-  { month: 'Apr', orders: 176 },
-  { month: 'May', orders: 205 },
-  { month: 'Jun', orders: 248 },
-];
-
 // Alternating bar shades — two steps of the brand blue, dark → light.
 const BAR_BLUES = ['#007BC1', '#41A3E0'];
 
@@ -69,7 +21,14 @@ const axisProps = {
 
 export function Dashboard() {
   const branchData = useBranchData();
-  const maxTankOrders = Math.max(...topSellingTanks.map((t) => t.orders));
+  const hourlyEarnings = branchData.earningsToday;
+  const weeklyEarnings = branchData.earningsThisMonth;
+  const topSellingTanks = branchData.topSellingTanks.map((tank, index) => ({
+    ...tank,
+    color: ['#EA580C', '#16A34A', '#9333EA'][index % 3],
+  }));
+  const orderVolumeTrend = branchData.orderVolumeData;
+  const maxTankOrders = Math.max(0, ...topSellingTanks.map((tank) => tank.orders));
 
   return (
     <div className="flex-1 overflow-y-auto">
@@ -170,8 +129,8 @@ export function Dashboard() {
                     <div
                       className="h-full rounded-full"
                       style={{
-                        width: `${(tank.orders / maxTankOrders) * 100}%`,
-                        backgroundColor: tank.color,
+                        width: `${maxTankOrders > 0 ? (tank.orders / maxTankOrders) * 100 : 0}%`,
+                        backgroundColor: tank.orders > 0 ? tank.color : '#d1d5db',
                       }}
                     />
                   </div>
@@ -180,7 +139,7 @@ export function Dashboard() {
             </div>
           </div>
 
-          {/* Order Volume Trend — smooth line, fixed 75–300 scale */}
+          {/* Order Volume Trend — smooth line, scaled from zero to live data */}
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
             <h3 className="font-semibold text-gray-900 mb-4">Order Volume Trend</h3>
             <ResponsiveContainer width="100%" height={220}>
@@ -189,8 +148,7 @@ export function Dashboard() {
                 <YAxis
                   {...axisProps}
                   style={{ fontSize: '11px' }}
-                  domain={[75, 300]}
-                  ticks={[75, 150, 225, 300]}
+                  domain={[0, 'auto']}
                   width={40}
                 />
                 <Tooltip formatter={(v) => [Number(v).toLocaleString(), 'Orders']} />

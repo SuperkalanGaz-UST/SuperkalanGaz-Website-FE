@@ -16,6 +16,8 @@ interface DeliveryRecord {
   rider_id: string | null;
 }
 
+const PREVIEW_RECORD_LIMIT = 5;
+
 function formatDeliveredAt(value: string | null): string {
   if (!value) return '—';
   const date = new Date(value);
@@ -31,7 +33,7 @@ function formatDeliveredAt(value: string | null): string {
 
 /** Branch Owner's read-only, selected-branch delivery proof queue. */
 export function DeliveryProofRecords() {
-  const { selectedBranch, selectedBranchId, assignedBranchesLoading } = useBranch();
+  const { selectedBranchId, assignedBranchesLoading } = useBranch();
   const [records, setRecords] = useState<DeliveryRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -90,18 +92,24 @@ export function DeliveryProofRecords() {
   return (
     <section className="mt-8 rounded-xl border border-gray-100 bg-white p-6 shadow-sm">
       <div className="mb-4 flex items-center justify-between gap-4">
-        <div>
-          <h2 className="font-semibold text-gray-900">Completed Deliveries &amp; Proof</h2>
-          <p className="mt-1 text-xs text-gray-500">Read-only records for {selectedBranch || 'the selected branch'}.</p>
+        <h2 className="font-semibold text-gray-900">Completed Deliveries &amp; Proof</h2>
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => window.dispatchEvent(new CustomEvent('navigate', { detail: 'delivery-proof-full' }))}
+            className="text-xs font-medium text-[#007BC1] transition-colors hover:text-[#005a8f]"
+          >
+            View all
+          </button>
+          <button
+            type="button"
+            onClick={() => setRefreshKey((value) => value + 1)}
+            disabled={loading || assignedBranchesLoading}
+            className="inline-flex items-center gap-1.5 rounded-md border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <RefreshCw size={14} /> Refresh
+          </button>
         </div>
-        <button
-          type="button"
-          onClick={() => setRefreshKey((value) => value + 1)}
-          disabled={loading || assignedBranchesLoading}
-          className="inline-flex items-center gap-1.5 rounded-md border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          <RefreshCw size={14} /> Refresh
-        </button>
       </div>
 
       {loading ? (
@@ -134,7 +142,7 @@ export function DeliveryProofRecords() {
               </tr>
             </thead>
             <tbody>
-              {records.map((record) => (
+              {records.slice(0, PREVIEW_RECORD_LIMIT).map((record) => (
                 <tr key={record.id} className="border-b border-gray-100 text-sm last:border-0">
                   <td className="py-4 pr-4 font-semibold text-gray-900">{record.sr_code}</td>
                   <td className="py-4 pr-4 text-gray-700">{record.customer_name}</td>

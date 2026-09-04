@@ -1,59 +1,13 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Header } from './Header';
 import { KPICard } from './KPICard';
 import { TrendingUp, ShoppingBag, ArrowUpRight } from 'lucide-react';
 import {
   AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
-  PieChart, Pie, Cell, Legend
+  Cell
 } from 'recharts';
-
-const monthlyRevenueData = [
-  { month: 'Dec', revenue: 198000 },
-  { month: 'Jan', revenue: 215000 },
-  { month: 'Feb', revenue: 203500 },
-  { month: 'Mar', revenue: 241000 },
-  { month: 'Apr', revenue: 253800 },
-  { month: 'May', revenue: 284500 },
-];
-
-const quarterlyRevenueData = [
-  { quarter: 'Q4 2025', revenue: 198000 },
-  { quarter: 'Q1 2026', revenue: 659500 },
-  { quarter: 'Q2 2026', revenue: 538300 },
-];
-
-const revenueByTankData = [
-  { size: '2.7kg', revenue: 120000, color: '#007BC1' },
-  { size: '5kg', revenue: 98500, color: '#41A3E0' },
-  { size: '11kg', revenue: 66000, color: '#76B4DD' },
-];
-
-const ordersByTankData = [
-  { name: '2.7kg', value: 52, color: '#007BC1' },
-  { name: '5kg', value: 31, color: '#41A3E0' },
-  { name: '11kg', value: 17, color: '#76B4DD' },
-];
-
-const salesData = [
-  { id: '1', date: 'May 2, 2026', receipt: 'RCP-0001', customer: 'Maria Santos', orders: 2, spent: 2200, paid: 'Paid' },
-  { id: '2', date: 'May 2, 2026', receipt: 'RCP-0002', customer: 'Juan Dela Cruz', orders: 1, spent: 1100, paid: 'Paid' },
-  { id: '3', date: 'May 1, 2026', receipt: 'RCP-0003', customer: 'Pedro Penduko', orders: 3, spent: 3300, paid: 'Unpaid' },
-  { id: '4', date: 'May 1, 2026', receipt: 'RCP-0004', customer: 'Lola Basyang', orders: 1, spent: 1100, paid: 'Paid' },
-  { id: '5', date: 'May 1, 2026', receipt: 'RCP-0005', customer: 'Carlos Miguel', orders: 2, spent: 2200, paid: 'Paid' },
-  { id: '6', date: 'Apr 30, 2026', receipt: 'RCP-0006', customer: 'Ana Reyes', orders: 1, spent: 1100, paid: 'Paid' },
-  { id: '7', date: 'Apr 30, 2026', receipt: 'RCP-0007', customer: 'Rita Lopez', orders: 4, spent: 4400, paid: 'Unpaid' },
-  { id: '8', date: 'Apr 29, 2026', receipt: 'RCP-0008', customer: 'Sofia Cruz', orders: 2, spent: 2200, paid: 'Paid' },
-  { id: '9', date: 'Apr 29, 2026', receipt: 'RCP-0009', customer: 'Ben Reyes', orders: 1, spent: 1100, paid: 'Paid' },
-  { id: '10', date: 'Apr 28, 2026', receipt: 'RCP-0010', customer: 'Diana Cruz', orders: 3, spent: 3300, paid: 'Paid' },
-  { id: '11', date: 'Apr 28, 2026', receipt: 'RCP-0011', customer: 'Edgar Santos', orders: 2, spent: 2200, paid: 'Unpaid' },
-  { id: '12', date: 'Apr 27, 2026', receipt: 'RCP-0012', customer: 'Fiona Reyes', orders: 1, spent: 1100, paid: 'Paid' },
-  { id: '13', date: 'Apr 27, 2026', receipt: 'RCP-0013', customer: 'Gabriel Cruz', orders: 2, spent: 2200, paid: 'Paid' },
-  { id: '14', date: 'Apr 26, 2026', receipt: 'RCP-0014', customer: 'Helen Lopez', orders: 1, spent: 1100, paid: 'Paid' },
-  { id: '15', date: 'Apr 26, 2026', receipt: 'RCP-0015', customer: 'Ivan Santos', orders: 3, spent: 3300, paid: 'Unpaid' },
-  { id: '16', date: 'Apr 25, 2026', receipt: 'RCP-0016', customer: 'Julia Reyes', orders: 2, spent: 2200, paid: 'Paid' },
-  { id: '17', date: 'Apr 25, 2026', receipt: 'RCP-0017', customer: 'Kevin Cruz', orders: 1, spent: 1100, paid: 'Paid' },
-  { id: '18', date: 'Apr 24, 2026', receipt: 'RCP-0018', customer: 'Luna Santos', orders: 2, spent: 2200, paid: 'Paid' },
-];
+import { apiFetch } from '../../lib/api';
+import { useBranch } from '../contexts/BranchContext';
 
 const axisProps = {
   axisLine: false as const,
@@ -64,13 +18,57 @@ const axisProps = {
 const pesoTooltip = (v: number | string) => [`₱${Number(v).toLocaleString()}`, 'Revenue'];
 
 export function SalesOverview() {
+  const { selectedBranchId } = useBranch();
   const [chartView, setChartView] = useState<'monthly' | 'quarterly'>('monthly');
+  const [salesMetrics, setSalesMetrics] = useState<any[]>([]);
+  const [allSales, setAllSales] = useState<any[]>([]);
+  const [salesLoading, setSalesLoading] = useState(true);
+
+  useEffect(() => {
+    if (!selectedBranchId) return;
+    const controller = new AbortController();
+    const now = new Date();
+    const months = Array.from({ length: 6 }, (_, index) => {
+      const date = new Date(now.getFullYear(), now.getMonth() - (5 - index), 1);
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const lastDay = new Date(year, date.getMonth() + 1, 0).getDate();
+      return { from: `${year}-${month}-01`, to: `${year}-${month}-${lastDay}`, label: date };
+    });
+    setSalesLoading(true);
+    Promise.all(months.map(async ({ from, to, label }) => {
+      const query = new URLSearchParams({ from, to, branchId: selectedBranchId }).toString();
+      const response = await apiFetch(`/service-requests/reports/branch-owner-dashboard?${query}`, { signal: controller.signal });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) throw new Error('Could not load sales data.');
+      return { label, ...(data?.metrics ?? {}) };
+    })).then(setSalesMetrics).catch(() => setSalesMetrics([])).finally(() => setSalesLoading(false));
+    apiFetch(`/service-requests/reports/branch-owner-sales?branchId=${encodeURIComponent(selectedBranchId)}`, { signal: controller.signal })
+      .then((response) => response.json().then((data) => response.ok ? setAllSales(data?.sales ?? []) : setAllSales([])))
+      .catch(() => setAllSales([]));
+    return () => controller.abort();
+  }, [selectedBranchId]);
+
+  const currentMetrics = salesMetrics.at(-1);
+  const previousMetrics = salesMetrics.at(-2);
+  const currentRevenue = Number(currentMetrics?.totalRevenue ?? 0);
+  const previousRevenue = Number(previousMetrics?.totalRevenue ?? 0);
+  const revenueChange = previousRevenue === 0 ? 0 : ((currentRevenue - previousRevenue) / previousRevenue) * 100;
+  const liveMonthlyRevenue = salesMetrics.map((metrics) => ({
+    month: new Intl.DateTimeFormat('en-PH', { month: 'short' }).format(metrics.label),
+    revenue: Number(metrics.totalRevenue ?? 0),
+  }));
+  const liveTankRevenue = (currentMetrics?.revenueByTank ?? []).map((entry: { size: string; revenue: number }, index: number) => ({
+    ...entry,
+    color: ['#007BC1', '#41A3E0', '#76B4DD', '#1a5f8a'][index % 4],
+  }));
+  const liveSales = allSales;
 
   // Limit the table data to only the 5 most recent entries
-  const recentSalesData = salesData.slice(0, 5);
+  const recentSalesData = liveSales.slice(0, 5);
 
-  const revenueData = chartView === 'monthly' ? monthlyRevenueData : quarterlyRevenueData;
-  const xKey = chartView === 'monthly' ? 'month' : 'quarter';
+  const revenueData = chartView === 'monthly' ? liveMonthlyRevenue : liveMonthlyRevenue;
+  const xKey = 'month';
 
   return (
     <div className="flex-1 overflow-y-auto">
@@ -82,24 +80,24 @@ export function SalesOverview() {
         <div className="grid grid-cols-3 gap-6 mb-8">
           <KPICard
             title="Total Revenue This Month"
-            value="₱284,500"
+            value={salesLoading ? '—' : `₱${currentRevenue.toLocaleString()}`}
             icon={<TrendingUp className="w-4 h-4 text-[#007BC1]" />}
             accentColor="#007BC1"
-            trend={{ text: "+12.4% from last month", direction: "up", positive: true }}
+            trend={salesLoading ? undefined : { text: `${revenueChange >= 0 ? '+' : ''}${revenueChange.toFixed(1)}% from last month`, direction: revenueChange >= 0 ? 'up' : 'down', positive: revenueChange >= 0 }}
           />
           <KPICard
             title="Total Orders Completed"
-            value="274"
+            value={salesLoading ? '—' : String(currentMetrics?.completedDeliveries ?? 0)}
             icon={<ShoppingBag className="w-4 h-4 text-[#007BC1]" />}
             accentColor="#007BC1"
-            trend={{ text: "+8.3% from last month", direction: "up", positive: true }}
+            trend={undefined}
           />
           <KPICard
             title="Revenue vs Last Month"
-            value="+12.4%"
+            value={salesLoading ? '—' : `${revenueChange >= 0 ? '+' : ''}${revenueChange.toFixed(1)}%`}
             icon={<ArrowUpRight className="w-4 h-4 text-[#22c55e]" />}
             accentColor="#22c55e"
-            trend={{ text: "Compared to Apr 2026", direction: "up", positive: true }}
+            trend={salesLoading ? undefined : { text: 'Compared to last month', direction: revenueChange >= 0 ? 'up' : 'down', positive: revenueChange >= 0 }}
           />
         </div>
 
@@ -153,16 +151,16 @@ export function SalesOverview() {
           </ResponsiveContainer>
         </div>
 
-        <div className="grid grid-cols-2 gap-6 mb-8">
+        <div className="grid grid-cols-1 gap-6 mb-8">
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
             <h3 className="font-semibold text-gray-900 mb-4">Revenue by LPG Tank Size</h3>
             <ResponsiveContainer width="100%" height={250}>
-              <BarChart data={revenueByTankData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+              <BarChart data={liveTankRevenue} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
                 <XAxis dataKey="size" {...axisProps} style={{ fontSize: '11px' }} tick={{ dy: 4 }} />
                 <YAxis {...axisProps} style={{ fontSize: '11px' }} tickFormatter={(value) => `₱${(value / 1000).toFixed(0)}k`} width={52} />
                 <Tooltip formatter={pesoTooltip} cursor={{ fill: 'rgba(0, 123, 193, 0.06)' }} />
                 <Bar dataKey="revenue" radius={[4, 4, 0, 0]}>
-                  {revenueByTankData.map((entry) => (
+                  {liveTankRevenue.map((entry: { size: string; color: string }) => (
                     <Cell key={entry.size} fill={entry.color} />
                   ))}
                 </Bar>
@@ -170,34 +168,6 @@ export function SalesOverview() {
             </ResponsiveContainer>
           </div>
 
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-            <h3 className="font-semibold text-gray-900 mb-4">Orders by Tank Size</h3>
-            <ResponsiveContainer width="100%" height={250}>
-              <PieChart>
-                <Pie
-                  data={ordersByTankData}
-                  cx="50%"
-                  cy="45%"
-                  innerRadius={60}
-                  outerRadius={80}
-                  paddingAngle={2}
-                  dataKey="value"
-                  stroke="none"
-                >
-                  {ordersByTankData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
-                  ))}
-                </Pie>
-                <Tooltip formatter={(value) => [`${value} Orders`, 'Volume']} />
-                <Legend
-                  verticalAlign="bottom"
-                  height={36}
-                  formatter={(value, entry: any) => <span className="text-sm font-medium text-gray-700">{`${value} - ${entry.payload.value}%`}</span>}
-                  iconType="circle"
-                />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
         </div>
 
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
@@ -228,7 +198,7 @@ export function SalesOverview() {
                 </tr>
               </thead>
               <tbody>
-                {recentSalesData.map((row, index) => (
+                {recentSalesData.map((row: any, index: number) => (
                   <tr key={row.id} className={`border-b border-gray-100 ${index % 2 === 1 ? 'bg-gray-50' : ''}`}>
                     <td className="py-3 text-[13px] text-gray-900 whitespace-nowrap">{row.date}</td>
                     <td className="py-3 text-[13px] text-gray-900 whitespace-nowrap font-mono">{row.receipt}</td>

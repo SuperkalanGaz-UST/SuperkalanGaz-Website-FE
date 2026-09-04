@@ -3,18 +3,13 @@ import { useBranch } from '../contexts/BranchContext';
 import type { KPITrend } from '../components/KPICard';
 import { apiFetch } from '../../lib/api';
 
-/**
- * Mock branch-scoped dashboard data, keyed by the BO's selected branch.
- * Placeholder until the API endpoints land — figures are demo values, not
- * client-confirmed operational numbers (AGENTS.md §13).
- *
- * csatScore is now fetched live from GET /csat/summary so it reflects
- * actual customer ratings stored in the database (AGENTS.md §13).
- */
-
 type BranchDataShape = {
   ordersToday: string;
   totalOrders: string;
+  ordersLastMonth: string;
+  completedDeliveries: string;
+  cancelledFailedDeliveries: string;
+  slaBreaches: string;
   completionRate: string;
   csatScore: string;
   loyaltyRedemptions: string;
@@ -26,156 +21,117 @@ type BranchDataShape = {
     loyalty?: KPITrend;
   };
   orderVolumeData: { month: string; orders: number }[];
+  dailyOrderVolume: { day: string; orders: number }[];
   csatTrendData: { month: string; score: number }[];
+  earningsToday: { hour: string; earnings: number }[];
+  earningsThisMonth: { week: string; earnings: number }[];
+  topSellingTanks: { size: string; orders: number }[];
 };
 
-const STATIC_BRANCH_DATA: Record<string, Omit<BranchDataShape, 'csatScore' | 'trends'> & { trends: Omit<BranchDataShape['trends'], 'csat'> }> = {
-  'Quezon City Branch': {
-    ordersToday: '61',
-    totalOrders: '284',
-    completionRate: '96.5%',
-    loyaltyRedemptions: '7',
-    stockLevel: 42,
-    trends: {
-      orders: { text: '+8.4% from yesterday', direction: 'up', positive: true } satisfies KPITrend,
-      completion: { text: '+1.8% this week', direction: 'up', positive: true } satisfies KPITrend,
-      loyalty: { text: '+2.0 from last month', direction: 'up', positive: true } satisfies KPITrend,
-    },
-    orderVolumeData: [
-      { month: 'Jan', orders: 185 },
-      { month: 'Feb', orders: 220 },
-      { month: 'Mar', orders: 195 },
-      { month: 'Apr', orders: 265 },
-      { month: 'May', orders: 284 },
-    ],
-    csatTrendData: [
-      { month: 'Jan', score: 4.0 },
-      { month: 'Feb', score: 4.2 },
-      { month: 'Mar', score: 4.5 },
-      { month: 'Apr', score: 4.1 },
-      { month: 'May', score: 4.3 },
-    ],
-  },
-  'Makati Branch': {
-    ordersToday: '53',
-    totalOrders: '198',
-    completionRate: '93.2%',
-    loyaltyRedemptions: '4',
-    stockLevel: 28,
-    trends: {
-      orders: { text: '+10.2% from yesterday', direction: 'up', positive: true } satisfies KPITrend,
-      completion: { text: '+3.1% this week', direction: 'up', positive: true } satisfies KPITrend,
-      loyalty: { text: '+7.2 from last month', direction: 'up', positive: true } satisfies KPITrend,
-    },
-    orderVolumeData: [
-      { month: 'Jan', orders: 142 },
-      { month: 'Feb', orders: 165 },
-      { month: 'Mar', orders: 178 },
-      { month: 'Apr', orders: 185 },
-      { month: 'May', orders: 198 },
-    ],
-    csatTrendData: [
-      { month: 'Jan', score: 3.8 },
-      { month: 'Feb', score: 4.0 },
-      { month: 'Mar', score: 4.2 },
-      { month: 'Apr', score: 4.0 },
-      { month: 'May', score: 4.1 },
-    ],
-  },
-  'Mandaluyong Branch': {
-    ordersToday: '78',
-    totalOrders: '321',
-    completionRate: '98.1%',
-    loyaltyRedemptions: '11',
-    stockLevel: 55,
-    trends: {
-      orders: { text: '+5.6% from yesterday', direction: 'up', positive: true } satisfies KPITrend,
-      completion: { text: '+0.9% this week', direction: 'up', positive: true } satisfies KPITrend,
-      loyalty: { text: '+4.0 from last month', direction: 'up', positive: true } satisfies KPITrend,
-    },
-    orderVolumeData: [
-      { month: 'Jan', orders: 245 },
-      { month: 'Feb', orders: 268 },
-      { month: 'Mar', orders: 285 },
-      { month: 'Apr', orders: 302 },
-      { month: 'May', orders: 321 },
-    ],
-    csatTrendData: [
-      { month: 'Jan', score: 4.3 },
-      { month: 'Feb', score: 4.4 },
-      { month: 'Mar', score: 4.6 },
-      { month: 'Apr', score: 4.4 },
-      { month: 'May', score: 4.5 },
-    ],
-  },
-};
+type CsatReport = { average_stars?: number | null; total_responses?: number };
+
+function reportDates(): { from: string; to: string } {
+  const now = new Date();
+  const from = new Date(now.getFullYear(), now.getMonth(), 1);
+  const format = (date: Date) =>
+    `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+  return { from: format(from), to: format(now) };
+}
 
 export function useBranchData(): BranchDataShape {
-  const { selectedBranch } = useBranch();
-  const [csatScore, setCsatScore] = useState<string>('—');
-  const [csatTrend, setCsatTrend] = useState<KPITrend | undefined>(undefined);
+  const { selectedBranchId } = useBranch();
+  const [data, setData] = useState<BranchDataShape>({
+    ordersToday: '—',
+    totalOrders: '—',
+    ordersLastMonth: '—',
+    completedDeliveries: '—',
+    cancelledFailedDeliveries: '—',
+    slaBreaches: '—',
+    completionRate: '—',
+    csatScore: '—',
+    loyaltyRedemptions: '—',
+    stockLevel: 0,
+    trends: {},
+    orderVolumeData: [],
+    dailyOrderVolume: [],
+    csatTrendData: [],
+    earningsToday: [],
+    earningsThisMonth: [],
+    topSellingTanks: [],
+  });
 
-  // Fetch live average CSAT from the branch-scoped /csat/reports/summary endpoint.
-  // The JWT carries the branch_id scope; the API filters ratings automatically.
-  // Branch Owners use /csat/reports/summary (the BO/FA report endpoint).
   useEffect(() => {
-    apiFetch('/csat/reports/summary')
-      .then((res) => res.json())
-      .then((data) => {
-        const report = data?.report;
-        if (!report) return;
-        const avg: number | null = report.average_stars;
-        if (avg !== null && avg !== undefined) {
-          setCsatScore(avg.toFixed(1));
-          const total: number = report.total_responses ?? 0;
-          setCsatTrend({
-            text: `${total} rating${total !== 1 ? 's' : ''} total`,
+    let active = true;
+    if (!selectedBranchId) return () => { active = false; };
+
+    const controller = new AbortController();
+    const currentRange = reportDates();
+    const previousDate = new Date(new Date().getFullYear(), new Date().getMonth() - 1, 1);
+    const previousYear = previousDate.getFullYear();
+    const previousMonth = String(previousDate.getMonth() + 1).padStart(2, '0');
+    const previousLastDay = new Date(previousYear, previousDate.getMonth() + 1, 0).getDate();
+    const query = new URLSearchParams({ ...currentRange, branchId: selectedBranchId }).toString();
+    const previousQuery = new URLSearchParams({
+      from: `${previousYear}-${previousMonth}-01`,
+      to: `${previousYear}-${previousMonth}-${previousLastDay}`,
+      branchId: selectedBranchId,
+    }).toString();
+
+    Promise.all([
+      apiFetch(`/service-requests/reports/branch-owner-dashboard?${query}`, { signal: controller.signal }),
+      apiFetch(`/service-requests/reports/branch-owner-dashboard?${previousQuery}`, { signal: controller.signal }),
+      apiFetch(`/csat/reports/dashboard-summary?${query}`, { signal: controller.signal }),
+    ])
+      .then(async ([metricsResponse, previousMetricsResponse, csatResponse]) => {
+        const [metricsData, previousMetricsData, csatData] = await Promise.all([
+          metricsResponse.json().catch(() => null),
+          previousMetricsResponse.json().catch(() => null),
+          csatResponse.json().catch(() => null),
+        ]);
+        if (!active) return;
+
+        const metrics = metricsResponse.ok ? metricsData?.metrics : undefined;
+        const previousMetrics = previousMetricsResponse.ok ? previousMetricsData?.metrics : undefined;
+        const csat: CsatReport | undefined = csatResponse.ok ? csatData?.report : undefined;
+        const average = csat?.average_stars;
+        const trends: BranchDataShape['trends'] = {};
+        if (average !== null && average !== undefined) {
+          const total = csat?.total_responses ?? 0;
+          trends.csat = {
+            text: `${total} rating${total === 1 ? '' : 's'} this month`,
             direction: 'up',
             positive: true,
-          });
-        } else {
-          setCsatScore('—');
-          setCsatTrend(undefined);
+          };
         }
+
+        setData((current) => ({
+          ...current,
+          ordersToday: metrics ? String(metrics.ordersToday) : '—',
+          totalOrders: metrics ? String(metrics.totalOrders) : '—',
+          ordersLastMonth: previousMetrics ? String(previousMetrics.totalOrders) : '—',
+          completedDeliveries: metrics ? String(metrics.completedDeliveries) : '—',
+          cancelledFailedDeliveries: metrics ? String(metrics.cancelledFailedDeliveries) : '—',
+          slaBreaches: metrics ? String(metrics.slaBreaches) : '—',
+          loyaltyRedemptions: metrics ? String(metrics.loyaltyClaimsThisMonth) : '—',
+          earningsToday: metrics?.earningsToday ?? [],
+          earningsThisMonth: metrics?.earningsThisMonth ?? [],
+          topSellingTanks: metrics?.topSellingTanks ?? [],
+          orderVolumeData: metrics?.orderVolumeTrend ?? [],
+          dailyOrderVolume: metrics?.dailyOrderVolume ?? [],
+          completionRate: metrics ? `${Number(metrics.deliveryCompletionRate ?? 0).toFixed(1)}%` : '—',
+          csatScore: average === null || average === undefined ? '—' : average.toFixed(1),
+          trends,
+        }));
       })
       .catch(() => {
-        // Non-fatal — keep showing dash until next fetch
-        setCsatScore('—');
-        setCsatTrend(undefined);
+        if (active) setData((current) => ({ ...current, completionRate: '—', csatScore: '—', trends: {} }));
       });
-  }, [selectedBranch]);
 
-  const staticData = Object.entries(STATIC_BRANCH_DATA).find(([name]) => name === selectedBranch)?.[1];
-
-  // Branches registered through the wizard have no mock entry above (the demo
-  // data only covers the three seed branches). Rather than crash every BO screen
-  // with `undefined`, fall back to a neutral empty state — a brand-new branch
-  // legitimately has no activity yet, and real figures await API wiring (§13).
-  if (!staticData) {
-    return {
-      ordersToday: '—',
-      totalOrders: '—',
-      completionRate: '—',
-      csatScore,
-      loyaltyRedemptions: '—',
-      stockLevel: 0,
-      trends: {
-        orders: undefined,
-        completion: undefined,
-        csat: csatTrend,
-        loyalty: undefined,
-      },
-      orderVolumeData: [],
-      csatTrendData: [],
+    return () => {
+      active = false;
+      controller.abort();
     };
-  }
+  }, [selectedBranchId]);
 
-  return {
-    ...staticData,
-    csatScore,
-    trends: {
-      ...staticData.trends,
-      csat: csatTrend,
-    },
-  };
+  return data;
 }

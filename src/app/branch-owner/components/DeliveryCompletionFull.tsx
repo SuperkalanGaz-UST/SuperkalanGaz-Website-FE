@@ -1,33 +1,82 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Header } from './Header';
 import { Pagination } from './Pagination';
 import { Select } from './Select';
 import { ArrowLeft, Search } from 'lucide-react';
+import { apiFetch } from '../../lib/api';
+import { useBranch } from '../contexts/BranchContext';
 
-const fullCompletionData = [
-  { month: 'January 2026', totalOrders: 268, completed: 260, completionRate: 97.0, slaBreaches: 8 },
-  { month: 'February 2026', totalOrders: 272, completed: 265, completionRate: 97.4, slaBreaches: 7 },
-  { month: 'March 2026', totalOrders: 285, completed: 275, completionRate: 96.5, slaBreaches: 10 },
-  { month: 'April 2026', totalOrders: 290, completed: 282, completionRate: 97.2, slaBreaches: 8 },
-  { month: 'May 2024', totalOrders: 245, completed: 238, completionRate: 97.1, slaBreaches: 7 },
-  { month: 'June 2024', totalOrders: 252, completed: 245, completionRate: 97.2, slaBreaches: 7 },
-  { month: 'July 2024', totalOrders: 260, completed: 251, completionRate: 96.5, slaBreaches: 9 },
-  { month: 'August 2024', totalOrders: 255, completed: 248, completionRate: 97.3, slaBreaches: 7 },
-  { month: 'September 2024', totalOrders: 263, completed: 255, completionRate: 96.9, slaBreaches: 8 },
-  { month: 'October 2024', totalOrders: 270, completed: 262, completionRate: 97.0, slaBreaches: 8 },
-  { month: 'November 2024', totalOrders: 265, completed: 258, completionRate: 97.4, slaBreaches: 7 },
-  { month: 'December 2024', totalOrders: 275, completed: 267, completionRate: 97.1, slaBreaches: 8 },
-];
+type CompletionRow = {
+  month: string;
+  totalOrders: number;
+  completed: number;
+  completionRate: number;
+  slaBreaches: number;
+};
+
+function monthRange(year: number, month: number) {
+  const from = `${year}-${String(month).padStart(2, '0')}-01`;
+  const lastDay = new Date(year, month, 0).getDate();
+  return { from, to: `${year}-${String(month).padStart(2, '0')}-${lastDay}` };
+}
 
 export function DeliveryCompletionFull({ onBack }: { onBack: () => void }) {
+  const { selectedBranchId } = useBranch();
+  const [completionData, setCompletionData] = useState<CompletionRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterMonth, setFilterMonth] = useState('all');
 
   const itemsPerPage = 10;
 
+  useEffect(() => {
+    let active = true;
+    if (!selectedBranchId) {
+      setCompletionData([]);
+      setLoading(false);
+      return () => { active = false; };
+    }
+
+    const controller = new AbortController();
+    const now = new Date();
+    const months = Array.from({ length: now.getMonth() + 1 }, (_, index) => index + 1);
+    setLoading(true);
+    setLoadError(null);
+    Promise.all(months.map(async (month) => {
+      const range = monthRange(now.getFullYear(), month);
+      const query = new URLSearchParams({ ...range, branchId: selectedBranchId }).toString();
+      const response = await apiFetch(`/service-requests/reports/branch-owner-dashboard?${query}`, { signal: controller.signal });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) throw new Error('Could not load delivery completion data.');
+      const metrics = data?.metrics;
+      return {
+        month: new Intl.DateTimeFormat('en-PH', { month: 'long', year: 'numeric' }).format(new Date(now.getFullYear(), month - 1, 1)),
+        totalOrders: Number(metrics?.totalOrders ?? 0),
+        completed: Number(metrics?.completedDeliveries ?? 0),
+        completionRate: Number(metrics?.deliveryCompletionRate ?? 0),
+        slaBreaches: Number(metrics?.slaBreaches ?? 0),
+      } satisfies CompletionRow;
+    })).then((rows) => {
+      if (active) setCompletionData(rows.reverse());
+    }).catch((error) => {
+      if (active && !controller.signal.aborted) {
+        setCompletionData([]);
+        setLoadError(error instanceof Error ? error.message : 'Could not load delivery completion data.');
+      }
+    }).finally(() => {
+      if (active && !controller.signal.aborted) setLoading(false);
+    });
+
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [selectedBranchId]);
+
   const filteredData = useMemo(() => {
-    let data = fullCompletionData;
+    let data = completionData;
 
     if (searchQuery) {
       data = data.filter(row =>
@@ -42,7 +91,7 @@ export function DeliveryCompletionFull({ onBack }: { onBack: () => void }) {
     }
 
     return data;
-  }, [searchQuery, filterMonth]);
+  }, [completionData, searchQuery, filterMonth]);
 
   const totalPages = Math.ceil(filteredData.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
@@ -91,7 +140,7 @@ export function DeliveryCompletionFull({ onBack }: { onBack: () => void }) {
               onChange={(value) => { setFilterMonth(value); setCurrentPage(1); }}
               options={[
                 { value: 'all', label: 'All Months' },
-                ...fullCompletionData.map(row => ({ value: row.month, label: row.month }))
+                ...completionData.map(row => ({ value: row.month, label: row.month }))
               ]}
             />
             {hasActiveFilters && (
@@ -116,7 +165,13 @@ export function DeliveryCompletionFull({ onBack }: { onBack: () => void }) {
                 </tr>
               </thead>
               <tbody>
-                {currentData.map((row) => (
+                {loading ? (
+                  <tr><td colSpan={5} className="py-10 text-center text-sm text-gray-400">Loading delivery completion data…</td></tr>
+                ) : loadError ? (
+                  <tr><td colSpan={5} className="py-10 text-center text-sm text-red-600">{loadError}</td></tr>
+                ) : currentData.length === 0 ? (
+                  <tr><td colSpan={5} className="py-10 text-center text-sm text-gray-400">No delivery completion data found.</td></tr>
+                ) : currentData.map((row) => (
                   <tr key={row.month} className="border-b border-gray-100">
                     <td className="py-4 text-[13px] text-gray-900 whitespace-nowrap">{row.month}</td>
                     <td className="py-4 text-[13px] text-gray-600 whitespace-nowrap">{row.totalOrders}</td>
@@ -124,7 +179,7 @@ export function DeliveryCompletionFull({ onBack }: { onBack: () => void }) {
                     <td className="py-4 text-[13px] font-medium text-gray-900 whitespace-nowrap">{row.completionRate}%</td>
                     <td className="py-4">
                       <span className={`inline-block px-3 py-1 rounded-full text-[11px] font-medium ${
-                        row.slaBreaches <= 8 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                        row.slaBreaches === 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
                       }`}>
                         {row.slaBreaches}
                       </span>
