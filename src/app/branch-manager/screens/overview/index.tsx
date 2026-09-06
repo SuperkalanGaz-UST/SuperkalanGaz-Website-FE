@@ -31,14 +31,17 @@ interface CsatSummary {
     total_ratings: number;
 }
 
-/** Low-stock alerts have no backing data source yet — there is no inventory
- * module in the CRM API (unlike every other section on this screen, which is
- * now wired to real branch data). Left as illustrative placeholders until an
- * Inventory module exists to seed this from. */
-const MOCK_ALERTS = [
-    { id: 1, item: '11kg LPG Tank', remaining: 15, threshold: 20 },
-    { id: 2, item: '50kg LPG Tank', remaining: 2, threshold: 5 },
-];
+/** Trimmed stock-level row (Inventory module, GET /inventory/stock-levels). */
+interface StockLevelRow {
+    product_id: string;
+    product_name: string;
+    current_qty: number;
+    threshold_qty: number;
+}
+
+// Same "needs attention" band the Inventory screen's own Critical/Low Stock
+// badges use: at or under threshold is Critical, up to 1.5x threshold is Low.
+const isStockAlert = (item: StockLevelRow) => item.current_qty <= item.threshold_qty * 1.5;
 
 const RECENT_ORDERS_LIMIT = 6;
 const STAR_LEVELS = [1, 2, 3, 4, 5] as const;
@@ -84,6 +87,10 @@ export default function Dashboard() {
     const [csatLoading, setCsatLoading] = useState(true);
 
     const [starCounts, setStarCounts] = useState<Record<number, number> | null>(null);
+
+    const [stockLevels, setStockLevels] = useState<StockLevelRow[]>([]);
+    const [stockLevelsError, setStockLevelsError] = useState<string | null>(null);
+    const [stockLevelsLoading, setStockLevelsLoading] = useState(true);
 
     useEffect(() => {
         if (!mounted) return;
@@ -133,6 +140,15 @@ export default function Dashboard() {
                 setStarCounts(counts);
             })
             .catch(() => { /* chart just shows nothing without this */ });
+
+        apiFetch('/inventory/stock-levels')
+            .then(async (res) => {
+                const data = await res.json();
+                if (!res.ok) throw new Error(apiErrorMessage(data, 'Failed to load stock levels'));
+                setStockLevels(data.stockLevels as StockLevelRow[]);
+            })
+            .catch((err) => setStockLevelsError(err instanceof Error ? err.message : 'Failed to load stock levels'))
+            .finally(() => setStockLevelsLoading(false));
     }, [mounted]);
 
     const todayKey = useMemo(() => phDateKey(new Date().toISOString()), []);
@@ -146,6 +162,7 @@ export default function Dashboard() {
         [requests],
     );
     const recentOrders = useMemo(() => requests.slice(0, RECENT_ORDERS_LIMIT), [requests]);
+    const stockAlerts = useMemo(() => stockLevels.filter(isStockAlert), [stockLevels]);
 
     const csatChartData = useMemo(
         () => STAR_LEVELS.map((stars) => ({ rating: `${stars}★`, count: starCounts?.[stars] ?? 0 })),
@@ -173,10 +190,10 @@ export default function Dashboard() {
                 />
                 <KPICard
                     title="Low Stock Alerts"
-                    value={String(MOCK_ALERTS.length)}
+                    value={stockLevelsLoading ? '…' : String(stockAlerts.length)}
                     icon={<AlertTriangle className="w-4 h-4 text-[#ef4444]" />}
                     accentColor="#ef4444"
-                    alert={true}
+                    alert={stockAlerts.length > 0}
                 />
                 <KPICard
                     title="Avg CSAT"
@@ -242,13 +259,20 @@ export default function Dashboard() {
                             <h2 className={styles.cardTitle}>Critical Alerts</h2>
                         </div>
                         <div className={styles.alertList}>
-                            {MOCK_ALERTS.map(alert => (
-                                <div key={alert.id} className={styles.alertItem}>
+                            {stockLevelsLoading && <div className={styles.emptyState}>Loading…</div>}
+                            {!stockLevelsLoading && stockLevelsError && (
+                                <div className={styles.emptyState}>{stockLevelsError}</div>
+                            )}
+                            {!stockLevelsLoading && !stockLevelsError && stockAlerts.length === 0 && (
+                                <div className={styles.emptyState}>All stock levels are healthy.</div>
+                            )}
+                            {!stockLevelsLoading && !stockLevelsError && stockAlerts.map(alert => (
+                                <div key={alert.product_id} className={styles.alertItem}>
                                     <Flame className={styles.alertIcon} size={20} />
                                     <div className={styles.alertText}>
-                                        <strong>{alert.item}</strong>
+                                        <strong>{alert.product_name}</strong>
                                         <br />
-                                        {alert.remaining} remaining (threshold: {alert.threshold})
+                                        {alert.current_qty} remaining (threshold: {alert.threshold_qty})
                                     </div>
                                 </div>
                             ))}

@@ -1,70 +1,173 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { toast } from 'sonner';
 import * as z from 'zod';
 import { Badge } from '../../components/Badge';
 import { Button } from '../../components/Button';
 import { Progress } from '../../components/Progress';
+import { RowActionsMenu } from '../../components/RowActionsMenu';
 import { Form, FormItem, FormLabel, FormControl, FormMessage, useForm } from '../../components/Form';
 import { Input } from '../../components/Input';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '../../components/Select';
+import { apiFetch, apiErrorMessage } from '../../../lib/api';
 import styles from './screen.module.css';
 
-const MOCK_INVENTORY = [
-    { id: "INV-1", product: "11kg LPG Tank", current: 45, threshold: 20, capacity: 100 },
-    { id: "INV-2", product: "22kg LPG Tank", current: 18, threshold: 15, capacity: 50 },
-    { id: "INV-3", product: "50kg LPG Tank", current: 4, threshold: 5, capacity: 20 },
-    { id: "INV-4", product: "Valve Set", current: 15, threshold: 10, capacity: 50 },
-];
+/** Trimmed stock-level row (Inventory module, GET /inventory/stock-levels) —
+ * one per product in the shared LPG catalog, sparse rows defaulted server-side. */
+interface StockLevelRow {
+    product_id: string;
+    product_name: string;
+    current_qty: number;
+    threshold_qty: number;
+    capacity_qty: number;
+}
 
-const MOCK_REORDERS = [
-    { id: "RO-001", date: "2023-10-25", product: "50kg LPG Tank", qty: 20, status: "Pending", requestedBy: "Branch Manager" },
-    { id: "RO-002", date: "2023-10-24", product: "11kg LPG Tank", qty: 50, status: "Approved", requestedBy: "Branch Manager" },
-    { id: "RO-003", date: "2023-10-20", product: "22kg LPG Tank", qty: 30, status: "Delivered", requestedBy: "System Admin" },
-    { id: "RO-005", date: "2023-10-15", product: "Valve Set", qty: 30, status: "Delivered", requestedBy: "Branch Manager" },
-    { id: "RO-006", date: "2023-10-10", product: "11kg LPG Tank", qty: 100, status: "Delivered", requestedBy: "System Admin" },
-];
+type ReorderStatus = 'Pending' | 'Approved' | 'Delivered' | 'Cancelled';
+
+/** Trimmed reorder-request row (GET /inventory/reorder-requests). */
+interface ReorderRequestRow {
+    id: string;
+    product_id: string;
+    product_name: string;
+    requested_qty: number;
+    status: ReorderStatus;
+    requested_by_name: string;
+    requested_at: string;
+}
 
 const reorderSchema = z.object({
-    product: z.string().min(1, "Product is required"),
+    productId: z.string().min(1, "Product is required"),
     qty: z.coerce.number().min(10, "Minimum reorder quantity is 10 units"),
 });
 
 const stockUpdateSchema = z.object({
-    product: z.string().min(1, "Product is required"),
+    productId: z.string().min(1, "Product is required"),
     receivedQty: z.coerce.number().min(1, "Received quantity must be greater than 0"),
 });
 
+const getStatusVariant = (status: ReorderStatus) => {
+    switch (status) {
+        case 'Delivered': return 'success' as const;
+        case 'Approved': return 'primary' as const;
+        case 'Pending': return 'warning' as const;
+        case 'Cancelled': return 'destructive' as const;
+        default: return 'secondary' as const;
+    }
+};
+
+const formatDate = (iso: string) => {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return '—';
+    return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(d);
+};
+
+// A request still open enough to act on. Delivered/Cancelled are terminal
+// (enforced server-side too — this just keeps dead buttons off the screen).
+const isOpenRequest = (status: ReorderStatus) => status === 'Pending' || status === 'Approved';
+
 export default function Inventory() {
-    const [mounted, setMounted] = React.useState(false);
+    const [mounted, setMounted] = useState(false);
+    useEffect(() => { setMounted(true); }, []);
 
-    React.useEffect(() => {
-        setMounted(true);
-    }, []);
+    const [stockLevels, setStockLevels] = useState<StockLevelRow[]>([]);
+    const [stockError, setStockError] = useState<string | null>(null);
+    const [stockLoading, setStockLoading] = useState(true);
 
-    const [reorders, setReorders] = useState(MOCK_REORDERS);
-    const [inventory, setInventory] = useState(MOCK_INVENTORY);
+    const [reorders, setReorders] = useState<ReorderRequestRow[]>([]);
+    const [reordersError, setReordersError] = useState<string | null>(null);
+    const [reordersLoading, setReordersLoading] = useState(true);
 
-    const reorderForm = useForm({ defaultValues: { product: "", qty: 10 }, schema: reorderSchema });
-    const stockForm = useForm({ defaultValues: { product: "", receivedQty: 10 }, schema: stockUpdateSchema });
+    const loadStockLevels = () =>
+        apiFetch('/inventory/stock-levels').then(async (res) => {
+            const data = await res.json();
+            if (!res.ok) throw new Error(apiErrorMessage(data, 'Failed to load stock levels'));
+            setStockLevels(data.stockLevels as StockLevelRow[]);
+        });
 
+    useEffect(() => {
+        if (!mounted) return;
 
-    const onReorderSubmit = (data: z.infer<typeof reorderSchema>) => {
-        setReorders([{ id: `RO-00${reorders.length + 1}`, date: new Date().toISOString().split('T')[0], product: data.product, qty: data.qty, status: "Pending", requestedBy: "Branch Manager" }, ...reorders]);
-        reorderForm.setValues({ product: "", qty: 10 });
+        loadStockLevels()
+            .catch((err) => setStockError(err instanceof Error ? err.message : 'Failed to load stock levels'))
+            .finally(() => setStockLoading(false));
+
+        apiFetch('/inventory/reorder-requests')
+            .then(async (res) => {
+                const data = await res.json();
+                if (!res.ok) throw new Error(apiErrorMessage(data, 'Failed to load reorder requests'));
+                setReorders(data.reorderRequests as ReorderRequestRow[]);
+            })
+            .catch((err) => setReordersError(err instanceof Error ? err.message : 'Failed to load reorder requests'))
+            .finally(() => setReordersLoading(false));
+    }, [mounted]);
+
+    const reorderForm = useForm({ defaultValues: { productId: "", qty: 10 }, schema: reorderSchema });
+    const stockForm = useForm({ defaultValues: { productId: "", receivedQty: 10 }, schema: stockUpdateSchema });
+
+    const [reorderSubmitting, setReorderSubmitting] = useState(false);
+    const onReorderSubmit = async (data: z.infer<typeof reorderSchema>) => {
+        setReorderSubmitting(true);
+        try {
+            const res = await apiFetch('/inventory/reorder-requests', {
+                method: 'POST',
+                body: JSON.stringify({ productId: data.productId, requestedQty: data.qty }),
+            });
+            const body = await res.json();
+            if (!res.ok) throw new Error(apiErrorMessage(body, 'Failed to submit reorder request'));
+            setReorders((prev) => [body.reorderRequest as ReorderRequestRow, ...prev]);
+            reorderForm.setValues({ productId: "", qty: 10 });
+            toast.success('Reorder request submitted.');
+        } catch (err) {
+            toast.error(err instanceof Error ? err.message : 'Failed to submit reorder request');
+        } finally {
+            setReorderSubmitting(false);
+        }
     };
 
-    const onStockUpdateSubmit = (data: z.infer<typeof stockUpdateSchema>) => {
-        setInventory(prev => prev.map(item => item.product === data.product ? { ...item, current: Math.min(item.current + data.receivedQty, item.capacity) } : item));
-        stockForm.setValues({ product: "", receivedQty: 10 });
+    const [intakeSubmitting, setIntakeSubmitting] = useState(false);
+    const onStockUpdateSubmit = async (data: z.infer<typeof stockUpdateSchema>) => {
+        setIntakeSubmitting(true);
+        try {
+            const res = await apiFetch('/inventory/stock-levels/intake', {
+                method: 'POST',
+                body: JSON.stringify({ productId: data.productId, receivedQty: data.receivedQty }),
+            });
+            const body = await res.json();
+            if (!res.ok) throw new Error(apiErrorMessage(body, 'Failed to update inventory'));
+            const updated = body.stockLevel as StockLevelRow;
+            setStockLevels((prev) => prev.map((item) => (item.product_id === updated.product_id ? updated : item)));
+            stockForm.setValues({ productId: "", receivedQty: 10 });
+            toast.success('Inventory updated.');
+        } catch (err) {
+            toast.error(err instanceof Error ? err.message : 'Failed to update inventory');
+        } finally {
+            setIntakeSubmitting(false);
+        }
     };
 
-    const getStatusVariant = (status: string) => {
-        switch (status) {
-            case 'Delivered': return 'success' as const;
-            case 'Approved': return 'primary' as const;
-            case 'Pending': return 'warning' as const;
-            default: return 'secondary' as const;
+    const [statusUpdatingId, setStatusUpdatingId] = useState<string | null>(null);
+    const updateReorderStatus = async (id: string, status: 'Approved' | 'Delivered' | 'Cancelled') => {
+        setStatusUpdatingId(id);
+        try {
+            const res = await apiFetch(`/inventory/reorder-requests/${id}/status`, {
+                method: 'PATCH',
+                body: JSON.stringify({ status }),
+            });
+            const body = await res.json();
+            if (!res.ok) throw new Error(apiErrorMessage(body, `Failed to mark request ${status}`));
+            const updated = body.reorderRequest as ReorderRequestRow;
+            setReorders((prev) => prev.map((r) => (r.id === id ? updated : r)));
+            if (status === 'Delivered') {
+                // Stock was credited server-side (atomic upsert) — reload the
+                // cards rather than re-deriving the capacity cap client-side.
+                loadStockLevels().catch(() => { /* cards just stay stale until next reload */ });
+            }
+            toast.success(`Reorder request marked ${status}.`);
+        } catch (err) {
+            toast.error(err instanceof Error ? err.message : `Failed to mark request ${status}`);
+        } finally {
+            setStatusUpdatingId(null);
         }
     };
 
@@ -75,25 +178,27 @@ export default function Inventory() {
     return (
         <>
             <div className={styles.stockCardsGrid}>
-                {inventory.map(item => {
-                    const pct = Math.min((item.current / item.capacity) * 100, 100);
-                    const isCritical = item.current <= item.threshold;
-                    const isWarning = !isCritical && item.current <= item.threshold * 1.5;
+                {stockLoading && <div className={styles.emptyState}>Loading stock levels…</div>}
+                {!stockLoading && stockError && <div className={styles.emptyState}>{stockError}</div>}
+                {!stockLoading && !stockError && stockLevels.map(item => {
+                    const pct = Math.min((item.current_qty / item.capacity_qty) * 100, 100);
+                    const isCritical = item.current_qty <= item.threshold_qty;
+                    const isWarning = !isCritical && item.current_qty <= item.threshold_qty * 1.5;
                     const colorVar = isCritical ? 'var(--error)' : isWarning ? 'var(--warning)' : 'var(--success)';
                     return (
-                        <div key={item.id} className={styles.stockCard}>
+                        <div key={item.product_id} className={styles.stockCard}>
                             <div className={styles.stockCardHeader}>
-                                <h3 className={styles.stockCardTitle}>{item.product}</h3>
+                                <h3 className={styles.stockCardTitle}>{item.product_name}</h3>
                                 <span className={styles.stockCardValues}>
-                                    <span className={styles.stockCurrent}>{item.current}</span>
-                                    <span className={styles.stockCapacity}>/ {item.capacity}</span>
+                                    <span className={styles.stockCurrent}>{item.current_qty}</span>
+                                    <span className={styles.stockCapacity}>/ {item.capacity_qty}</span>
                                 </span>
                             </div>
                             <div className={styles.gaugeContainer} style={{ "--primary": colorVar } as React.CSSProperties}>
                                 <Progress value={pct} />
                             </div>
                             <div className={styles.stockCardFooter}>
-                                <span className={styles.thresholdLabel}>Threshold: {item.threshold}</span>
+                                <span className={styles.thresholdLabel}>Threshold: {item.threshold_qty}</span>
                                 {isCritical && <Badge variant="destructive" className={styles.alertBadge}>Critical</Badge>}
                                 {isWarning && <Badge variant="warning" className={styles.alertBadge}>Low Stock</Badge>}
                             </div>
@@ -108,14 +213,14 @@ export default function Inventory() {
                     <div className={styles.cardBody}>
                         <Form {...reorderForm}>
                             <form onSubmit={reorderForm.handleSubmit(onReorderSubmit)} className={styles.formLayout}>
-                                <FormItem name="product">
+                                <FormItem name="productId">
                                     <FormLabel>Product Line</FormLabel>
-                                    <Select value={reorderForm.values.product} onValueChange={(val: string) => { reorderForm.setValues(p => ({ ...p, product: val })); reorderForm.validateField("product"); }}>
+                                    <Select value={reorderForm.values.productId} onValueChange={(val: string) => { reorderForm.setValues(p => ({ ...p, productId: val })); reorderForm.validateField("productId"); }}>
                                         <FormControl><SelectTrigger><SelectValue placeholder="Select product..." /></SelectTrigger></FormControl>
                                         <SelectContent>
-                                            <SelectItem value="11kg LPG Tank">11kg LPG Tank</SelectItem>
-                                            <SelectItem value="22kg LPG Tank">22kg LPG Tank</SelectItem>
-                                            <SelectItem value="50kg LPG Tank">50kg LPG Tank</SelectItem>
+                                            {stockLevels.map(item => (
+                                                <SelectItem key={item.product_id} value={item.product_id}>{item.product_name}</SelectItem>
+                                            ))}
                                         </SelectContent>
                                     </Select>
                                     <FormMessage />
@@ -125,7 +230,11 @@ export default function Inventory() {
                                     <FormControl><Input type="number" min="10" value={reorderForm.values.qty} onChange={e => reorderForm.setValues(p => ({ ...p, qty: Number(e.target.value) }))} onBlur={() => reorderForm.validateField("qty")} /></FormControl>
                                     <FormMessage />
                                 </FormItem>
-                                <div className={styles.formFooter}><Button type="submit" variant="accent">Submit Request</Button></div>
+                                <div className={styles.formFooter}>
+                                    <Button type="submit" variant="accent" disabled={reorderSubmitting}>
+                                        {reorderSubmitting ? 'Submitting…' : 'Submit Request'}
+                                    </Button>
+                                </div>
                             </form>
                         </Form>
                     </div>
@@ -135,14 +244,14 @@ export default function Inventory() {
                     <div className={styles.cardBody}>
                         <Form {...stockForm}>
                             <form onSubmit={stockForm.handleSubmit(onStockUpdateSubmit)} className={styles.formLayout}>
-                                <FormItem name="product">
+                                <FormItem name="productId">
                                     <FormLabel>Product Line</FormLabel>
-                                    <Select value={stockForm.values.product} onValueChange={(val: string) => { stockForm.setValues(p => ({ ...p, product: val })); stockForm.validateField("product"); }}>
+                                    <Select value={stockForm.values.productId} onValueChange={(val: string) => { stockForm.setValues(p => ({ ...p, productId: val })); stockForm.validateField("productId"); }}>
                                         <FormControl><SelectTrigger><SelectValue placeholder="Select product..." /></SelectTrigger></FormControl>
                                         <SelectContent>
-                                            <SelectItem value="11kg LPG Tank">11kg LPG Tank</SelectItem>
-                                            <SelectItem value="22kg LPG Tank">22kg LPG Tank</SelectItem>
-                                            <SelectItem value="50kg LPG Tank">50kg LPG Tank</SelectItem>
+                                            {stockLevels.map(item => (
+                                                <SelectItem key={item.product_id} value={item.product_id}>{item.product_name}</SelectItem>
+                                            ))}
                                         </SelectContent>
                                     </Select>
                                     <FormMessage />
@@ -152,7 +261,11 @@ export default function Inventory() {
                                     <FormControl><Input type="number" min="1" value={stockForm.values.receivedQty} onChange={e => stockForm.setValues(p => ({ ...p, receivedQty: Number(e.target.value) }))} onBlur={() => stockForm.validateField("receivedQty")} /></FormControl>
                                     <FormMessage />
                                 </FormItem>
-                                <div className={styles.formFooter}><Button type="submit" variant="secondary">Update Inventory</Button></div>
+                                <div className={styles.formFooter}>
+                                    <Button type="submit" variant="secondary" disabled={intakeSubmitting}>
+                                        {intakeSubmitting ? 'Updating…' : 'Update Inventory'}
+                                    </Button>
+                                </div>
                             </form>
                         </Form>
                     </div>
@@ -163,16 +276,47 @@ export default function Inventory() {
                 <div className={styles.cardHeader}><h2 className={styles.cardTitle}>Reorder Request Log</h2></div>
                 <div className={styles.tableWrapper}>
                     <table className={styles.table}>
-                        <thead><tr><th>Req ID</th><th>Date</th><th>Product</th><th>Qty Requested</th><th>Requested By</th><th>Status</th></tr></thead>
+                        <thead><tr><th>Req ID</th><th>Date</th><th>Product</th><th>Qty Requested</th><th>Requested By</th><th>Status</th><th></th></tr></thead>
                         <tbody>
-                            {reorders.map(req => (
+                            {reordersLoading && (
+                                <tr><td colSpan={7} className={styles.emptyState}>Loading…</td></tr>
+                            )}
+                            {!reordersLoading && reordersError && (
+                                <tr><td colSpan={7} className={styles.emptyState}>{reordersError}</td></tr>
+                            )}
+                            {!reordersLoading && !reordersError && reorders.length === 0 && (
+                                <tr><td colSpan={7} className={styles.emptyState}>No reorder requests yet.</td></tr>
+                            )}
+                            {!reordersLoading && !reordersError && reorders.map(req => (
                                 <tr key={req.id}>
-                                    <td className={styles.monoText}>{req.id}</td>
-                                    <td>{req.date}</td>
-                                    <td className={styles.boldText}>{req.product}</td>
-                                    <td className={styles.boldText}>{req.qty}</td>
-                                    <td className={styles.mutedText}>{req.requestedBy}</td>
+                                    <td className={styles.monoText}>#{req.id.slice(0, 8).toUpperCase()}</td>
+                                    <td>{formatDate(req.requested_at)}</td>
+                                    <td className={styles.boldText}>{req.product_name}</td>
+                                    <td className={styles.boldText}>{req.requested_qty}</td>
+                                    <td className={styles.mutedText}>{req.requested_by_name}</td>
                                     <td><Badge variant={getStatusVariant(req.status)}>{req.status}</Badge></td>
+                                    <td>
+                                        {isOpenRequest(req.status) ? (
+                                            <div className={styles.rowActions}>
+                                                <Button
+                                                    size="sm"
+                                                    variant="primary"
+                                                    disabled={statusUpdatingId === req.id}
+                                                    onClick={() => updateReorderStatus(req.id, 'Delivered')}
+                                                >
+                                                    {statusUpdatingId === req.id ? 'Updating…' : 'Mark Delivered'}
+                                                </Button>
+                                                <RowActionsMenu items={[
+                                                    ...(req.status === 'Pending'
+                                                        ? [{ label: 'Approve', onClick: () => updateReorderStatus(req.id, 'Approved') }]
+                                                        : []),
+                                                    { label: 'Cancel', onClick: () => updateReorderStatus(req.id, 'Cancelled') },
+                                                ]} />
+                                            </div>
+                                        ) : (
+                                            <span className={styles.mutedText}>—</span>
+                                        )}
+                                    </td>
                                 </tr>
                             ))}
                         </tbody>

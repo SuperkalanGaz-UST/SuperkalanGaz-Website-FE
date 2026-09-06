@@ -31,3 +31,8 @@
 .monoText { font-family: var(--font-family-monospace); font-size: 0.8125rem; }
 .boldText { font-weight: 600; }
 .mutedText { color: var(--muted-foreground); }
+.emptyState { text-align: center; padding: 2rem; color: var(--muted-foreground); }
+
+/* Primary status-transition Button + kebab RowActionsMenu, side by side —
+   never wrap the menu below the button (matches the Orders table). */
+.rowActions { display: flex; gap: 0.4rem; align-items: center; justify-content: flex-end; flex-wrap: nowrap; }
