@@ -7,7 +7,6 @@ import {
     CheckCircle2,
     ClipboardList,
     Clock3,
-    MoreHorizontal,
     Plus,
     RefreshCw,
     Search,
@@ -19,16 +18,11 @@ import { toast } from 'sonner';
 import * as z from 'zod';
 import { Badge } from '../../components/Badge';
 import { Button } from '../../components/Button';
+import { RowActionsMenu } from '../../components/RowActionsMenu';
 import { Tabs, TabsList, TabsTrigger } from '../../components/Tabs';
 import { Form, FormItem, FormLabel, FormControl, FormMessage, useForm } from '../../components/Form';
 import { Input } from '../../components/Input';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '../../components/Select';
-import {
-    DropdownMenu,
-    DropdownMenuTrigger,
-    DropdownMenuContent,
-    DropdownMenuItem,
-} from '../../../components/ui/dropdown-menu';
 import { apiFetch, apiErrorMessage } from '../../../lib/api';
 import { DeliveryProofViewer } from '../../../components/DeliveryProofViewer';
 import { fetchLpgPrices, formatPeso, LpgPrice } from '../../../lib/pricing';
@@ -191,39 +185,6 @@ const getSlaState = (request: SRRow) => {
     if (request.dispatched_at) return { label: 'In progress', className: 'slaInfo' };
     return { label: 'Awaiting dispatch', className: 'slaNeutral' };
 };
-
-/** Ghost icon-sm Button's computed style, inlined here because the Radix
- * DropdownMenuTrigger renders its own <button> (no ref-forwarding `asChild`
- * target available on the hand-rolled Button component) — kept visually
- * identical to every other icon-only button in this table. */
-const menuTriggerStyle: React.CSSProperties = {
-    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-    width: '1.75rem', height: '1.75rem', padding: '0.25rem', borderRadius: '0.375rem',
-    border: '1px solid var(--border)', backgroundColor: 'var(--card)', color: 'inherit', cursor: 'pointer',
-};
-
-/** A row's secondary actions (2+) collapse into this kebab menu instead of a
- * row of buttons — the single most important action (Assign & Dispatch / Mark
- * Delivered) stays a visible Button beside it. Radix portals the menu content
- * to the document body, so it isn't clipped by the table's own
- * `overflow-x: auto` wrapper (the same reason the rider assignment picker
- * below uses a native <select> instead of a custom dropdown). */
-function RowActionsMenu({ items }: { items: { label: string; onClick: () => void }[] }) {
-    return (
-        <DropdownMenu>
-            <DropdownMenuTrigger style={menuTriggerStyle} aria-label="More actions">
-                <MoreHorizontal size={16} />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-                {items.map((item) => (
-                    <DropdownMenuItem key={item.label} onSelect={() => item.onClick()}>
-                        {item.label}
-                    </DropdownMenuItem>
-                ))}
-            </DropdownMenuContent>
-        </DropdownMenu>
-    );
-}
 
 interface OrdersProps {
     /** Set by the Customers screen's "View order history" link — seeds the
