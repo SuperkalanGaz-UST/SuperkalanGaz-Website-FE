@@ -20,12 +20,10 @@ type BranchDataShape = {
     csat?: KPITrend;
     loyalty?: KPITrend;
   };
-  orderVolumeData: { month: string; orders: number }[];
   dailyOrderVolume: { day: string; orders: number }[];
   csatTrendData: { month: string; score: number }[];
   earningsToday: { hour: string; earnings: number }[];
   earningsThisMonth: { week: string; earnings: number }[];
-  topSellingTanks: { size: string; orders: number }[];
 };
 
 type CsatReport = { average_stars?: number | null; total_responses?: number };
@@ -52,12 +50,10 @@ export function useBranchData(): BranchDataShape {
     loyaltyRedemptions: '—',
     stockLevel: 0,
     trends: {},
-    orderVolumeData: [],
     dailyOrderVolume: [],
     csatTrendData: [],
     earningsToday: [],
     earningsThisMonth: [],
-    topSellingTanks: [],
   });
 
   useEffect(() => {
@@ -115,8 +111,6 @@ export function useBranchData(): BranchDataShape {
           loyaltyRedemptions: metrics ? String(metrics.loyaltyClaimsThisMonth) : '—',
           earningsToday: metrics?.earningsToday ?? [],
           earningsThisMonth: metrics?.earningsThisMonth ?? [],
-          topSellingTanks: metrics?.topSellingTanks ?? [],
-          orderVolumeData: metrics?.orderVolumeTrend ?? [],
           dailyOrderVolume: metrics?.dailyOrderVolume ?? [],
           completionRate: metrics ? `${Number(metrics.deliveryCompletionRate ?? 0).toFixed(1)}%` : '—',
           csatScore: average === null || average === undefined ? '—' : average.toFixed(1),
