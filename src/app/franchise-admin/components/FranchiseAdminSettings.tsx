@@ -1,11 +1,12 @@
 'use client';
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Eye, EyeOff, KeyRound, LockKeyhole } from 'lucide-react';
 import { toast } from 'sonner';
 import { Header } from '../../components/Header';
 import { useAccount, useUpdateAccount } from '../../contexts/AccountContext';
-import { apiErrorMessage, apiFetch } from '../../lib/api';
+import { apiErrorMessage, apiFetch, fetchJson } from '../../lib/api';
 import { ROLE_LABELS } from '../../lib/auth';
 import { formatPhMobileNational, toE164PhMobile } from '../../lib/phMobile';
 
@@ -64,8 +65,6 @@ export function FranchiseAdminSettings() {
   }));
   const [savedForm, setSavedForm] = useState<ProfileForm | null>(null);
   const [errors, setErrors] = useState<FormErrors>({});
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [passwordOpen, setPasswordOpen] = useState(false);
   const [password, setPassword] = useState('');
@@ -73,6 +72,8 @@ export function FranchiseAdminSettings() {
   const [showPassword, setShowPassword] = useState(false);
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [passwordSaving, setPasswordSaving] = useState(false);
+
+  const queryClient = useQueryClient();
 
   const applyProfile = useCallback((user: ProfileResponse['user']) => {
     const nextForm: ProfileForm = {
@@ -85,27 +86,17 @@ export function FranchiseAdminSettings() {
     setSavedForm(nextForm);
   }, [fallbackName]);
 
-  const loadProfile = useCallback(async () => {
-    setLoading(true);
-    setLoadError(null);
-    try {
-      const response = await apiFetch('/users/me');
-      const data = (await response.json().catch(() => null)) as ProfileResponse | null;
-      if (!response.ok || !data?.user) {
-        setLoadError(apiErrorMessage(data, 'Could not load your account details.'));
-        return;
-      }
-      applyProfile(data.user);
-    } catch {
-      setLoadError('Could not reach the server.');
-    } finally {
-      setLoading(false);
-    }
-  }, [applyProfile]);
+  const { data: profileData, isLoading: loading, error: profileQueryError } = useQuery({
+    queryKey: ['users-me'],
+    queryFn: () => fetchJson<ProfileResponse>('/users/me'),
+    staleTime: 30_000,
+  });
+  const loadError = profileQueryError ? (profileQueryError.message || 'Could not load your account details.') : null;
 
   useEffect(() => {
-    void loadProfile();
-  }, [loadProfile]);
+    if (profileData?.user) applyProfile(profileData.user);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profileData]);
 
   const profileInitials = useMemo(
     () => initials(form.firstName, form.lastName),
@@ -151,6 +142,7 @@ export function FranchiseAdminSettings() {
 
       applyProfile(data.user);
       updateAccount({ displayName: data.user.display_name || fullName });
+      void queryClient.invalidateQueries({ queryKey: ['users-me'] });
       toast.success('Account details updated.');
     } catch {
       toast.error('Could not reach the server.');
@@ -221,7 +213,7 @@ export function FranchiseAdminSettings() {
             <p className="text-sm text-red-600">{loadError}</p>
             <button
               type="button"
-              onClick={() => void loadProfile()}
+              onClick={() => void queryClient.invalidateQueries({ queryKey: ['users-me'] })}
               className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
             >
               Try again

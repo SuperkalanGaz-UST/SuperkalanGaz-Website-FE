@@ -1,6 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import {
   ArrowRight,
   CheckCircle2,
@@ -28,19 +29,11 @@ function activityLabel(action: string): string {
 }
 
 export function GovernanceDashboard({ onNavigate }: { onNavigate: (screen: string) => void }) {
-  const [data, setData] = useState<GovernanceDashboardData | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  const load = useCallback(async () => {
-    setError(null);
-    try {
-      setData(await governanceApi.dashboard());
-    } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : 'Could not load the dashboard.');
-    }
-  }, []);
-
-  useEffect(() => void load(), [load]);
+  const { data, error: queryError, refetch: load } = useQuery({
+    queryKey: ['governance-dashboard'],
+    queryFn: () => governanceApi.dashboard(),
+  });
+  const error = queryError ? queryError.message : null;
 
   const metricCards = [
     ['Pending Approvals', data?.metrics.pendingApprovals, Clock3, 'text-amber-600 bg-amber-50'],

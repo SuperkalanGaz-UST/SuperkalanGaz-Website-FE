@@ -1,12 +1,13 @@
 'use client';
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { RefreshCw, Search, UserRound, X, Coins, Boxes, Users } from 'lucide-react';
 import { KPICard } from '../../../components/KPICard';
 import { Badge } from '../../components/Badge';
 import { Progress } from '../../components/Progress';
 import { Pagination } from '../../../components/Pagination';
-import { apiFetch, apiErrorMessage } from '../../../lib/api';
+import { apiErrorMessage, fetchJson } from '../../../lib/api';
 import { formatPHMobile } from '../../../lib/phMobile';
 import styles from './screen.module.css';
 
@@ -105,51 +106,48 @@ interface CustomersProps {
  * to the Orders screen, pre-filtered to them, for the full interactive queue.
  */
 export default function Customers({ onViewOrders }: CustomersProps = {}) {
-    const [mounted, setMounted] = useState(false);
-    useEffect(() => { setMounted(true); }, []);
 
-    const [customers, setCustomers] = useState<CustomerRow[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
     const [search, setSearch] = useState('');
+    const [debouncedSearch, setDebouncedSearch] = useState('');
+
+    useEffect(() => {
+        const handle = setTimeout(() => setDebouncedSearch(search), search === '' ? 0 : 300);
+        return () => clearTimeout(handle);
+    }, [search]);
+
     const [sourceFilter, setSourceFilter] = useState<(typeof SOURCE_FILTERS)[number]>('All Sources');
     const [page, setPage] = useState(1);
 
-    const [selectedCustomer, setSelectedCustomer] = useState<CustomerRow | null>(null);
-    const [orders, setOrders] = useState<OrderHistoryRow[]>([]);
-    const [ordersLoading, setOrdersLoading] = useState(false);
-    const [ordersError, setOrdersError] = useState<string | null>(null);
-    const [loyalty, setLoyalty] = useState<LoyaltyLedgerView | null>(null);
-    const [loyaltyLoading, setLoyaltyLoading] = useState(false);
-    const [loyaltyError, setLoyaltyError] = useState<string | null>(null);
-
-    const load = useCallback(async (term: string) => {
-        setLoading(true);
-        setError(null);
-        try {
-            // No term => the full branch directory; >=2 chars => name/contact match.
-            // A 1-character term is not sent (the API 400s below 2 chars) — the
-            // directory just stays as-is until the term clears the threshold.
-            const trimmed = term.trim();
+    const { data: customersData, error: queryError, isLoading, refetch: loadRequests } = useQuery({
+        queryKey: ['customers', debouncedSearch],
+        queryFn: () => {
+            const trimmed = debouncedSearch.trim();
             const path = trimmed.length >= 2 ? `/customers?search=${encodeURIComponent(trimmed)}` : '/customers';
-            const res = await apiFetch(path);
-            const data = await res.json();
-            if (!res.ok) throw new Error(apiErrorMessage(data, 'Failed to load customers'));
-            setCustomers(data.customers as CustomerRow[]);
-        } catch (err) {
-            setError(err instanceof Error ? err.message : 'Failed to load customers');
-            setCustomers([]);
-        } finally {
-            setLoading(false);
-        }
-    }, []);
+            return fetchJson<{ customers: CustomerRow[] }>(path);
+        },
+    });
 
-    // Debounced: directory loads immediately on mount; typing re-queries.
-    useEffect(() => {
-        const handle = setTimeout(() => load(search), search === '' ? 0 : 300);
-        return () => clearTimeout(handle);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [search]);
+    const customers = customersData?.customers ?? [];
+    const loading = isLoading;
+    const error = queryError ? queryError.message : null;
+
+    const [selectedCustomer, setSelectedCustomer] = useState<CustomerRow | null>(null);
+
+    const { data: ordersData, error: ordersQueryError, isLoading: ordersLoading } = useQuery({
+        queryKey: ['customer-orders', selectedCustomer?.id],
+        queryFn: () => fetchJson<{ serviceRequests: OrderHistoryRow[] }>(`/service-requests/customers/${selectedCustomer!.id}`),
+        enabled: !!selectedCustomer,
+    });
+    const orders = ordersData?.serviceRequests ?? [];
+    const ordersError = ordersQueryError ? ordersQueryError.message : null;
+
+    const { data: loyaltyData, error: loyaltyQueryError, isLoading: loyaltyLoading } = useQuery({
+        queryKey: ['customer-loyalty', selectedCustomer?.id],
+        queryFn: () => fetchJson<{ ledger: LoyaltyLedgerView }>(`/loyalty/customers/${selectedCustomer!.id}`),
+        enabled: !!selectedCustomer,
+    });
+    const loyalty = loyaltyData?.ledger ?? null;
+    const loyaltyError = loyaltyQueryError ? loyaltyQueryError.message : null;
 
     // Source filter is layered client-side on top of the (server-searched)
     // directory — real data already on the page, no extra request.
@@ -175,47 +173,11 @@ export default function Customers({ onViewOrders }: CustomersProps = {}) {
 
     const openCustomer = (customer: CustomerRow) => {
         setSelectedCustomer(customer);
-
-        setOrdersLoading(true);
-        setOrdersError(null);
-        apiFetch(`/service-requests/customers/${customer.id}`)
-            .then(async (res) => {
-                const data = await res.json();
-                if (!res.ok) throw new Error(apiErrorMessage(data, 'Failed to load order history'));
-                setOrders(data.serviceRequests as OrderHistoryRow[]);
-            })
-            .catch((err) => {
-                setOrdersError(err instanceof Error ? err.message : 'Failed to load order history');
-                setOrders([]);
-            })
-            .finally(() => setOrdersLoading(false));
-
-        setLoyaltyLoading(true);
-        setLoyaltyError(null);
-        setLoyalty(null);
-        apiFetch(`/loyalty/customers/${customer.id}`)
-            .then(async (res) => {
-                const data = await res.json();
-                if (!res.ok) throw new Error(apiErrorMessage(data, 'Failed to load loyalty standing'));
-                setLoyalty(data.ledger as LoyaltyLedgerView);
-            })
-            .catch((err) => {
-                setLoyaltyError(err instanceof Error ? err.message : 'Failed to load loyalty standing');
-            })
-            .finally(() => setLoyaltyLoading(false));
     };
 
     const closeCustomer = () => {
         setSelectedCustomer(null);
-        setOrders([]);
-        setOrdersError(null);
-        setLoyalty(null);
-        setLoyaltyError(null);
     };
-
-    if (!mounted) {
-        return <div style={{ minHeight: '100vh', backgroundColor: 'var(--background)' }} />;
-    }
 
     return (
         <div>
@@ -275,7 +237,7 @@ export default function Customers({ onViewOrders }: CustomersProps = {}) {
                     <button
                         type="button"
                         className={styles.refreshButton}
-                        onClick={() => load(search)}
+                        onClick={() => void loadRequests()}
                         disabled={loading}
                         title="Refresh"
                     >

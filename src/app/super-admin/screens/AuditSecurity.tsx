@@ -1,6 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, ShieldCheck, UserCog } from 'lucide-react';
 import { governanceApi } from '../api';
 import type { SecuritySummary } from '../types';
@@ -8,21 +9,27 @@ import { ErrorState, formatDate, humanize, LoadingState, Panel, StatusChip } fro
 import { SuperAdminHeader } from '../components/SuperAdminHeader';
 
 export function AuditSecurity() {
-  const [data, setData] = useState<SecuritySummary | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const load = useCallback(async () => {
-    setError(null);
-    try { setData(await governanceApi.security()); }
-    catch (loadError) { setError(loadError instanceof Error ? loadError.message : 'Could not load security data.'); }
-  }, []);
-  useEffect(() => void load(), [load]);
+  const queryClient = useQueryClient();
+
+  const { data: queryData, error: queryError, isLoading } = useQuery({
+    queryKey: ['security'],
+    queryFn: () => governanceApi.security(),
+    staleTime: 30_000,
+  });
+
+  const data = queryData ?? null;
+  const error = queryError ? (queryError.message || 'Could not load security data.') : null;
+  
+  const refreshSecurity = useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: ['security'] });
+  }, [queryClient]);
 
   return (
     <div className="flex-1 overflow-y-auto bg-[#f7f8fa]">
       <SuperAdminHeader title="Audit & Security" description="Monitor privileged activity, account health, and audit completeness." />
       <main className="mx-auto w-full max-w-[1560px] px-8 pb-10">
         {!data && !error && <LoadingState />}
-        {error && <ErrorState message={error} onRetry={() => void load()} />}
+        {error && <ErrorState message={error} onRetry={() => refreshSecurity()} />}
         {data && <>
           <Panel className="p-6">
             <div className="grid items-center gap-5 md:grid-cols-[1.3fr_repeat(3,0.7fr)]">

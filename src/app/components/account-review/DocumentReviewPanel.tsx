@@ -10,7 +10,8 @@ import {
   X,
 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
-import { apiErrorMessage, apiFetch } from '../../lib/api';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { apiErrorMessage, apiFetch, fetchJson } from '../../lib/api';
 
 export type DocumentReviewState = 'loading' | 'ready' | 'incomplete' | 'unavailable';
 
@@ -61,9 +62,9 @@ export function DocumentReviewPanel({
   requestId,
   onReviewStateChange,
 }: DocumentReviewPanelProps) {
-  const [documents, setDocuments] = useState<ReviewDocument[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
   const [preview, setPreview] = useState<PreviewState | null>(null);
+  const [previewError, setPreviewError] = useState<string | null>(null);
   const [openingId, setOpeningId] = useState<string | null>(null);
 
   const closePreview = useCallback(() => {
@@ -71,55 +72,55 @@ export function DocumentReviewPanel({
       if (current) URL.revokeObjectURL(current.url);
       return null;
     });
+    setPreviewError(null);
   }, []);
 
-  const load = useCallback(async () => {
-    setDocuments(null);
-    setError(null);
-    onReviewStateChange?.('loading');
+  useEffect(() => {
+    return closePreview;
+  }, [closePreview]);
 
-    let response: Response;
-    try {
-      response = await apiFetch(`/staff-registration/requests/${requestId}/documents`, {
-        signal: AbortSignal.timeout(10_000),
-      });
-    } catch {
-      setError('Documents are temporarily unavailable. Account decisions are disabled.');
-      onReviewStateChange?.('unavailable');
-      return;
-    }
+  const { data: documentsData, isLoading: documentsLoading, error: queryError } = useQuery({
+    queryKey: ['staff-registration-documents', requestId],
+    queryFn: async () => {
+      try {
+        const body: unknown = await fetchJson(`/staff-registration/requests/${requestId}/documents`);
+        const rows = body && typeof body === 'object'
+          ? (body as { documents?: unknown }).documents
+          : null;
+        if (!Array.isArray(rows) || !rows.every(isReviewDocument)) {
+          throw new Error('The document service returned an invalid response.');
+        }
+        return rows as ReviewDocument[];
+      } catch (err: any) {
+        if (err.status === 404) {
+          throw new Error('Document review is not connected for this request.');
+        }
+        throw err;
+      }
+    },
+    staleTime: 30_000,
+  });
 
-    const body: unknown = await response.json().catch(() => null);
-    if (!response.ok) {
-      setError(
-        response.status === 404
-          ? 'Document review is not connected for this request.'
-          : apiErrorMessage(body, 'Documents could not be loaded.'),
-      );
-      onReviewStateChange?.('unavailable');
-      return;
-    }
-
-    const rows = body && typeof body === 'object'
-      ? (body as { documents?: unknown }).documents
-      : null;
-    if (!Array.isArray(rows) || !rows.every(isReviewDocument)) {
-      setError('The document service returned an invalid response.');
-      onReviewStateChange?.('unavailable');
-      return;
-    }
-
-    setDocuments(rows);
-    onReviewStateChange?.(rows.length > 0 ? 'ready' : 'incomplete');
-  }, [onReviewStateChange, requestId]);
+  const documents = documentsLoading ? null : (documentsData ?? null);
+  const error = queryError ? 
+    (queryError.message === 'Document review is not connected for this request.' || queryError.message === 'The document service returned an invalid response.'
+      ? queryError.message 
+      : 'Documents are temporarily unavailable. Account decisions are disabled.') 
+    : null;
 
   useEffect(() => {
-    void load();
-    return closePreview;
-  }, [closePreview, load]);
+    if (documentsLoading) {
+      onReviewStateChange?.('loading');
+    } else if (error) {
+      onReviewStateChange?.('unavailable');
+    } else if (documents) {
+      onReviewStateChange?.(documents.length > 0 ? 'ready' : 'incomplete');
+    }
+  }, [documentsLoading, error, documents, onReviewStateChange]);
 
   const openPreview = async (document: ReviewDocument) => {
     closePreview();
+    setPreviewError(null);
     setOpeningId(document.id);
     try {
       const response = await apiFetch(
@@ -144,10 +145,10 @@ export function DocumentReviewPanel({
         name: document.file_name,
         mimeType: contentType as ReviewDocument['detected_mime_type'],
       });
-    } catch (previewError) {
-      setError(
-        previewError instanceof Error
-          ? previewError.message
+    } catch (previewErr) {
+      setPreviewError(
+        previewErr instanceof Error
+          ? previewErr.message
           : 'The document could not be opened.',
       );
     } finally {
@@ -170,7 +171,7 @@ export function DocumentReviewPanel({
           <span className="flex items-start gap-2">
             <AlertCircle className="mt-0.5 h-4 w-4 flex-none" /> {error}
           </span>
-          <button type="button" onClick={() => void load()} className="shrink-0 font-semibold underline">
+            <button type="button" onClick={() => void queryClient.invalidateQueries({ queryKey: ['staff-registration-documents', requestId] })} className="text-sm font-semibold text-[#007BC1] hover:underline">
             Retry
           </button>
         </div>
@@ -207,6 +208,16 @@ export function DocumentReviewPanel({
               </article>
             );
           })}
+        </div>
+      )}
+
+      {previewError && (
+        <div className="mt-4 flex items-start gap-3 rounded-lg border border-red-200 bg-red-50 p-4 text-red-700">
+          <AlertCircle className="mt-0.5 h-5 w-5 flex-none" />
+          <div className="text-sm">
+            <h4 className="font-semibold">Unable to preview document</h4>
+            <p className="mt-1 opacity-90">{previewError}</p>
+          </div>
         </div>
       )}
 

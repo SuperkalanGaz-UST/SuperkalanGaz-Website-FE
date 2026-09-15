@@ -152,12 +152,12 @@ export function ExpensesLogFull({ onBack }: { onBack?: () => void }) {
             <table className="w-full">
               <thead>
                 <tr className="border-b border-gray-200">
-                  <th className="pb-3 pr-4 text-left text-[11px] font-medium uppercase text-gray-500">Date</th>
-                  <th className="pb-3 pr-4 text-left text-[11px] font-medium uppercase text-gray-500">Reference no.</th>
-                  <th className="pb-3 pr-4 text-left text-[11px] font-medium uppercase text-gray-500">Category</th>
-                  <th className="pb-3 pr-4 text-left text-[11px] font-medium uppercase text-gray-500">Description</th>
-                  <th className="pb-3 pr-4 text-right text-[11px] font-medium uppercase text-gray-500">Amount</th>
-                  <th className="pb-3 text-left text-[11px] font-medium uppercase text-gray-500">Recorded by</th>
+                  <th className="pb-3 pr-4 text-left text-xs font-semibold  text-gray-700">Date</th>
+                  <th className="pb-3 pr-4 text-left text-xs font-semibold  text-gray-700">Reference no.</th>
+                  <th className="pb-3 pr-4 text-left text-xs font-semibold  text-gray-700">Category</th>
+                  <th className="pb-3 pr-4 text-left text-xs font-semibold  text-gray-700">Description</th>
+                  <th className="pb-3 pr-4 text-right text-xs font-semibold  text-gray-700">Amount</th>
+                  <th className="pb-3 text-left text-xs font-semibold  text-gray-700">Recorded by</th>
                 </tr>
               </thead>
               <tbody>

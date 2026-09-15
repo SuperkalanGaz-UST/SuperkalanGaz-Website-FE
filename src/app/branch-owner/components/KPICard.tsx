@@ -29,35 +29,52 @@ interface KPICardProps {
 
 export function KPICard({ title, value, subtitle, icon, alert, accentColor = '#007BC1', trend, titleClassName = '' }: KPICardProps) {
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 relative flex flex-col min-h-[120px] h-full">
-      {icon && (
-        <div
-          className="absolute top-4 right-4 w-9 h-9 rounded-full flex items-center justify-center"
-          style={{ backgroundColor: `${accentColor}26` }}
-        >
-          {icon}
+    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-3.5 relative flex flex-col h-full">
+      <div className="flex items-start justify-between mb-1">
+        <div className="flex items-start gap-1.5 pt-1.5">
+          <div className={`text-sm font-medium text-gray-500 ${titleClassName}`}>{title}</div>
         </div>
-      )}
+        {icon && (
+          <div className="w-8 h-8 rounded-[8px] border border-gray-100 flex items-center justify-center shadow-sm [&>svg]:!text-[#007BC1]">
+            {icon}
+          </div>
+        )}
+      </div>
 
-      <div className={`text-sm font-medium text-gray-500 ${icon ? 'pr-12' : ''} ${titleClassName}`}>{title}</div>
-      <div className={`text-3xl font-bold mt-2 leading-none ${alert ? 'text-[#CC1903]' : 'text-gray-900'}`}>
+      <div className={`text-[28px] font-semibold tracking-tight mt-0.5 leading-none ${alert ? 'text-[#CC1903]' : 'text-[#111827]'}`}>
         {value}
       </div>
 
       {subtitle && <div className="text-xs text-gray-500 mt-1">{subtitle}</div>}
 
       {trend && (
-        <div
-          className={`flex items-center gap-1 text-xs font-medium mt-auto pt-3 ${
-            trend.positive ? 'text-green-600' : 'text-red-600'
-          }`}
-        >
-          {trend.direction === 'up' ? (
-            <ArrowUpRight className="w-3.5 h-3.5" />
-          ) : (
-            <ArrowDownRight className="w-3.5 h-3.5" />
-          )}
-          <span>{trend.text}</span>
+        <div className="flex items-center gap-2 mt-auto pt-2">
+          {(() => {
+            const match = trend.text.match(/^([+-]?\d+(?:\.\d+)?%)\s+(.*)$/);
+            const isUp = trend.direction === 'up';
+            const isPositive = trend.positive;
+            
+            const pillBg = isPositive ? 'bg-[#e8faef]' : 'bg-[#fee2e2]';
+            const pillText = isPositive ? 'text-[#16a34a]' : 'text-[#ef4444]';
+            const IconComponent = isUp ? ArrowUpRight : ArrowDownRight;
+
+            if (match) {
+              const [, percent, textPart] = match;
+              return (
+                <>
+                  <span className="text-xs text-gray-400 font-medium">{textPart}</span>
+                  <div className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded-md text-[11px] font-semibold ${pillBg} ${pillText}`}>
+                    {percent}
+                    <IconComponent className="w-3 h-3" />
+                  </div>
+                </>
+              );
+            } else {
+              return (
+                <span className="text-xs text-gray-400 font-medium">{trend.text}</span>
+              );
+            }
+          })()}
         </div>
       )}
     </div>

@@ -189,12 +189,12 @@ export function SalesOverview() {
             <table className="w-full">
               <thead>
                 <tr className="border-b border-gray-200">
-                  <th className="text-left text-[11px] font-medium text-gray-600 pb-3">Order Date</th>
-                  <th className="text-left text-[11px] font-medium text-gray-600 pb-3">Receipt No.</th>
-                  <th className="text-left text-[11px] font-medium text-gray-600 pb-3">Customer</th>
-                  <th className="text-left text-[11px] font-medium text-gray-600 pb-3">Total Orders</th>
-                  <th className="text-left text-[11px] font-medium text-gray-600 pb-3">Cash Received</th>
-                  <th className="text-left text-[11px] font-medium text-gray-600 pb-3">Paid</th>
+                  <th className="text-left text-xs font-semibold text-gray-700 pb-3">Order Date</th>
+                  <th className="text-left text-xs font-semibold text-gray-700 pb-3">Receipt No.</th>
+                  <th className="text-left text-xs font-semibold text-gray-700 pb-3">Customer</th>
+                  <th className="text-left text-xs font-semibold text-gray-700 pb-3">Total Orders</th>
+                  <th className="text-left text-xs font-semibold text-gray-700 pb-3">Cash Received</th>
+                  <th className="text-left text-xs font-semibold text-gray-700 pb-3">Paid</th>
                 </tr>
               </thead>
               <tbody>

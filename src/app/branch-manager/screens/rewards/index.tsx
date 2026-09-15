@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import Image from 'next/image';
 import { RefreshCw, Gift, Star, UsersRound, Clock3, RotateCw, Building2 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -8,7 +9,7 @@ import { Badge } from '../../components/Badge';
 import { Button } from '../../components/Button';
 import { Tabs, TabsList, TabsTrigger } from '../../components/Tabs';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '../../components/Select';
-import { apiFetch, apiErrorMessage } from '../../../lib/api';
+import { apiFetch, apiErrorMessage, fetchJson } from '../../../lib/api';
 import { formatPHMobile } from '../../../lib/phMobile';
 import styles from './screen.module.css';
 
@@ -154,11 +155,48 @@ export default function Rewards() {
     const [mounted, setMounted] = useState(false);
     useEffect(() => { setMounted(true); }, []);
 
+    const queryClient = useQueryClient();
     const [track, setTrack] = useState<Track>(HOUSEHOLD);
     const [activeTab, setActiveTab] = useState('pending');
-    const [redemptions, setRedemptions] = useState<RedemptionRow[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
+
+    const {
+        data: redemptionsData,
+        isLoading: loading,
+        error: redemptionsQueryError,
+    } = useQuery({
+        queryKey: ['loyalty-redemptions', track, activeTab],
+        queryFn: () => fetchJson<{ redemptions: RedemptionRow[] }>(`/loyalty/redemptions?track=${track}&status=${encodeURIComponent(activeTab)}`),
+        staleTime: 30_000,
+    });
+    const redemptions = redemptionsData?.redemptions ?? [];
+    const error = redemptionsQueryError ? redemptionsQueryError.message : null;
+
+    // KPI summary row above the queue
+    const { data: summaryData } = useQuery({
+        queryKey: ['loyalty-summary', track],
+        queryFn: () => fetchJson<{ redemptions: RedemptionRow[] }>(`/loyalty/redemptions?track=${track}&status=all`),
+        staleTime: 30_000,
+    });
+    const trackSummary = useMemo(() => {
+        if (!summaryData) return null;
+        const all = summaryData.redemptions;
+        return {
+            pending: all.filter((r) => r.status === 'pending').length,
+            approved: all.filter((r) => r.status === 'approved').length,
+            fulfilled: all.filter((r) => r.status === 'fulfilled').length,
+            pendingPoints: all
+                .filter((r) => r.status === 'pending')
+                .reduce((sum, r) => sum + (r.points_spent ?? 0), 0),
+        };
+    }, [summaryData]);
+
+    // Active household reward catalog
+    const { data: catalogData } = useQuery({
+        queryKey: ['loyalty-catalog'],
+        queryFn: () => fetchJson<{ catalogItems: CatalogItemRow[] }>('/loyalty/catalog'),
+        staleTime: 30_000,
+    });
+    const catalog = catalogData?.catalogItems ?? [];
 
     // Per-row in-flight guards. Only one action runs per row at a time, so a single
     // id per action is enough (mirrors the Orders screen's dispatchingId).
@@ -176,7 +214,6 @@ export default function Rewards() {
     // The household form also needs a reward; the commercial form does not (the
     // reward is always one free cylinder).
     const [showCreate, setShowCreate] = useState(false);
-    const [catalog, setCatalog] = useState<CatalogItemRow[]>([]);
     const [selectedItemId, setSelectedItemId] = useState('');
     const [selectedCustomer, setSelectedCustomer] = useState<CustomerRow | null>(null);
     const [customerSearch, setCustomerSearch] = useState('');
@@ -195,70 +232,6 @@ export default function Rewards() {
     const [codeSearchError, setCodeSearchError] = useState<string | null>(null);
 
     const isCommercial = track === COMMERCIAL;
-
-    const loadRedemptions = useCallback(async (t: Track, status: string) => {
-        setLoading(true);
-        setError(null);
-        try {
-            const res = await apiFetch(`/loyalty/redemptions?track=${t}&status=${encodeURIComponent(status)}`);
-            const data = await res.json();
-            if (!res.ok) throw new Error(apiErrorMessage(data, 'Failed to load redemptions'));
-            setRedemptions(data.redemptions as RedemptionRow[]);
-        } catch (err) {
-            const message = err instanceof Error ? err.message : 'Failed to load redemptions';
-            setError(message);
-            setRedemptions([]);
-        } finally {
-            setLoading(false);
-        }
-    }, []);
-
-    useEffect(() => { loadRedemptions(track, activeTab); }, [track, activeTab, loadRedemptions]);
-
-    // KPI summary row above the queue — real counts derived from the full
-    // (unfiltered-by-status) redemption list for the active track, not a
-    // separate mocked-up metric. Loaded independently of the status-filtered
-    // `redemptions` list above so the cards stay stable while the BM switches
-    // status tabs underneath them.
-    const [trackSummary, setTrackSummary] = useState<{
-        pending: number;
-        approved: number;
-        fulfilled: number;
-        pendingPoints: number;
-    } | null>(null);
-    const loadTrackSummary = useCallback(async (t: Track) => {
-        try {
-            const res = await apiFetch(`/loyalty/redemptions?track=${t}&status=all`);
-            const data = await res.json();
-            if (!res.ok) return;
-            const all = data.redemptions as RedemptionRow[];
-            setTrackSummary({
-                pending: all.filter((r) => r.status === 'pending').length,
-                approved: all.filter((r) => r.status === 'approved').length,
-                fulfilled: all.filter((r) => r.status === 'fulfilled').length,
-                pendingPoints: all
-                    .filter((r) => r.status === 'pending')
-                    .reduce((sum, r) => sum + (r.points_spent ?? 0), 0),
-            });
-        } catch {
-            // Non-fatal: the KPI row just stays blank, the queue below still works.
-        }
-    }, []);
-    useEffect(() => { loadTrackSummary(track); }, [track, loadTrackSummary]);
-
-    // Active household reward catalog — loaded once for the household create form.
-    const loadCatalog = useCallback(async () => {
-        try {
-            const res = await apiFetch('/loyalty/catalog');
-            const data = await res.json();
-            if (!res.ok) return;
-            setCatalog(data.catalogItems as CatalogItemRow[]);
-        } catch {
-            // Non-fatal: the create form just shows an empty catalog.
-        }
-    }, []);
-
-    useEffect(() => { loadCatalog(); }, [loadCatalog]);
 
     // Open (or close) the ledger review panel for a row (BM-014).
     const toggleLedger = async (id: string) => {
@@ -356,7 +329,8 @@ export default function Rewards() {
                 toast.success('Redemption request logged.');
             }
             resetCreate();
-            await Promise.all([loadRedemptions(track, activeTab), loadTrackSummary(track)]);
+            void queryClient.invalidateQueries({ queryKey: ['loyalty-redemptions'] });
+            void queryClient.invalidateQueries({ queryKey: ['loyalty-summary'] });
         } catch (err) {
             toast.error(err instanceof Error ? err.message : 'Failed to create redemption request');
         } finally {
@@ -379,7 +353,8 @@ export default function Rewards() {
                 // completed cycle (commercial) — the API's message says which.
                 if (res.status === 409) {
                     toast.error(apiErrorMessage(data, 'Could not approve this redemption'));
-                    await Promise.all([loadRedemptions(track, activeTab), loadTrackSummary(track)]);
+                    void queryClient.invalidateQueries({ queryKey: ['loyalty-redemptions'] });
+            void queryClient.invalidateQueries({ queryKey: ['loyalty-summary'] });
                     return;
                 }
                 if (res.status === 404) { toast.error('Redemption not found'); return; }
@@ -391,7 +366,9 @@ export default function Rewards() {
             toast.success((isCommercial ? 'Free cylinder approved' : 'Redemption approved') + codeMsg);
             // Close the ledger panel for this row if it was open; state changed.
             if (ledgerId === id) { setLedgerId(null); setLedger(null); }
-            await Promise.all([loadRedemptions(track, activeTab), loadCatalog(), loadTrackSummary(track)]);
+            void queryClient.invalidateQueries({ queryKey: ['loyalty-redemptions'] });
+            void queryClient.invalidateQueries({ queryKey: ['loyalty-summary'] });
+            void queryClient.invalidateQueries({ queryKey: ['loyalty-catalog'] });
         } catch (err) {
             toast.error(err instanceof Error ? err.message : 'Failed to approve redemption');
         } finally {
@@ -419,7 +396,8 @@ export default function Rewards() {
                 if (res.status === 409) {
                     toast.error(apiErrorMessage(data, 'This redemption is no longer pending'));
                     setRejectId(null);
-                    await Promise.all([loadRedemptions(track, activeTab), loadTrackSummary(track)]);
+                    void queryClient.invalidateQueries({ queryKey: ['loyalty-redemptions'] });
+            void queryClient.invalidateQueries({ queryKey: ['loyalty-summary'] });
                     return;
                 }
                 toast.error(apiErrorMessage(data, 'Failed to reject redemption'));
@@ -427,7 +405,8 @@ export default function Rewards() {
             }
             toast.success('Redemption rejected.');
             setRejectId(null);
-            await Promise.all([loadRedemptions(track, activeTab), loadTrackSummary(track)]);
+            void queryClient.invalidateQueries({ queryKey: ['loyalty-redemptions'] });
+            void queryClient.invalidateQueries({ queryKey: ['loyalty-summary'] });
         } catch (err) {
             toast.error(err instanceof Error ? err.message : 'Failed to reject redemption');
         } finally {
@@ -443,7 +422,8 @@ export default function Rewards() {
             if (!res.ok) {
                 if (res.status === 409) {
                     toast.error(apiErrorMessage(data, 'This redemption is not approved'));
-                    await Promise.all([loadRedemptions(track, activeTab), loadTrackSummary(track)]);
+                    void queryClient.invalidateQueries({ queryKey: ['loyalty-redemptions'] });
+            void queryClient.invalidateQueries({ queryKey: ['loyalty-summary'] });
                     return;
                 }
                 if (res.status === 404) { toast.error('Redemption not found'); return; }
@@ -451,7 +431,8 @@ export default function Rewards() {
                 return;
             }
             toast.success('Reward marked as handed over.');
-            await Promise.all([loadRedemptions(track, activeTab), loadTrackSummary(track)]);
+            void queryClient.invalidateQueries({ queryKey: ['loyalty-redemptions'] });
+            void queryClient.invalidateQueries({ queryKey: ['loyalty-summary'] });
         } catch (err) {
             toast.error(err instanceof Error ? err.message : 'Failed to mark fulfilled');
         } finally {
@@ -695,7 +676,7 @@ export default function Rewards() {
                         >
                             {codeSearchLoading ? 'Searching…' : 'Verify Code'}
                         </Button>
-                        <Button variant="ghost" size="sm" onClick={() => loadRedemptions(track, activeTab)} disabled={loading}>
+                        <Button variant="ghost" size="sm" onClick={() => void queryClient.invalidateQueries({ queryKey: ['loyalty-redemptions'] })} disabled={loading}>
                             <RefreshCw size={16} /> Refresh
                         </Button>
                     </div>

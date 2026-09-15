@@ -1,6 +1,7 @@
 'use client';
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useCallback, useMemo, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Building2,
   Clock3,
@@ -10,7 +11,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Header } from '../../components/Header';
-import { apiErrorMessage, apiFetch } from '../../lib/api';
+import { apiErrorMessage, apiFetch, fetchJson } from '../../lib/api';
 import type {
   GovernanceRequest,
   GovernanceRequestType,
@@ -91,12 +92,9 @@ const inputClass =
 
 export function GovernanceRequests() {
   const [activeForm, setActiveForm] = useState<RequestForm>('sla-threshold');
-  const [requests, setRequests] = useState<GovernanceRequest[]>([]);
-  const [branches, setBranches] = useState<BranchOption[]>([]);
-  const [owners, setOwners] = useState<OwnerOption[]>([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
+
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   const [slaSegment, setSlaSegment] = useState<(typeof SEGMENTS)[number][0]>(
     'request_to_dispatch',
@@ -108,36 +106,37 @@ export function GovernanceRequests() {
   const [ownerId, setOwnerId] = useState('');
   const [ownerReason, setOwnerReason] = useState('');
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const [requestResponse, branchResponse, ownerResponse] = await Promise.all([
-        apiFetch('/governance/requests?limit=200'),
-        apiFetch('/branches'),
-        apiFetch('/users?role=branch-owner'),
-      ]);
-      const [requestBody, branchBody, ownerBody] = await Promise.all([
-        responseJson<{ requests: GovernanceRequest[] }>(
-          requestResponse,
-          'Could not load governance requests.',
-        ),
-        responseJson<{ branches: BranchOption[] }>(branchResponse, 'Could not load branches.'),
-        responseJson<{ users: OwnerOption[] }>(ownerResponse, 'Could not load Branch Owners.'),
-      ]);
-      setRequests(requestBody.requests);
-      setBranches(branchBody.branches.filter((branch) => branch.status === 'active'));
-      setOwners(ownerBody.users.filter((owner) => owner.status === 'Active'));
-    } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : 'Could not load governance data.');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const { data: requestsData, isLoading: requestsLoading, error: requestsError } = useQuery({
+    queryKey: ['governance-requests'],
+    queryFn: () => fetchJson<{ requests: GovernanceRequest[] }>('/governance/requests?limit=200'),
+    staleTime: 30_000,
+  });
+  const requests = requestsData?.requests ?? [];
 
-  useEffect(() => {
-    void load();
-  }, [load]);
+  const { data: branchesData, isLoading: branchesLoading, error: branchesError } = useQuery({
+    queryKey: ['branches'],
+    queryFn: () => fetchJson<{ branches: BranchOption[] }>('/branches'),
+    staleTime: 30_000,
+  });
+  const branches = (branchesData?.branches ?? []).filter((branch) => branch.status === 'active');
+
+  const { data: ownersData, isLoading: ownersLoading, error: ownersError } = useQuery({
+    queryKey: ['branch-owners'],
+    queryFn: () => fetchJson<{ users: OwnerOption[] }>('/users?role=branch-owner'),
+    staleTime: 30_000,
+  });
+  const owners = (ownersData?.users ?? []).filter((owner) => owner.status === 'Active');
+
+  const loading = requestsLoading || branchesLoading || ownersLoading;
+  const error = (requestsError || branchesError || ownersError) 
+    ? 'Could not load governance data.' 
+    : null;
+
+  const refreshGovernance = useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: ['governance-requests'] });
+    void queryClient.invalidateQueries({ queryKey: ['branches'] });
+    void queryClient.invalidateQueries({ queryKey: ['branch-owners'] });
+  }, [queryClient]);
 
   const selectedBranch = useMemo(
     () => branches.find((branch) => branch.id === branchId),
@@ -154,7 +153,7 @@ export function GovernanceRequests() {
       await responseJson(response, 'Could not submit the governance request.');
       toast.success('Request submitted for Super Administrator review.');
       window.dispatchEvent(new Event('notifications:refresh'));
-      await load();
+      refreshGovernance();
       return true;
     } catch (submitError) {
       toast.error(
@@ -341,7 +340,7 @@ export function GovernanceRequests() {
               <h2 className="font-semibold text-slate-900">My submitted requests</h2>
               <p className="mt-1 text-xs text-slate-500">Newest requests appear first.</p>
             </div>
-            <button type="button" onClick={() => void load()} className="text-sm font-semibold text-[#007BC1] hover:underline">Refresh</button>
+            <button type="button" onClick={() => refreshGovernance()} className="text-sm font-semibold text-[#007BC1] hover:underline">Refresh</button>
           </div>
           {loading ? (
             <div className="p-10 text-center text-sm text-slate-500">Loading requests…</div>

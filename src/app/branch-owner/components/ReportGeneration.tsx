@@ -1,6 +1,7 @@
 'use client';
 
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   AlertCircle,
   CalendarDays,
@@ -19,7 +20,7 @@ import {
   TriangleAlert,
   Truck,
 } from 'lucide-react';
-import { apiErrorMessage, apiFetch } from '../../lib/api';
+import { apiErrorMessage, fetchJson } from '../../lib/api';
 import { useAccount } from '../../contexts/AccountContext';
 import { useBranch } from '../contexts/BranchContext';
 import { Header } from './Header';
@@ -562,15 +563,11 @@ export function ReportGeneration() {
     assignedBranchesLoading,
     assignedBranchesError,
   } = useBranch();
+  const queryClient = useQueryClient();
   const [draftType, setDraftType] = useState<ReportType>('csat');
   const [draftMonth, setDraftMonth] = useState(DEFAULT_MONTH);
   const [exportFormat, setExportFormat] = useState<ExportFormat>('pdf');
   const [preview, setPreview] = useState<PreviewSelection>({ type: 'csat', month: DEFAULT_MONTH });
-  const [refreshKey, setRefreshKey] = useState(0);
-  const [loadedReport, setLoadedReport] = useState<LoadedReport | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [generatedAt, setGeneratedAt] = useState<Date | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const toastTimer = useRef<number | null>(null);
 
@@ -592,84 +589,49 @@ export function ReportGeneration() {
     if (toastTimer.current !== null) window.clearTimeout(toastTimer.current);
   }, []);
 
-  useEffect(() => {
-    if (assignedBranchesLoading || (needsResolvedBranch && !selectedBranchId)) {
-      if (!assignedBranchesLoading && assignedBranchesError) {
-        setLoading(false);
-        setLoadedReport(null);
-        setError(assignedBranchesError);
+  const endpoint = preview.type === 'csat' ? '/csat/reports/summary' : '/service-requests/reports/sla';
+  const params = new URLSearchParams({ from: previewPeriod.from, to: previewPeriod.to });
+  if (selectedBranchId) params.set('branchId', selectedBranchId);
+
+  const isQueryEnabled = !assignedBranchesLoading && !(needsResolvedBranch && !selectedBranchId) && !assignedBranchesError;
+
+  const {
+    data: reportData,
+    isLoading: reportLoadingQuery,
+    error: reportQueryError,
+    dataUpdatedAt,
+  } = useQuery({
+    queryKey: ['reports', preview.type, previewPeriod.from, previewPeriod.to, selectedBranchId],
+    queryFn: async () => {
+      const payload: unknown = await fetchJson(`${endpoint}?${params.toString()}`);
+      const reportValue = isRecord(payload) ? payload.report : null;
+      const parsed = preview.type === 'csat'
+        ? parseCsatReport(reportValue)
+        : parseSlaReport(reportValue);
+      if (!parsed) {
+        throw new Error('The server returned an invalid report response.');
       }
-      return;
-    }
+      return parsed;
+    },
+    enabled: isQueryEnabled,
+    staleTime: 30_000,
+  });
 
-    const controller = new AbortController();
-    const timeout = window.setTimeout(() => controller.abort(), 8_000);
-    const loadReport = async () => {
-      setLoading(true);
-      setError(null);
-      setLoadedReport(null);
-      const params = new URLSearchParams({ from: previewPeriod.from, to: previewPeriod.to });
-      if (selectedBranchId) params.set('branchId', selectedBranchId);
-      const endpoint = preview.type === 'csat'
-        ? '/csat/reports/summary'
-        : '/service-requests/reports/sla';
+  const loadedReport = useMemo(() => {
+    if (!reportData) return null;
+    return preview.type === 'csat'
+      ? { type: 'csat' as const, data: reportData as CsatReport }
+      : { type: 'sla' as const, data: reportData as SlaReport };
+  }, [reportData, preview.type]);
 
-      try {
-        const response = await apiFetch(`${endpoint}?${params.toString()}`, {
-          signal: controller.signal,
-        });
-        const payload: unknown = await response.json().catch(() => null);
-        if (!response.ok) {
-          setError(apiErrorMessage(payload, 'The report could not be loaded.'));
-          return;
-        }
-        const reportValue = isRecord(payload) ? payload.report : null;
-        const parsed = preview.type === 'csat'
-          ? parseCsatReport(reportValue)
-          : parseSlaReport(reportValue);
-        if (!parsed) {
-          setError('The server returned an invalid report response.');
-          return;
-        }
-        setLoadedReport(
-          preview.type === 'csat'
-            ? { type: 'csat', data: parsed as CsatReport }
-            : { type: 'sla', data: parsed as SlaReport },
-        );
-        setGeneratedAt(new Date());
-      } catch {
-        setError(
-          controller.signal.aborted
-            ? 'The report request timed out. Try again.'
-            : 'The Reports service is unavailable. Check the API connection and retry.',
-        );
-      } finally {
-        window.clearTimeout(timeout);
-        setLoading(false);
-      }
-    };
-
-    void loadReport();
-    return () => {
-      window.clearTimeout(timeout);
-      controller.abort();
-    };
-  }, [
-    assignedBranchesError,
-    assignedBranchesLoading,
-    needsResolvedBranch,
-    preview.month,
-    preview.type,
-    previewPeriod.from,
-    previewPeriod.to,
-    refreshKey,
-    selectedBranchId,
-  ]);
+  const loading = isQueryEnabled ? reportLoadingQuery : false;
+  const error = assignedBranchesError || (reportQueryError ? reportQueryError.message || 'The report could not be loaded.' : null);
+  const generatedAt = dataUpdatedAt ? new Date(dataUpdatedAt) : null;
 
   const updatePreview = () => {
     const next = { type: draftType, month: draftMonth };
     if (preview.type === next.type && preview.month === next.month) {
-      setRefreshKey((value) => value + 1);
+      void queryClient.invalidateQueries({ queryKey: ['reports'] });
     } else {
       setPreview(next);
     }
@@ -859,7 +821,7 @@ export function ReportGeneration() {
                   <p className="mt-2 max-w-md text-sm leading-6 text-gray-500">{error}</p>
                   <button
                     type="button"
-                    onClick={() => setRefreshKey((value) => value + 1)}
+                    onClick={() => void queryClient.invalidateQueries({ queryKey: ['reports', preview.type, previewPeriod.from, previewPeriod.to, selectedBranchId] })}
                     className="mt-5 flex h-10 items-center gap-2 rounded-lg bg-[#087fc3] px-4 text-sm font-medium text-white hover:bg-[#066da8]"
                   >
                     <RefreshCw className="h-4 w-4" />

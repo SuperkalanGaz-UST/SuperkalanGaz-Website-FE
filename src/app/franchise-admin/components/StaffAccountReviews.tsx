@@ -8,14 +8,15 @@ import {
   Search,
   UserRound,
 } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useCallback } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { Header } from '../../components/Header';
 import {
   DocumentReviewPanel,
   type DocumentReviewState,
 } from '../../components/account-review/DocumentReviewPanel';
-import { apiErrorMessage, apiFetch } from '../../lib/api';
+import { apiFetch, fetchJson, apiErrorMessage } from '../../lib/api';
 
 type ReviewRole = 'branch-owner' | 'branch-manager';
 
@@ -60,47 +61,49 @@ async function responseJson<T>(response: Response, fallback: string): Promise<T>
 }
 
 export function StaffAccountReviews() {
-  const [requests, setRequests] = useState<StaffAccountReviewRequest[] | null>(null);
+  const queryClient = useQueryClient();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState<'all' | ReviewRole>('all');
   const [reason, setReason] = useState('');
   const [working, setWorking] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [documentReviewState, setDocumentReviewState] =
-    useState<DocumentReviewState>('loading');
+  const [documentReviewState, setDocumentReviewState] = useState<DocumentReviewState>('loading');
 
-  const load = useCallback(async () => {
-    setError(null);
-    setRequests(null);
-    try {
-      const response = await apiFetch(
-        '/staff-registration/requests?status=pending&roles=branch-owner,branch-manager',
-        { signal: AbortSignal.timeout(10_000) },
-      );
-      if (response.status === 404) {
-        throw new Error('The secure staff-registration service is not connected yet.');
+  const { data: requestsData, isLoading, error: queryError } = useQuery({
+    queryKey: ['staff-registration-requests'],
+    queryFn: async () => {
+      try {
+        return await fetchJson<{ requests: StaffAccountReviewRequest[] }>('/staff-registration/requests?status=pending&roles=branch-owner,branch-manager');
+      } catch (err: any) {
+        if (err.status === 404) {
+          throw new Error('The secure staff-registration service is not connected yet.');
+        }
+        throw err;
       }
-      const body = await responseJson<{ requests: StaffAccountReviewRequest[] }>(
-        response,
-        'Could not load staff account registrations.',
-      );
-      setRequests(body.requests);
+    },
+    staleTime: 30_000,
+  });
+
+  const requests = isLoading ? null : (requestsData?.requests ?? []);
+  const error = queryError ? 
+    (queryError.message === 'The secure staff-registration service is not connected yet.' 
+      ? queryError.message 
+      : 'The secure staff-registration service is unavailable.') 
+    : null;
+
+  useEffect(() => {
+    if (requests) {
       setSelectedId((current) =>
-        current && body.requests.some((request) => request.id === current)
+        current && requests.some((request) => request.id === current)
           ? current
-          : body.requests[0]?.id ?? null,
-      );
-    } catch (loadError) {
-      setError(
-        loadError instanceof Error
-          ? loadError.message
-          : 'The secure staff-registration service is unavailable.',
+          : requests[0]?.id ?? null,
       );
     }
-  }, []);
+  }, [requests]);
 
-  useEffect(() => void load(), [load]);
+  const refreshRequests = useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: ['staff-registration-requests'] });
+  }, [queryClient]);
 
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -144,7 +147,7 @@ export function StaffAccountReviews() {
           : `${roleLabel(selected.role)} registration rejected.`,
       );
       setReason('');
-      await load();
+      refreshRequests();
     } catch (decisionError) {
       toast.error(
         decisionError instanceof Error
@@ -200,7 +203,7 @@ export function StaffAccountReviews() {
             </p>
             <button
               type="button"
-              onClick={() => void load()}
+              onClick={() => refreshRequests()}
               className="mt-5 rounded-lg border border-[#007BC1] px-4 py-2 text-sm font-semibold text-[#007BC1] hover:bg-sky-50"
             >
               Retry

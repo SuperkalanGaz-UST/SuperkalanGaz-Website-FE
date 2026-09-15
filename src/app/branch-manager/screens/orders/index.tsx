@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import {
     AlertTriangle,
     CalendarDays,
@@ -23,7 +24,7 @@ import { Tabs, TabsList, TabsTrigger } from '../../components/Tabs';
 import { Form, FormItem, FormLabel, FormControl, FormMessage, useForm } from '../../components/Form';
 import { Input } from '../../components/Input';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '../../components/Select';
-import { apiFetch, apiErrorMessage } from '../../../lib/api';
+import { apiFetch, apiErrorMessage, fetchJson } from '../../../lib/api';
 import { DeliveryProofViewer } from '../../../components/DeliveryProofViewer';
 import { fetchLpgPrices, formatPeso, LpgPrice } from '../../../lib/pricing';
 import { formatPHMobile, normalizePhMobile, toE164PhMobile } from '../../../lib/phMobile';
@@ -207,11 +208,25 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
         if (initialSearch) setSearchQuery(initialSearch);
     }, [initialSearch]);
     const [requests, setRequests] = useState<SRRow[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
-    // Timestamp of the last successful background or foreground fetch.
-    // Displayed in the header so the BM can see the list is live.
+    
+    const { data: requestsData, error: queryError, isLoading: requestsLoading, refetch: loadRequests } = useQuery({
+        queryKey: ['service-requests'],
+        queryFn: () => fetchJson<{ serviceRequests: SRRow[] }>('/service-requests'),
+        refetchInterval: 10000, // Background polling every 10s
+    });
+    
+    useEffect(() => {
+        if (requestsData?.serviceRequests) setRequests(requestsData.serviceRequests);
+    }, [requestsData]);
+    
+    const error = queryError ? queryError.message : null;
+    const loading = requestsLoading;
+
     const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null);
+    useEffect(() => {
+        if (requestsData) setLastRefreshed(new Date());
+    }, [requestsData]);
+
     const [isCreateFormVisible, setIsCreateFormVisible] = useState(false);
     const [submitting, setSubmitting] = useState(false);
     const [catalogPrices, setCatalogPrices] = useState<LpgPrice[]>([]);
@@ -426,60 +441,7 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
         setNewCustomerErrors({});
     };
 
-    const loadRequests = useCallback(async (isBackground = false) => {
-        console.log('[branch-manager-orders] fetch start /service-requests');
-        if (!isBackground) setLoading(true);
-        setError(null);
-        try {
-            const res = await apiFetch('/service-requests');
-            const data = await res.json();
-            console.log('[branch-manager-orders] fetch response', {
-                ok: res.ok,
-                status: res.status,
-                raw: data,
-                count: Array.isArray(data?.serviceRequests) ? data.serviceRequests.length : 0,
-                firstRow: Array.isArray(data?.serviceRequests) && data.serviceRequests.length > 0
-                    ? {
-                        id: data.serviceRequests[0].id,
-                        branch_id: data.serviceRequests[0].branch_id,
-                        status: data.serviceRequests[0].status,
-                    }
-                    : null,
-            });
-            if (!res.ok) throw new Error(apiErrorMessage(data, 'Failed to load service requests'));
-            setRequests(data.serviceRequests as SRRow[]);
-            // Stamp the last successful refresh so the header indicator stays current.
-            setLastRefreshed(new Date());
-        } catch (err) {
-            const message = err instanceof Error ? err.message : 'Failed to load service requests';
-            console.log('[branch-manager-orders] fetch error', message);
-            setError(message);
-            setRequests([]);
-        } finally {
-            if (!isBackground) setLoading(false);
-        }
-    }, []);
 
-    useEffect(() => { void loadRequests(); }, [loadRequests]);
-    useEffect(() => {
-        // Poll every 10 s while the tab is open.
-        const intervalId = window.setInterval(() => {
-            void loadRequests(true);
-        }, 10000);
-        // Re-fetch immediately when the BM switches back to this tab after it was
-        // backgrounded — browsers throttle setInterval to ≥ 1 min in hidden tabs,
-        // so without this the list could be stale for up to a minute on tab refocus.
-        const handleVisibility = () => {
-            if (document.visibilityState === 'visible') {
-                void loadRequests(true);
-            }
-        };
-        document.addEventListener('visibilitychange', handleVisibility);
-        return () => {
-            window.clearInterval(intervalId);
-            document.removeEventListener('visibilitychange', handleVisibility);
-        };
-    }, [loadRequests]);
 
     useEffect(() => {
         let active = true;

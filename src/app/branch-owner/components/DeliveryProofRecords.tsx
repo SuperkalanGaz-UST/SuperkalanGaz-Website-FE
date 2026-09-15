@@ -1,9 +1,10 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Loader2, RefreshCw } from 'lucide-react';
 import { DeliveryProofViewer } from '../../components/DeliveryProofViewer';
-import { apiErrorMessage, apiFetch } from '../../lib/api';
+import { fetchJson } from '../../lib/api';
 import { useBranch } from '../contexts/BranchContext';
 
 interface DeliveryRecord {
@@ -34,60 +35,22 @@ function formatDeliveredAt(value: string | null): string {
 /** Branch Owner's read-only, selected-branch delivery proof queue. */
 export function DeliveryProofRecords() {
   const { selectedBranchId, assignedBranchesLoading } = useBranch();
-  const [records, setRecords] = useState<DeliveryRecord[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [refreshKey, setRefreshKey] = useState(0);
+  const queryClient = useQueryClient();
 
-  const loadRecords = useCallback(async (signal: AbortSignal) => {
-    if (!selectedBranchId) {
-      setRecords([]);
-      setLoading(false);
-      setError(null);
-      return;
-    }
+  const {
+    data: recordsData,
+    isLoading: recordsLoading,
+    error: recordsQueryError,
+  } = useQuery({
+    queryKey: ['service-requests-delivery-records', selectedBranchId],
+    queryFn: () => fetchJson<{ serviceRequests: DeliveryRecord[] }>(`/service-requests/delivery-records?branchId=${encodeURIComponent(selectedBranchId!)}`),
+    enabled: !!selectedBranchId,
+    staleTime: 30_000,
+  });
 
-    setLoading(true);
-    setError(null);
-    try {
-      const response = await apiFetch(
-        `/service-requests/delivery-records?branchId=${encodeURIComponent(selectedBranchId)}`,
-        { signal },
-      );
-      const data: unknown = await response.json().catch(() => null);
-      if (!response.ok) {
-        throw new Error(apiErrorMessage(data, 'Could not load completed deliveries.'));
-      }
-      const rows = data && typeof data === 'object' && Array.isArray((data as { serviceRequests?: unknown }).serviceRequests)
-        ? (data as { serviceRequests: unknown[] }).serviceRequests
-        : [];
-      setRecords(rows.filter((row): row is DeliveryRecord => {
-        if (!row || typeof row !== 'object') return false;
-        const value = row as Record<string, unknown>;
-        return (
-          typeof value.id === 'string' &&
-          typeof value.sr_code === 'string' &&
-          typeof value.customer_name === 'string' &&
-          typeof value.cylinder_size === 'string' &&
-          typeof value.quantity === 'number' &&
-          (value.delivered_at === null || typeof value.delivered_at === 'string') &&
-          (value.rider_id === null || typeof value.rider_id === 'string')
-        );
-      }));
-    } catch (loadError) {
-      if (signal.aborted) return;
-      setRecords([]);
-      setError(loadError instanceof Error ? loadError.message : 'Could not load completed deliveries.');
-    } finally {
-      if (!signal.aborted) setLoading(false);
-    }
-  }, [selectedBranchId]);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    void loadRecords(controller.signal);
-    return () => controller.abort();
-  }, [loadRecords, refreshKey]);
+  const records = recordsData?.serviceRequests ?? [];
+  const loading = recordsLoading && !!selectedBranchId;
+  const error = recordsQueryError ? recordsQueryError.message || 'Could not load completed deliveries.' : null;
 
   return (
     <section className="mt-8 rounded-xl border border-gray-100 bg-white p-6 shadow-sm">
@@ -103,11 +66,12 @@ export function DeliveryProofRecords() {
           </button>
           <button
             type="button"
-            onClick={() => setRefreshKey((value) => value + 1)}
+            onClick={() => void queryClient.invalidateQueries({ queryKey: ['service-requests-delivery-records', selectedBranchId] })}
             disabled={loading || assignedBranchesLoading}
-            className="inline-flex items-center gap-1.5 rounded-md border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+            className="text-gray-400 hover:text-gray-600 transition-colors disabled:opacity-40"
+            title="Refresh"
           >
-            <RefreshCw size={14} /> Refresh
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           </button>
         </div>
       </div>
@@ -121,7 +85,7 @@ export function DeliveryProofRecords() {
           <p>{error}</p>
           <button
             type="button"
-            onClick={() => setRefreshKey((value) => value + 1)}
+            onClick={() => void queryClient.invalidateQueries({ queryKey: ['service-requests-delivery-records', selectedBranchId] })}
             className="mt-3 font-semibold underline"
           >
             Try again
@@ -133,22 +97,22 @@ export function DeliveryProofRecords() {
         <div className="overflow-x-auto">
           <table className="w-full min-w-[700px] text-left">
             <thead>
-              <tr className="border-b border-gray-200 text-[11px] uppercase tracking-wide text-gray-500">
-                <th className="pb-3 pr-4">Service Request</th>
-                <th className="pb-3 pr-4">Customer</th>
-                <th className="pb-3 pr-4">Order</th>
-                <th className="pb-3 pr-4">Delivered At</th>
-                <th className="pb-3 text-right">Proof</th>
+              <tr className="border-b border-gray-200">
+                <th className="pb-3 pr-4 text-left text-xs font-semibold text-gray-700">Service Request</th>
+                <th className="pb-3 pr-4 text-left text-xs font-semibold text-gray-700">Customer</th>
+                <th className="pb-3 pr-4 text-left text-xs font-semibold text-gray-700">Order</th>
+                <th className="pb-3 pr-4 text-left text-xs font-semibold text-gray-700">Delivered At</th>
+                <th className="pb-3 pr-4 text-left text-xs font-semibold text-gray-700">Proof</th>
               </tr>
             </thead>
             <tbody>
               {records.slice(0, PREVIEW_RECORD_LIMIT).map((record) => (
-                <tr key={record.id} className="border-b border-gray-100 text-sm last:border-0">
-                  <td className="py-4 pr-4 font-semibold text-gray-900">{record.sr_code}</td>
+                <tr key={record.id} className="border-b border-gray-100 text-[13px] last:border-0">
+                  <td className="py-4 pr-4 font-medium text-gray-900">{record.sr_code}</td>
                   <td className="py-4 pr-4 text-gray-700">{record.customer_name}</td>
                   <td className="py-4 pr-4 text-gray-600">{record.quantity} × {record.cylinder_size}</td>
                   <td className="py-4 pr-4 text-gray-600">{formatDeliveredAt(record.delivered_at)}</td>
-                  <td className="py-4 text-right">
+                  <td className="py-4 pr-4 text-left">
                     <DeliveryProofViewer
                       serviceRequestId={record.id}
                       serviceRequestCode={record.sr_code}

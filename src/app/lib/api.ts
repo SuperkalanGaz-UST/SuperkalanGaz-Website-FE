@@ -29,7 +29,25 @@ export async function apiFetch(path: string, init: RequestInit = {}): Promise<Re
     headers.set('Content-Type', 'application/json');
   }
 
-  return fetch(`${BASE_URL}/api${path}`, { ...init, headers });
+  const response = await fetch(`${BASE_URL}/api${path}`, { ...init, headers });
+
+  // 401-intercept: the proactive guard above covers most cases, but a request
+  // can still race a token rotation window. On a 401, do one silent refresh
+  // and replay the original request with the new token before giving up.
+  if (response.status === 401) {
+    const { data: retryRefreshed } = await supabase.auth.refreshSession();
+    const newToken = retryRefreshed.session?.access_token;
+    if (newToken) {
+      const retryHeaders = new Headers(init.headers);
+      retryHeaders.set('Authorization', `Bearer ${newToken}`);
+      if (init.body && !retryHeaders.has('Content-Type')) {
+        retryHeaders.set('Content-Type', 'application/json');
+      }
+      return fetch(`${BASE_URL}/api${path}`, { ...init, headers: retryHeaders });
+    }
+  }
+
+  return response;
 }
 
 /**
@@ -61,4 +79,13 @@ export function apiErrorMessage(data: unknown, fallback: string): string {
     if (typeof error === 'string') return error;
   }
   return fallback;
+}
+
+export async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await apiFetch(path, init);
+  const data = await res.json().catch(() => null);
+  if (!res.ok) {
+    throw new Error(apiErrorMessage(data, 'Request failed'));
+  }
+  return data as T;
 }

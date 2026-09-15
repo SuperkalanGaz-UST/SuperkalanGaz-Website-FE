@@ -1,11 +1,12 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import { useQuery } from '@tanstack/react-query';
 import dynamic from "next/dynamic";
 import { AlertCircle, Clock, MapPin, Navigation, ShieldAlert, Truck } from "lucide-react";
 import { Badge } from "../../components/Badge";
 import styles from "./screen.module.css";
-import { apiErrorMessage, apiFetch } from "../../../lib/api";
+import { fetchJson } from "../../../lib/api";
 import {
     assignedBranchesFrom,
     type BranchGeofence,
@@ -111,87 +112,51 @@ export default function FleetPage() {
     const branchName = account.branches[0];
     const [selectedRiderId, setSelectedRiderId] = useState<string | null>(null);
     const [mapCenter, setMapCenter] = useState<[number, number] | null>(null);
-    const [geofence, setGeofence] = useState<BranchGeofence | null>(null);
-    const [geofenceLoading, setGeofenceLoading] = useState(true);
-    const [geofenceError, setGeofenceError] = useState<string | null>(null);
-    const [riders, setRiders] = useState<FleetRider[]>([]);
-    const [ridersLoading, setRidersLoading] = useState(true);
-    const [ridersError, setRidersError] = useState<string | null>(null);
+    const { data: geofenceData, error: geofenceQueryError, isLoading: geofenceLoading } = useQuery({
+        queryKey: ['assigned-branches'],
+        queryFn: () => fetchJson<unknown>('/branches/assigned'),
+    });
 
-    useEffect(() => {
-        const controller = new AbortController();
+    const geofence = useMemo(() => {
+        if (!geofenceData) return null;
+        const assignedBranch = assignedBranchesFrom(geofenceData).find((branch) => branch.name === branchName);
+        return assignedBranch?.geofence ?? null;
+    }, [geofenceData, branchName]);
 
-        async function loadGeofence() {
-            setGeofenceLoading(true);
-            setGeofenceError(null);
-            try {
-                const response = await apiFetch('/branches/assigned', { signal: controller.signal });
-                const data: unknown = await response.json().catch(() => null);
-                if (!response.ok) {
-                    throw new Error(apiErrorMessage(data, 'Could not load the assigned geofence.'));
-                }
-                const assignedBranch = assignedBranchesFrom(data).find(
-                    (branch) => branch.name === branchName,
-                );
-                setGeofence(assignedBranch?.geofence ?? null);
-                if (!assignedBranch) {
-                    setGeofenceError('The signed-in account has no active assigned branch.');
-                }
-            } catch (error) {
-                if (controller.signal.aborted) return;
-                setGeofence(null);
-                setGeofenceError(error instanceof Error ? error.message : 'Could not reach the server.');
-            } finally {
-                if (!controller.signal.aborted) setGeofenceLoading(false);
+    const geofenceError = geofenceQueryError ? geofenceQueryError.message : (geofenceData && !geofence ? 'The signed-in account has no active assigned branch.' : null);
+
+    const { data: ridersData, error: ridersQueryError, isLoading: ridersLoading } = useQuery({
+        queryKey: ['riders'],
+        queryFn: () => fetchJson<{ riders: ApiRiderRow[] }>('/riders'),
+    });
+
+    const { data: srData } = useQuery({
+        queryKey: ['service-requests'],
+        queryFn: () => fetchJson<{ serviceRequests: SRRow[] }>('/service-requests'),
+    });
+
+    const ridersError = ridersQueryError ? ridersQueryError.message : null;
+
+    const riders = useMemo(() => {
+        const apiRiders = ridersData?.riders ?? [];
+        const serviceRequests = srData?.serviceRequests ?? [];
+
+        const activeOrders = new Map<string, string>();
+        for (const sr of serviceRequests) {
+            if (sr.rider_id && (sr.status === 'Dispatched' || sr.status === 'En Route')) {
+                activeOrders.set(sr.rider_id, `${sr.cylinder_size} delivery`);
             }
         }
 
-        void loadGeofence();
-        return () => controller.abort();
-    }, [branchName]);
-
-    const loadRiders = useCallback(async () => {
-        setRidersLoading(true);
-        setRidersError(null);
-        try {
-            const [ridersRes, srRes] = await Promise.all([
-                apiFetch('/riders'),
-                apiFetch('/service-requests'),
-            ]);
-            const ridersData = await ridersRes.json();
-            const srData = await srRes.json();
-
-            if (!ridersRes.ok) throw new Error(apiErrorMessage(ridersData, 'Failed to load riders'));
-
-            const apiRiders = (ridersData.riders ?? []) as ApiRiderRow[];
-            const serviceRequests = (srData.serviceRequests ?? []) as SRRow[];
-
-            // Build a map of rider_id → current order info for Dispatched/En Route requests.
-            const activeOrders = new Map<string, string>();
-            for (const sr of serviceRequests) {
-                if (sr.rider_id && (sr.status === 'Dispatched' || sr.status === 'En Route')) {
-                    activeOrders.set(sr.rider_id, `${sr.cylinder_size} delivery`);
-                }
-            }
-
-            const mapped: FleetRider[] = apiRiders.map((r) => ({
-                id: r.id,
-                name: r.name,
-                plateNumber: r.plate,
-                status: toFleetStatus(r.status),
-                currentOrder: activeOrders.get(r.id) ?? null,
-                lastUpdated: formatRelativeTime(r.created_at),
-            }));
-            setRiders(mapped);
-        } catch (err) {
-            setRidersError(err instanceof Error ? err.message : 'Failed to load riders');
-            setRiders([]);
-        } finally {
-            setRidersLoading(false);
-        }
-    }, []);
-
-    useEffect(() => { void loadRiders(); }, [loadRiders]);
+        return apiRiders.map((r) => ({
+            id: r.id,
+            name: r.name,
+            plateNumber: r.plate,
+            status: toFleetStatus(r.status),
+            currentOrder: activeOrders.get(r.id) ?? null,
+            lastUpdated: formatRelativeTime(r.created_at),
+        }));
+    }, [ridersData, srData]);
 
     const positionedRiders = useMemo(
         () => geofence ? positionFleetRiders(riders, geofence) : [],

@@ -1,6 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import {
   AlertCircle,
   Loader2,
@@ -31,8 +32,6 @@ import {
 import { SuperAdminHeader } from '../components/SuperAdminHeader';
 
 export function AdminAccounts() {
-  const [accounts, setAccounts] = useState<AdminAccount[] | null>(null);
-  const [invitations, setInvitations] = useState<FranchiseAdminInvitation[]>([]);
   const [accountSearch, setAccountSearch] = useState('');
   const [invitationSearch, setInvitationSearch] = useState('');
   const [inviteOpen, setInviteOpen] = useState(false);
@@ -41,24 +40,15 @@ export function AdminAccounts() {
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [submittingInvite, setSubmittingInvite] = useState(false);
   const [actingInvitationId, setActingInvitationId] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
-    setError(null);
-    try {
-      const data = await governanceApi.adminAccounts();
-      setAccounts(data.accounts);
-      setInvitations(data.invitations);
-    } catch (loadError) {
-      setError(
-        loadError instanceof Error
-          ? loadError.message
-          : 'Could not load Franchise Administrator accounts.',
-      );
-    }
-  }, []);
-
-  useEffect(() => void load(), [load]);
+  const { data, error: queryError, refetch: load } = useQuery({
+    queryKey: ['admin-accounts'],
+    queryFn: () => governanceApi.adminAccounts(),
+  });
+  
+  const accounts = data?.accounts ?? null;
+  const invitations = data?.invitations ?? [];
+  const error = queryError ? queryError.message : null;
 
   const visibleAccounts = useMemo(() => {
     if (!accounts) return [];

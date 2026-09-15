@@ -1,12 +1,13 @@
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Flame, Star, ShoppingCart, Truck, AlertTriangle } from 'lucide-react';
 import { KPICard } from '../../../components/KPICard';
 import { Badge } from '../../components/Badge';
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '../../components/Chart';
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from 'recharts';
-import { apiFetch, apiErrorMessage } from '../../../lib/api';
+import { fetchJson } from '../../../lib/api';
 import styles from './screen.module.css';
 
 /** Trimmed Service Request row (SRD module, GET /service-requests) — only the
@@ -73,83 +74,51 @@ const phDateKey = (iso: string) =>
     new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(new Date(iso));
 
 export default function Dashboard() {
-    const [mounted, setMounted] = useState(false);
-    useEffect(() => { setMounted(true); }, []);
+    const { data: requestsData, error: requestsQueryError, isLoading: requestsLoading } = useQuery({
+        queryKey: ['service-requests'],
+        queryFn: () => fetchJson<{ serviceRequests: SRRow[] }>('/service-requests'),
+    });
+    const requests = requestsData?.serviceRequests ?? [];
+    const requestsError = requestsQueryError ? requestsQueryError.message : null;
 
-    const [requests, setRequests] = useState<SRRow[]>([]);
-    const [requestsError, setRequestsError] = useState<string | null>(null);
-    const [requestsLoading, setRequestsLoading] = useState(true);
+    const { data: ridersData } = useQuery({
+        queryKey: ['riders'],
+        queryFn: () => fetchJson<{ riders: RiderRow[] }>('/riders'),
+    });
+    const ridersMap = useMemo(() => {
+        const map: Record<string, string> = {};
+        if (ridersData?.riders) {
+            for (const r of ridersData.riders) map[r.id] = r.name;
+        }
+        return map;
+    }, [ridersData]);
 
-    const [ridersMap, setRidersMap] = useState<Record<string, string>>({});
+    const { data: csatData, error: csatQueryError, isLoading: csatLoading } = useQuery({
+        queryKey: ['csat-summary'],
+        queryFn: () => fetchJson<{ summary: CsatSummary }>('/csat/summary'),
+    });
+    const csat = csatData?.summary ?? null;
+    const csatError = csatQueryError ? csatQueryError.message : null;
 
-    const [csat, setCsat] = useState<CsatSummary | null>(null);
-    const [csatError, setCsatError] = useState<string | null>(null);
-    const [csatLoading, setCsatLoading] = useState(true);
+    const { data: ratingsData } = useQuery({
+        queryKey: ['csat-ratings-all'],
+        queryFn: () => fetchJson<{ ratings: { stars: number }[] }>('/csat/ratings?resolution=all'),
+    });
+    const starCounts = useMemo(() => {
+        if (!ratingsData?.ratings) return null;
+        const counts: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+        for (const r of ratingsData.ratings) {
+            counts[r.stars] = (counts[r.stars] ?? 0) + 1;
+        }
+        return counts;
+    }, [ratingsData]);
 
-    const [starCounts, setStarCounts] = useState<Record<number, number> | null>(null);
-
-    const [stockLevels, setStockLevels] = useState<StockLevelRow[]>([]);
-    const [stockLevelsError, setStockLevelsError] = useState<string | null>(null);
-    const [stockLevelsLoading, setStockLevelsLoading] = useState(true);
-
-    useEffect(() => {
-        if (!mounted) return;
-
-        apiFetch('/service-requests')
-            .then(async (res) => {
-                const data = await res.json();
-                if (!res.ok) throw new Error(apiErrorMessage(data, 'Failed to load orders'));
-                setRequests(data.serviceRequests as SRRow[]);
-            })
-            .catch((err) => setRequestsError(err instanceof Error ? err.message : 'Failed to load orders'))
-            .finally(() => setRequestsLoading(false));
-
-        // Best-effort — a rider name is a nicety on the recent-orders table, not
-        // worth surfacing its own error state if it fails.
-        apiFetch('/riders')
-            .then(async (res) => {
-                const data = await res.json();
-                if (!res.ok) return;
-                const map: Record<string, string> = {};
-                for (const r of data.riders as RiderRow[]) map[r.id] = r.name;
-                setRidersMap(map);
-            })
-            .catch(() => { /* rider names are optional */ });
-
-        // GET /csat/summary is already filtered to the logged-in BM's branch by the JWT.
-        apiFetch('/csat/summary')
-            .then(async (res) => {
-                const data = await res.json();
-                if (!res.ok) throw new Error(apiErrorMessage(data, 'Failed to load CSAT'));
-                setCsat(data.summary as CsatSummary);
-            })
-            .catch((err) => setCsatError(err instanceof Error ? err.message : 'Failed to load CSAT'))
-            .finally(() => setCsatLoading(false));
-
-        // /csat/summary has no star-by-star breakdown (only branch-owner's
-        // reports/summary does) — /csat/ratings?resolution=all does, so the
-        // distribution chart is built client-side from the raw list.
-        apiFetch('/csat/ratings?resolution=all')
-            .then(async (res) => {
-                const data = await res.json();
-                if (!res.ok) return;
-                const counts: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
-                for (const r of data.ratings as { stars: number }[]) {
-                    counts[r.stars] = (counts[r.stars] ?? 0) + 1;
-                }
-                setStarCounts(counts);
-            })
-            .catch(() => { /* chart just shows nothing without this */ });
-
-        apiFetch('/inventory/stock-levels')
-            .then(async (res) => {
-                const data = await res.json();
-                if (!res.ok) throw new Error(apiErrorMessage(data, 'Failed to load stock levels'));
-                setStockLevels(data.stockLevels as StockLevelRow[]);
-            })
-            .catch((err) => setStockLevelsError(err instanceof Error ? err.message : 'Failed to load stock levels'))
-            .finally(() => setStockLevelsLoading(false));
-    }, [mounted]);
+    const { data: stockData, error: stockQueryError, isLoading: stockLevelsLoading } = useQuery({
+        queryKey: ['stock-levels'],
+        queryFn: () => fetchJson<{ stockLevels: StockLevelRow[] }>('/inventory/stock-levels'),
+    });
+    const stockLevels = stockData?.stockLevels ?? [];
+    const stockLevelsError = stockQueryError ? stockQueryError.message : null;
 
     const todayKey = useMemo(() => phDateKey(new Date().toISOString()), []);
 
@@ -169,9 +138,7 @@ export default function Dashboard() {
         [starCounts],
     );
 
-    if (!mounted) {
-        return <div style={{ minHeight: '100vh', backgroundColor: 'var(--background)' }} />;
-    }
+
 
     return (
         <>

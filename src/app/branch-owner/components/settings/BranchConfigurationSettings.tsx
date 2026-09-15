@@ -1,10 +1,11 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Clock3, Gift, LockKeyhole, PackageSearch } from 'lucide-react';
 import { toast } from 'sonner';
 import { useBranch } from '../../contexts/BranchContext';
-import { apiErrorMessage, apiFetch } from '../../../lib/api';
+import { apiErrorMessage, apiFetch, fetchJson } from '../../../lib/api';
 
 interface BranchConfiguration {
   dualAuth: boolean;
@@ -46,36 +47,37 @@ export function BranchConfigurationSettings() {
     setForm(savedConfiguration);
   }, [savedConfiguration]);
 
+  const queryClient = useQueryClient();
+
+  const { data: loyaltySettings, error: queryError } = useQuery({
+    queryKey: ['loyalty-settings', selectedBranchId],
+    queryFn: () => fetchJson<{ settings: any }>(`/loyalty/settings?branchId=${encodeURIComponent(selectedBranchId!)}`),
+    enabled: !!selectedBranchId,
+    staleTime: 30_000,
+  });
+
   useEffect(() => {
-    let cancelled = false;
-    const load = async () => {
-      if (!selectedBranchId) return;
-      try {
-        const response = await apiFetch(
-          `/loyalty/settings?branchId=${encodeURIComponent(selectedBranchId)}`,
-        );
-        const data = await response.json();
-        if (!response.ok) throw new Error(apiErrorMessage(data, 'Failed to load loyalty settings'));
-        if (cancelled) return;
-        const rates = data.settings.point_rates as Record<keyof BranchConfiguration['pointRates'], number>;
-        setForm((current) => ({
-          ...current,
-          dualAuth: data.settings.dual_auth === true,
-          pointRates: {
-            '2.7kg': String(rates['2.7kg']),
-            '5kg': String(rates['5kg']),
-            '11kg': String(rates['11kg']),
-            '22kg': String(rates['22kg']),
-            '50kg': String(rates['50kg']),
-          },
-        }));
-      } catch (error) {
-        if (!cancelled) toast.error(error instanceof Error ? error.message : 'Failed to load loyalty settings');
-      }
-    };
-    void load();
-    return () => { cancelled = true; };
-  }, [selectedBranchId]);
+    if (loyaltySettings?.settings) {
+      const rates = loyaltySettings.settings.point_rates as Record<keyof BranchConfiguration['pointRates'], number>;
+      setForm((current) => ({
+        ...current,
+        dualAuth: loyaltySettings.settings.dual_auth === true,
+        pointRates: {
+          '2.7kg': String(rates['2.7kg']),
+          '5kg': String(rates['5kg']),
+          '11kg': String(rates['11kg']),
+          '22kg': String(rates['22kg']),
+          '50kg': String(rates['50kg']),
+        },
+      }));
+    }
+  }, [loyaltySettings]);
+
+  useEffect(() => {
+    if (queryError) {
+      toast.error(queryError.message || 'Failed to load loyalty settings');
+    }
+  }, [queryError]);
 
   const updateField = <K extends keyof BranchConfiguration>(field: K, value: BranchConfiguration[K]) => {
     setForm((current) => ({ ...current, [field]: value }));
@@ -105,6 +107,7 @@ export function BranchConfigurationSettings() {
       const data = await response.json();
       if (!response.ok) throw new Error(apiErrorMessage(data, 'Failed to save loyalty settings'));
       setSavedByBranch((current) => ({ ...current, [selectedBranchId]: form }));
+      void queryClient.invalidateQueries({ queryKey: ['loyalty-settings', selectedBranchId] });
       toast.success(`Loyalty settings saved for ${selectedBranch}.`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to save loyalty settings');
