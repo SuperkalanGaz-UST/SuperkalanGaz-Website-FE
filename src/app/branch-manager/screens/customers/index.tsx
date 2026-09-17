@@ -289,18 +289,7 @@ export default function Customers({ onViewOrders }: CustomersProps = {}) {
                                     <td>
                                         <div className={styles.nameCell}>
                                             <span className={styles.avatarCircle}>{initials(c.name)}</span>
-                                            {onViewOrders ? (
-                                                <button
-                                                    type="button"
-                                                    className={styles.nameLink}
-                                                    onClick={(e) => { e.stopPropagation(); onViewOrders(c.name); }}
-                                                    title={`View ${c.name}'s order history in Order Management`}
-                                                >
-                                                    {c.name}
-                                                </button>
-                                            ) : (
-                                                <span className={styles.boldText}>{c.name}</span>
-                                            )}
+                                            <span className={styles.boldText}>{c.name}</span>
                                         </div>
                                     </td>
                                     <td>{formatPHMobile(c.contact_number)}</td>
@@ -385,7 +374,19 @@ export default function Customers({ onViewOrders }: CustomersProps = {}) {
                             </section>
 
                             <section className={styles.detailSection}>
-                                <h3 className={styles.sectionTitle}><Boxes size={15} /> Order History</h3>
+                                <div className="flex items-baseline justify-between mb-2">
+                                    <h3 className={styles.sectionTitle} style={{ marginBottom: 0 }}><Boxes size={15} /> Order History</h3>
+                                    {onViewOrders && (
+                                        <button
+                                            type="button"
+                                            className="text-[11px] font-medium text-[#007BC1] hover:text-[#006399] hover:underline"
+                                            onClick={() => onViewOrders(selectedCustomer.name)}
+                                            title={`View all requests for ${selectedCustomer.name} in Order Management`}
+                                        >
+                                            View all requests
+                                        </button>
+                                    )}
+                                </div>
                                 {ordersLoading && <div className={styles.mutedText}>Loading…</div>}
                                 {!ordersLoading && ordersError && <div className={styles.mutedText}>{ordersError}</div>}
                                 {!ordersLoading && !ordersError && orders.length === 0 && (
@@ -404,7 +405,7 @@ export default function Customers({ onViewOrders }: CustomersProps = {}) {
                                                 </tr>
                                             </thead>
                                             <tbody>
-                                                {orders.map((o) => (
+                                                {orders.slice(0, 7).map((o) => (
                                                     <tr key={o.id}>
                                                         <td className={styles.mutedText}>{formatDate(o.requested_at)}</td>
                                                         <td>{o.cylinder_size}</td>

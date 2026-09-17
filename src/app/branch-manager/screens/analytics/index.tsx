@@ -124,7 +124,7 @@ export default function AnalyticsPage() {
                     trend={{ text: '+2.1% from last period', direction: 'up', positive: true }}
                 />
                 <KPICard
-                    title="Avg CSAT Score"
+                    title="Average CSAT Score"
                     value="4.3"
                     subtitle="Below target of 4.5"
                     icon={<Star className="w-4 h-4 text-[#f59e0b]" />}

@@ -43,7 +43,7 @@ export function SalesOverview() {
       if (!response.ok) throw new Error('Could not load sales data.');
       return { label, ...(data?.metrics ?? {}) };
     })).then(setSalesMetrics).catch(() => setSalesMetrics([])).finally(() => setSalesLoading(false));
-    apiFetch(`/service-requests/reports/branch-owner-sales?branchId=${encodeURIComponent(selectedBranchId)}`, { signal: controller.signal })
+    apiFetch(`/service-requests/reports/branch-owner-sales?branchId=${encodeURIComponent(selectedBranchId)}&limit=5`, { signal: controller.signal })
       .then((response) => response.json().then((data) => response.ok ? setAllSales(data?.sales ?? []) : setAllSales([])))
       .catch(() => setAllSales([]));
     return () => controller.abort();

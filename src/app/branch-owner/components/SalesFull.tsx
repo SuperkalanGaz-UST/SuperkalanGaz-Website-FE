@@ -11,6 +11,7 @@ type SaleRow = { id: string; date: string; receipt: string; customer: string; or
 export function SalesFull({ onBack }: { onBack: () => void }) {
   const { selectedBranchId } = useBranch();
   const [salesData, setSalesData] = useState<SaleRow[]>([]);
+  const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
   const [searchQuery, setSearchQuery] = useState('');
@@ -22,43 +23,46 @@ export function SalesFull({ onBack }: { onBack: () => void }) {
     let active = true;
     if (!selectedBranchId) return () => { active = false; };
     const controller = new AbortController();
-    const now = new Date();
-    setLoading(true);
-    apiFetch(`/service-requests/reports/branch-owner-sales?branchId=${encodeURIComponent(selectedBranchId)}`, { signal: controller.signal })
-      .then(async (response) => {
-        const data = await response.json().catch(() => null);
-        if (!response.ok) throw new Error('Could not load sales records.');
-        if (active) setSalesData((data?.sales ?? []) as SaleRow[]);
-      }).catch(() => {
-      if (active && !controller.signal.aborted) setSalesData([]);
-    }).finally(() => {
-      if (active && !controller.signal.aborted) setLoading(false);
-    });
-    return () => { active = false; controller.abort(); };
-  }, [selectedBranchId]);
+    
+    const fetchSales = () => {
+      setLoading(true);
+      const params = new URLSearchParams({
+        branchId: selectedBranchId,
+        page: currentPage.toString(),
+        limit: itemsPerPage.toString(),
+      });
+      if (searchQuery) params.append('search', searchQuery);
+      if (filterStatus !== 'all') params.append('status', filterStatus);
 
-  const filteredData = useMemo(() => {
-    let data = salesData;
+      apiFetch(`/service-requests/reports/branch-owner-sales?${params.toString()}`, { signal: controller.signal })
+        .then(async (response) => {
+          const data = await response.json().catch(() => null);
+          if (!response.ok) throw new Error('Could not load sales records.');
+          if (active) {
+            setSalesData((data?.sales ?? []) as SaleRow[]);
+            setTotalCount(data?.totalCount ?? 0);
+          }
+        }).catch(() => {
+        if (active && !controller.signal.aborted) {
+          setSalesData([]);
+          setTotalCount(0);
+        }
+      }).finally(() => {
+        if (active && !controller.signal.aborted) setLoading(false);
+      });
+    };
 
-    if (searchQuery) {
-      data = data.filter(row =>
-        Object.values(row).some(val =>
-          String(val).toLowerCase().includes(searchQuery.toLowerCase())
-        )
-      );
-    }
+    const timeoutId = setTimeout(fetchSales, 300);
 
-    if (filterStatus !== 'all') {
-      data = data.filter(row => row.paid.toLowerCase() === filterStatus.toLowerCase());
-    }
+    return () => { 
+      active = false; 
+      clearTimeout(timeoutId);
+      controller.abort(); 
+    };
+  }, [selectedBranchId, currentPage, searchQuery, filterStatus]);
 
-    return data;
-  }, [salesData, searchQuery, filterStatus]);
-
-  const totalPages = Math.ceil(filteredData.length / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const endIndex = startIndex + itemsPerPage;
-  const currentData = filteredData.slice(startIndex, endIndex);
+  const totalPages = Math.ceil(totalCount / itemsPerPage);
+  const currentData = salesData;
 
   const hasActiveFilters = searchQuery || filterStatus !== 'all';
 

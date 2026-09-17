@@ -2,18 +2,21 @@
 
 import React, { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Flame, Star, ShoppingCart, Truck, AlertTriangle } from 'lucide-react';
+import { Flame, Star, ShoppingCart, Truck, AlertTriangle, MoreVertical } from 'lucide-react';
 import { KPICard } from '../../../components/KPICard';
 import { Badge } from '../../components/Badge';
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '../../components/Chart';
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from 'recharts';
 import { fetchJson } from '../../../lib/api';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '../../../components/ui/dialog';
+import { Carousel, CarouselContent, CarouselItem, type CarouselApi } from '../../../components/ui/carousel';
 import styles from './screen.module.css';
 
 /** Trimmed Service Request row (SRD module, GET /service-requests) — only the
  * fields this dashboard's KPIs and "Recent Orders" table need. */
 interface SRRow {
     id: string;
+    sr_code: string;
     status: 'Pending' | 'Dispatched' | 'En Route' | 'Delivered' | 'Cancelled' | 'Under Review';
     customer_name: string;
     quantity: number;
@@ -48,7 +51,7 @@ const RECENT_ORDERS_LIMIT = 6;
 const STAR_LEVELS = [1, 2, 3, 4, 5] as const;
 
 const chartConfig = {
-    count: { label: 'Reviews', color: 'var(--primary)' }
+    count: { label: 'Reviews', color: '#007BC1' }
 };
 
 const getStatusVariant = (status: SRRow['status']) => {
@@ -65,7 +68,14 @@ const getStatusVariant = (status: SRRow['status']) => {
 const formatTime = (iso: string) => {
     const d = new Date(iso);
     if (Number.isNaN(d.getTime())) return '—';
-    return new Intl.DateTimeFormat('en-PH', { timeZone: 'Asia/Manila', hour: 'numeric', minute: '2-digit' }).format(d);
+    return new Intl.DateTimeFormat('en-US', { 
+        timeZone: 'Asia/Manila', 
+        month: '2-digit', 
+        day: '2-digit', 
+        year: 'numeric',
+        hour: 'numeric', 
+        minute: '2-digit' 
+    }).format(d);
 };
 
 /** Branch operations run on Philippine time regardless of the viewer's own
@@ -73,7 +83,37 @@ const formatTime = (iso: string) => {
 const phDateKey = (iso: string) =>
     new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(new Date(iso));
 
-export default function Dashboard() {
+interface DashboardProps {
+    onViewOrders?: (searchTerm: string) => void;
+}
+
+const CustomTick = ({ x, y, payload }: any) => {
+    return (
+        <g transform={`translate(${x},${y})`}>
+            <text x={-2} y={0} dy={16} textAnchor="end" fill="#9ca3af" fontSize={12} fontWeight={500}>
+                {payload.value}
+            </text>
+            <g transform="translate(2, 6)">
+                <Star size={12} fill="#f59e0b" color="#f59e0b" />
+            </g>
+        </g>
+    );
+};
+
+export default function Dashboard({ onViewOrders }: DashboardProps = {}) {
+    const [carouselApi, setCarouselApi] = useState<CarouselApi>();
+    const [currentSlide, setCurrentSlide] = useState(0);
+
+    React.useEffect(() => {
+        if (!carouselApi) return;
+        
+        setCurrentSlide(carouselApi.selectedScrollSnap());
+        
+        carouselApi.on('select', () => {
+            setCurrentSlide(carouselApi.selectedScrollSnap());
+        });
+    }, [carouselApi]);
+
     const { data: requestsData, error: requestsQueryError, isLoading: requestsLoading } = useQuery({
         queryKey: ['service-requests'],
         queryFn: () => fetchJson<{ serviceRequests: SRRow[] }>('/service-requests'),
@@ -134,7 +174,7 @@ export default function Dashboard() {
     const stockAlerts = useMemo(() => stockLevels.filter(isStockAlert), [stockLevels]);
 
     const csatChartData = useMemo(
-        () => STAR_LEVELS.map((stars) => ({ rating: `${stars}★`, count: starCounts?.[stars] ?? 0 })),
+        () => STAR_LEVELS.map((stars) => ({ rating: String(stars), count: starCounts?.[stars] ?? 0 })),
         [starCounts],
     );
 
@@ -160,17 +200,12 @@ export default function Dashboard() {
                     value={stockLevelsLoading ? '…' : String(stockAlerts.length)}
                     icon={<AlertTriangle className="w-4 h-4 text-[#ef4444]" />}
                     accentColor="#ef4444"
-                    alert={stockAlerts.length > 0}
                 />
                 <KPICard
-                    title="Avg CSAT"
+                    title="Average CSAT"
                     value={csatLoading ? '…' : String(csat?.average_stars ?? '—')}
                     icon={<Star className="w-4 h-4 text-[#f59e0b]" />}
                     accentColor="#f59e0b"
-                    // No prior-period figure exists from this endpoint, so show
-                    // the total rating count as context instead of a fabricated
-                    // trend delta.
-                    trend={csat ? { text: `${csat.total_ratings} rating${csat.total_ratings !== 1 ? 's' : ''} total`, direction: 'up', positive: true } : undefined}
                 />
             </div>
 
@@ -184,12 +219,12 @@ export default function Dashboard() {
                             <table className={styles.table}>
                                 <thead>
                                     <tr>
-                                        <th>Order #</th>
+                                        <th>Request ID</th>
                                         <th>Customer</th>
                                         <th>Items</th>
                                         <th>Status</th>
                                         <th>Rider</th>
-                                        <th>Time</th>
+                                        <th>Date & Time</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -203,8 +238,12 @@ export default function Dashboard() {
                                         <tr><td colSpan={6} className={styles.emptyState}>No orders yet.</td></tr>
                                     )}
                                     {!requestsLoading && !requestsError && recentOrders.map(order => (
-                                        <tr key={order.id}>
-                                            <td className={styles.monoText}>#{order.id.slice(0, 8).toUpperCase()}</td>
+                                        <tr 
+                                            key={order.id} 
+                                            className="cursor-pointer"
+                                            onClick={() => onViewOrders?.(order.sr_code)}
+                                        >
+                                            <td className={styles.monoText}>{order.sr_code}</td>
                                             <td className={styles.boldText}>{order.customer_name}</td>
                                             <td>{order.quantity}x {order.cylinder_size}</td>
                                             <td>
@@ -221,50 +260,101 @@ export default function Dashboard() {
                 </div>
 
                 <div className={styles.sideColumn}>
-                    <div className={styles.card}>
-                        <div className={styles.cardHeader}>
-                            <h2 className={styles.cardTitle}>Critical Alerts</h2>
-                        </div>
-                        <div className={styles.alertList}>
-                            {stockLevelsLoading && <div className={styles.emptyState}>Loading…</div>}
-                            {!stockLevelsLoading && stockLevelsError && (
-                                <div className={styles.emptyState}>{stockLevelsError}</div>
-                            )}
-                            {!stockLevelsLoading && !stockLevelsError && stockAlerts.length === 0 && (
-                                <div className={styles.emptyState}>All stock levels are healthy.</div>
-                            )}
-                            {!stockLevelsLoading && !stockLevelsError && stockAlerts.map(alert => (
-                                <div key={alert.product_id} className={styles.alertItem}>
-                                    <Flame className={styles.alertIcon} size={20} />
-                                    <div className={styles.alertText}>
-                                        <strong>{alert.product_name}</strong>
-                                        <br />
-                                        {alert.current_qty} remaining (threshold: {alert.threshold_qty})
+                    <Carousel setApi={setCarouselApi} className="w-full">
+                        <CarouselContent>
+                            <CarouselItem>
+                                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 flex flex-col">
+                                    <Dialog>
+                                        <div className={`${styles.cardHeader} flex items-center justify-between`}>
+                                            <h2 className={styles.cardTitle}>Critical Alerts</h2>
+                                            <DialogTrigger asChild>
+                                                <button className="text-[11px] text-gray-500 hover:text-gray-700 font-medium cursor-pointer">See all</button>
+                                            </DialogTrigger>
+                                        </div>
+                                        <div className="flex flex-col gap-2 p-4">
+                                            {stockLevelsLoading && <div className={styles.emptyState}>Loading…</div>}
+                                            {!stockLevelsLoading && stockLevelsError && (
+                                                <div className={styles.emptyState}>{stockLevelsError}</div>
+                                            )}
+                                            {!stockLevelsLoading && !stockLevelsError && stockAlerts.length === 0 && (
+                                                <div className={styles.emptyState}>All stock levels are healthy.</div>
+                                            )}
+                                            {!stockLevelsLoading && !stockLevelsError && stockAlerts.slice(0, 3).map(alert => (
+                                                <div key={alert.product_id} className="flex items-center justify-between p-3 rounded-xl bg-white border border-gray-100 shadow-sm">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="w-8 h-8 rounded-full bg-red-50 flex items-center justify-center shadow-sm">
+                                                            <AlertTriangle className="w-4 h-4 text-[#dc2626]" />
+                                                        </div>
+                                                        <div className="flex flex-col">
+                                                            <span className="text-sm font-semibold text-gray-900 leading-none">{alert.product_name}</span>
+                                                            <span className="text-[11px] text-gray-500 mt-1">{alert.current_qty} remaining (Threshold: {alert.threshold_qty})</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                        
+                                        <DialogContent className="max-w-md" aria-describedby={undefined}>
+                                            <DialogHeader className="border-b border-gray-100 pb-3">
+                                                <DialogTitle className={styles.cardTitle}>All Critical Alerts</DialogTitle>
+                                            </DialogHeader>
+                                            <div className="flex flex-col gap-3 max-h-[60vh] overflow-y-auto mt-1">
+                                                {stockAlerts.map(alert => (
+                                                    <div key={alert.product_id} className="flex items-center justify-between p-3 rounded-xl bg-white border border-gray-100 shadow-sm">
+                                                        <div className="flex items-center gap-3">
+                                                            <div className="w-8 h-8 rounded-full bg-red-50 flex items-center justify-center shadow-sm">
+                                                                <AlertTriangle className="w-4 h-4 text-[#dc2626]" />
+                                                            </div>
+                                                            <div className="flex flex-col">
+                                                                <span className="text-sm font-semibold text-gray-900 leading-none">{alert.product_name}</span>
+                                                                <span className="text-[11px] text-gray-500 mt-1">{alert.current_qty} remaining (Threshold: {alert.threshold_qty})</span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                                {stockAlerts.length === 0 && (
+                                                    <div className="text-center text-gray-500 py-8">No alerts found.</div>
+                                                )}
+                                            </div>
+                                        </DialogContent>
+                                    </Dialog>
+                                </div>
+                            </CarouselItem>
+
+                            <CarouselItem>
+                                <div className={styles.card}>
+                                    <div className={styles.cardHeader}>
+                                        <h2 className={styles.cardTitle}>CSAT Overview</h2>
+                                    </div>
+                                    <div className={styles.chartWrapper}>
+                                        {csatError ? (
+                                            <div className={styles.emptyState}>{csatError}</div>
+                                        ) : (
+                                            <ChartContainer config={chartConfig}>
+                                                <BarChart data={csatChartData} margin={{ top: 20, right: 10, left: -20, bottom: 5 }}>
+                                                    <CartesianGrid stroke="#f3f4f6" strokeDasharray="3 3" vertical={false} />
+                                                    <XAxis dataKey="rating" axisLine={false} tickLine={false} tickMargin={10} tick={<CustomTick />} />
+                                                    <YAxis axisLine={false} tickLine={false} allowDecimals={false} tickMargin={10} tick={{ fill: '#9ca3af', fontSize: 12 }} />
+                                                    <ChartTooltip content={<ChartTooltipContent />} cursor={{ fill: 'var(--muted)', opacity: 0.4 }} />
+                                                    <Bar dataKey="count" fill="var(--color-count)" radius={[4, 4, 0, 0]} maxBarSize={40} />
+                                                </BarChart>
+                                            </ChartContainer>
+                                        )}
                                     </div>
                                 </div>
-                            ))}
-                        </div>
-                    </div>
+                            </CarouselItem>
+                        </CarouselContent>
+                    </Carousel>
 
-                    <div className={styles.card}>
-                        <div className={styles.cardHeader}>
-                            <h2 className={styles.cardTitle}>CSAT Overview</h2>
-                        </div>
-                        <div className={styles.chartWrapper}>
-                            {csatError ? (
-                                <div className={styles.emptyState}>{csatError}</div>
-                            ) : (
-                                <ChartContainer config={chartConfig}>
-                                    <BarChart data={csatChartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                                        <XAxis dataKey="rating" axisLine={false} tickLine={false} tickMargin={10} />
-                                        <YAxis axisLine={false} tickLine={false} allowDecimals={false} />
-                                        <ChartTooltip content={<ChartTooltipContent />} cursor={{ fill: 'var(--muted)', opacity: 0.4 }} />
-                                        <Bar dataKey="count" fill="var(--color-count)" radius={[4, 4, 0, 0]} maxBarSize={40} />
-                                    </BarChart>
-                                </ChartContainer>
-                            )}
-                        </div>
+                    <div className="flex justify-center items-center gap-2 -mt-1">
+                        {[0, 1].map((index) => (
+                            <button
+                                key={index}
+                                onClick={() => carouselApi?.scrollTo(index)}
+                                className={`h-2 rounded-full transition-all duration-300 ${currentSlide === index ? 'bg-gray-800 w-4' : 'bg-gray-300 w-2 hover:bg-gray-400'}`}
+                                aria-label={`Go to slide ${index + 1}`}
+                            />
+                        ))}
                     </div>
                 </div>
             </div>

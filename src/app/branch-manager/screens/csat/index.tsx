@@ -285,10 +285,9 @@ export default function Csat() {
                     value={summary ? summary.open_count.toString() : '—'}
                     icon={<AlertTriangle className="w-4 h-4 text-[#ef4444]" />}
                     accentColor="#ef4444"
-                    alert={true}
                 />
                 <KPICard
-                    title="Low CSAT Open (1–3★)"
+                    title="Low CSAT"
                     value={summary ? summary.low_csat_open_count.toString() : '—'}
                     icon={<AlertCircle className="w-4 h-4 text-[#f59e0b]" />}
                     accentColor="#f59e0b"
@@ -302,7 +301,6 @@ export default function Csat() {
                 <KPICard
                     title="Average Rating"
                     value={summary?.average_stars != null ? summary.average_stars.toFixed(2) : '—'}
-                    subtitle={summary?.average_stars != null ? "out of 5" : undefined}
                     icon={<Star className="w-4 h-4 text-[#f59e0b]" />}
                     accentColor="#f59e0b"
                 />

@@ -1,4 +1,4 @@
-import { ReactNode } from 'react';
+import React, { ReactNode } from 'react';
 import { ArrowUpRight, ArrowDownRight } from 'lucide-react';
 
 export interface KPITrend {
@@ -35,13 +35,13 @@ export function KPICard({ title, value, subtitle, icon, alert, accentColor = '#0
           <div className={`text-sm font-medium text-gray-500 ${titleClassName}`}>{title}</div>
         </div>
         {icon && (
-          <div className="w-8 h-8 rounded-[8px] border border-gray-100 flex items-center justify-center shadow-sm [&>svg]:!text-[#007BC1]">
-            {icon}
+          <div className="w-8 h-8 rounded-[8px] border border-gray-100 flex items-center justify-center shadow-sm text-[#007BC1]">
+            {React.isValidElement(icon) ? React.cloneElement(icon as React.ReactElement, { className: `${(icon as React.ReactElement).props.className || ''} !text-[#007BC1]`.replace(/text-\[[^\]]+\]/g, '') }) : icon}
           </div>
         )}
       </div>
 
-      <div className={`text-[28px] font-semibold tracking-tight mt-0.5 leading-none ${alert ? 'text-[#CC1903]' : 'text-[#111827]'}`}>
+      <div className={`text-3xl font-bold mt-2 leading-none ${alert ? 'text-[#CC1903]' : 'text-gray-900'}`}>
         {value}
       </div>
 
@@ -50,7 +50,7 @@ export function KPICard({ title, value, subtitle, icon, alert, accentColor = '#0
       {trend && (
         <div className="flex items-center gap-2 mt-auto pt-2">
           {(() => {
-            const match = trend.text.match(/^([+-]?\d+(?:\.\d+)?%)\s+(.*)$/);
+            const match = trend.text.match(/^([+-]?\d+(?:\.\d+)?%?)\s+(.*)$/);
             const isUp = trend.direction === 'up';
             const isPositive = trend.positive;
             

@@ -19,6 +19,7 @@ import {
   fetchExpenses,
   saveExpense,
 } from '../../../lib/expenses';
+import { KPICard } from '../../../components/KPICard';
 import styles from './screen.module.css';
 
 interface MonthPeriod {
@@ -315,33 +316,34 @@ export default function MonthlyExpenses() {
         </button>
       </div>
 
-      <div className={styles.notice} role="status">
-        <ShieldCheck aria-hidden="true" />
-        <p>
-          {showPreviousMonth
-            ? `${previousPeriod.label} is closed. These entries are available for review only.`
-            : `Entries are limited to ${formatExpenseDate(currentPeriod.minDate)}–${formatExpenseDate(currentPeriod.maxDate)}. Previous months are view-only.`}
-        </p>
-      </div>
+      {showPreviousMonth && (
+        <div className={styles.notice} role="status">
+          <ShieldCheck aria-hidden="true" />
+          <p>{previousPeriod.label} is closed. These entries are available for review only.</p>
+        </div>
+      )}
 
       {loadError && <div className={styles.apiError} role="alert">{loadError}</div>}
 
-      <div className={styles.summaryGrid}>
-        <article className={`${styles.summaryCard} ${styles.summaryBlue}`}>
-          <div className={styles.summaryIcon}><WalletCards aria-hidden="true" /></div>
-          <div><span>{showPreviousMonth ? previousPeriod.label : 'This month'}</span><strong>{formatPeso(total)}</strong></div>
-        </article>
-        <article className={`${styles.summaryCard} ${styles.summaryGreen}`}>
-          <div className={styles.summaryIcon}><FileText aria-hidden="true" /></div>
-          <div><span>Expense entries</span><strong>{viewedExpenses.length}</strong></div>
-        </article>
-        <article className={`${styles.summaryCard} ${styles.summaryOrange}`}>
-          <div className={styles.summaryIcon}><Clock3 aria-hidden="true" /></div>
-          <div>
-            <span>{showPreviousMonth ? 'Period status' : 'Last recorded'}</span>
-            <strong>{showPreviousMonth ? 'Closed' : lastRecorded ? formatRecordedTime(lastRecorded) : 'No entries'}</strong>
-          </div>
-        </article>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-8">
+        <KPICard
+            title={showPreviousMonth ? previousPeriod.label : 'This month'}
+            value={formatPeso(total)}
+            icon={<WalletCards className="w-4 h-4 text-[#007BC1]" />}
+            accentColor="#007BC1"
+        />
+        <KPICard
+            title="Expense entries"
+            value={String(viewedExpenses.length)}
+            icon={<FileText className="w-4 h-4 text-[#16A34A]" />}
+            accentColor="#16A34A"
+        />
+        <KPICard
+            title={showPreviousMonth ? 'Period status' : 'Last recorded'}
+            value={showPreviousMonth ? 'Closed' : lastRecorded ? formatRecordedTime(lastRecorded) : 'No entries'}
+            icon={<Clock3 className="w-4 h-4 text-[#f59e0b]" />}
+            accentColor="#f59e0b"
+        />
       </div>
 
       <div className={styles.workspace}>
