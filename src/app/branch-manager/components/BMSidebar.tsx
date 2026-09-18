@@ -34,9 +34,9 @@ const NAV_ENTRIES: SidebarNavEntry[] = [
   { icon: LayoutDashboard, label: 'Overview', id: 'overview' },
   {
     icon: BarChart2,
-    label: 'Analytics',
+    label: 'Branch Performance',
     children: [
-      { icon: BarChart3,   label: 'Analytics',        id: 'analytics' },
+      { icon: BarChart3,   label: 'Branch Performance', id: 'analytics' },
       { icon: WalletCards, label: 'Monthly Expenses',  id: 'expenses' },
     ],
   },

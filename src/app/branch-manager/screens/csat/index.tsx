@@ -1,13 +1,14 @@
 'use client';
 
 import React, { useCallback, useEffect, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { RefreshCw, Star, MessageSquare, AlertTriangle, Flag, AlertCircle, CheckCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { KPICard } from '../../../components/KPICard';
 import { Badge } from '../../components/Badge';
 import { Button } from '../../components/Button';
 import { Tabs, TabsList, TabsTrigger } from '../../components/Tabs';
-import { apiFetch, apiErrorMessage } from '../../../lib/api';
+import { apiFetch, apiErrorMessage, fetchJson } from '../../../lib/api';
 import styles from './screen.module.css';
 
 /**
@@ -143,15 +144,34 @@ export default function Csat() {
     const [mounted, setMounted] = useState(false);
     useEffect(() => { setMounted(true); }, []);
 
+    const queryClient = useQueryClient();
     const [view, setView] = useState('ratings');
 
     const [resolution, setResolution] = useState('Open');
-    // Show all ratings by default; the toggle narrows to the complaint band.
     const [lowOnly, setLowOnly] = useState(false);
-    const [ratings, setRatings] = useState<RatingRow[]>([]);
-    const [summary, setSummary] = useState<SummaryRow | null>(null);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
+
+    const { data: summaryData } = useQuery({
+        queryKey: ['csat-summary'],
+        queryFn: () => fetchJson<{ summary: SummaryRow }>('/csat/summary'),
+        staleTime: 30_000,
+    });
+    const summary = summaryData?.summary ?? null;
+
+    const {
+        data: ratingsData,
+        isLoading: loading,
+        error: ratingsQueryError,
+    } = useQuery({
+        queryKey: ['csat-ratings', resolution, lowOnly],
+        queryFn: async () => {
+            const params = new URLSearchParams({ resolution });
+            if (lowOnly) params.set('maxStars', '3');
+            return fetchJson<{ ratings: RatingRow[] }>(`/csat/ratings?${params.toString()}`);
+        },
+        staleTime: 30_000,
+    });
+    const ratings = ratingsData?.ratings ?? [];
+    const error = ratingsQueryError ? ratingsQueryError.message : null;
 
     // Expanded delivery-context panel (BM-039).
     const [detailId, setDetailId] = useState<string | null>(null);
@@ -163,65 +183,22 @@ export default function Csat() {
 
     // Incidents view (BM-US-04).
     const [incidentStatus, setIncidentStatus] = useState('open');
-    const [incidents, setIncidents] = useState<IncidentRow[]>([]);
-    const [incidentsLoading, setIncidentsLoading] = useState(true);
-    const [incidentsError, setIncidentsError] = useState<string | null>(null);
+
+    const {
+        data: incidentsData,
+        isLoading: incidentsLoading,
+        error: incidentsQueryError,
+    } = useQuery({
+        queryKey: ['csat-incidents', incidentStatus],
+        queryFn: () => fetchJson<{ incidents: IncidentRow[] }>(`/csat/incidents?status=${encodeURIComponent(incidentStatus)}`),
+        staleTime: 30_000,
+        enabled: view === 'incidents',
+    });
+    const incidents = incidentsData?.incidents ?? [];
+    const incidentsError = incidentsQueryError ? incidentsQueryError.message : null;
+
     const [incidentDetailId, setIncidentDetailId] = useState<string | null>(null);
     const [escalatingId, setEscalatingId] = useState<string | null>(null);
-
-    const loadRatings = useCallback(async (res: string, low: boolean) => {
-        setLoading(true);
-        setError(null);
-        try {
-            const params = new URLSearchParams({ resolution: res });
-            if (low) params.set('maxStars', '3');
-            const r = await apiFetch(`/csat/ratings?${params.toString()}`);
-            const data = await r.json();
-            if (!r.ok) throw new Error(apiErrorMessage(data, 'Failed to load feedback'));
-            setRatings(data.ratings as RatingRow[]);
-        } catch (err) {
-            setError(err instanceof Error ? err.message : 'Failed to load feedback');
-            setRatings([]);
-        } finally {
-            setLoading(false);
-        }
-    }, []);
-
-    const loadSummary = useCallback(async () => {
-        try {
-            const r = await apiFetch('/csat/summary');
-            const data = await r.json();
-            if (!r.ok) return;
-            setSummary(data.summary as SummaryRow);
-        } catch {
-            // Non-fatal: the KPI tiles just stay blank.
-        }
-    }, []);
-
-    useEffect(() => { loadRatings(resolution, lowOnly); }, [resolution, lowOnly, loadRatings]);
-    useEffect(() => { loadSummary(); }, [loadSummary]);
-
-    const loadIncidents = useCallback(async (status: string) => {
-        setIncidentsLoading(true);
-        setIncidentsError(null);
-        try {
-            const r = await apiFetch(`/csat/incidents?status=${encodeURIComponent(status)}`);
-            const data = await r.json();
-            if (!r.ok) throw new Error(apiErrorMessage(data, 'Failed to load incidents'));
-            setIncidents(data.incidents as IncidentRow[]);
-        } catch (err) {
-            setIncidentsError(err instanceof Error ? err.message : 'Failed to load incidents');
-            setIncidents([]);
-        } finally {
-            setIncidentsLoading(false);
-        }
-    }, []);
-
-    // Only load incidents once the BM actually switches to that view — the
-    // ratings view (the default) never needs this request.
-    useEffect(() => {
-        if (view === 'incidents') loadIncidents(incidentStatus);
-    }, [view, incidentStatus, loadIncidents]);
 
     const handleEscalate = async (id: string) => {
         setEscalatingId(id);
@@ -231,7 +208,7 @@ export default function Csat() {
             if (!r.ok) {
                 if (r.status === 409) {
                     toast.error(apiErrorMessage(data, 'This incident is already escalated'));
-                    await loadIncidents(incidentStatus);
+                    void queryClient.invalidateQueries({ queryKey: ['csat-incidents'] });
                     return;
                 }
                 if (r.status === 404) { toast.error('Incident not found'); return; }
@@ -239,7 +216,7 @@ export default function Csat() {
                 return;
             }
             toast.success('Incident flagged as escalated.');
-            await loadIncidents(incidentStatus);
+            void queryClient.invalidateQueries({ queryKey: ['csat-incidents'] });
         } catch (err) {
             toast.error(err instanceof Error ? err.message : 'Failed to escalate');
         } finally {
@@ -266,7 +243,8 @@ export default function Csat() {
                 // 409: already resolved (a concurrent action won) — reconcile the queue.
                 if (r.status === 409) {
                     setResolveId(null);
-                    await Promise.all([loadRatings(resolution, lowOnly), loadSummary()]);
+                    void queryClient.invalidateQueries({ queryKey: ['csat-ratings'] });
+                    void queryClient.invalidateQueries({ queryKey: ['csat-summary'] });
                     return;
                 }
                 setNoteError(apiErrorMessage(data, 'Failed to resolve'));
@@ -274,7 +252,8 @@ export default function Csat() {
             }
             setResolveId(null);
             // Refresh both: the row leaves the Open queue and the KPI decrements.
-            await Promise.all([loadRatings(resolution, lowOnly), loadSummary()]);
+            void queryClient.invalidateQueries({ queryKey: ['csat-ratings'] });
+            void queryClient.invalidateQueries({ queryKey: ['csat-summary'] });
         } catch (err) {
             setNoteError(err instanceof Error ? err.message : 'Failed to resolve');
         } finally {
@@ -306,10 +285,9 @@ export default function Csat() {
                     value={summary ? summary.open_count.toString() : '—'}
                     icon={<AlertTriangle className="w-4 h-4 text-[#ef4444]" />}
                     accentColor="#ef4444"
-                    alert={true}
                 />
                 <KPICard
-                    title="Low CSAT Open (1–3★)"
+                    title="Low CSAT"
                     value={summary ? summary.low_csat_open_count.toString() : '—'}
                     icon={<AlertCircle className="w-4 h-4 text-[#f59e0b]" />}
                     accentColor="#f59e0b"
@@ -323,7 +301,6 @@ export default function Csat() {
                 <KPICard
                     title="Average Rating"
                     value={summary?.average_stars != null ? summary.average_stars.toFixed(2) : '—'}
-                    subtitle={summary?.average_stars != null ? "out of 5" : undefined}
                     icon={<Star className="w-4 h-4 text-[#f59e0b]" />}
                     accentColor="#f59e0b"
                 />
@@ -350,7 +327,10 @@ export default function Csat() {
                         <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => { loadRatings(resolution, lowOnly); loadSummary(); }}
+                            onClick={() => {
+                                void queryClient.invalidateQueries({ queryKey: ['csat-ratings'] });
+                                void queryClient.invalidateQueries({ queryKey: ['csat-summary'] });
+                            }}
                             disabled={loading}
                         >
                             <RefreshCw size={16} /> Refresh
@@ -506,7 +486,7 @@ export default function Csat() {
                                 <TabsTrigger value="all">All</TabsTrigger>
                             </TabsList>
                         </Tabs>
-                        <Button variant="ghost" size="sm" onClick={() => loadIncidents(incidentStatus)} disabled={incidentsLoading}>
+                        <Button variant="ghost" size="sm" onClick={() => void queryClient.invalidateQueries({ queryKey: ['csat-incidents'] })} disabled={incidentsLoading}>
                             <RefreshCw size={16} /> Refresh
                         </Button>
                     </div>

@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import dynamic from 'next/dynamic';
 import { Header } from './Header';
 import { KPICard } from './KPICard';
@@ -8,7 +9,7 @@ import type {
   FleetRider,
   PositionedFleetRider,
 } from '../../lib/fleetPresentationData';
-import { apiErrorMessage, apiFetch } from '../../lib/api';
+import { apiErrorMessage, apiFetch, fetchJson } from '../../lib/api';
 import { DeliveryRiderAccess } from './DeliveryRiderAccess';
 
 type ApiRiderStatus = 'Available' | 'On Delivery' | 'Maintenance Due' | 'Offline';
@@ -96,69 +97,41 @@ export function FleetOverview() {
     refreshAssignedBranches,
   } = useBranch();
   const [activeTab, setActiveTab] = useState<'overview' | 'access'>('overview');
-  const [riders, setRiders] = useState<BranchOwnerFleetRider[]>([]);
-  const [ridersLoading, setRidersLoading] = useState(true);
-  const [ridersError, setRidersError] = useState<string | null>(null);
-  const [ridersRefreshKey, setRidersRefreshKey] = useState(0);
+  const queryClient = useQueryClient();
+
+  const {
+    data: ridersData,
+    isLoading: isRidersLoadingQuery,
+    error: ridersQueryError,
+  } = useQuery({
+    queryKey: ['riders', selectedBranchId],
+    queryFn: () => fetchJson<{ riders: ApiRiderRow[] }>(`/riders?branchId=${encodeURIComponent(selectedBranchId!)}`),
+    enabled: !!selectedBranchId,
+    staleTime: 30_000,
+  });
+
+  const riders = useMemo(() => {
+    const rawRiders = ridersData?.riders ?? [];
+    return rawRiders.filter(isApiRiderRow).map((rider) => ({
+      id: rider.id,
+      name: rider.name,
+      plateNumber: rider.plate,
+      status: toFleetStatus(rider.status),
+      apiStatus: rider.status,
+      currentOrder: rider.current_order,
+      lastUpdated: formatRelativeTime(rider.updated_at || rider.created_at),
+    }));
+  }, [ridersData]);
+
+  const ridersLoading = isRidersLoadingQuery && !!selectedBranchId;
+  const ridersError = ridersQueryError ? ridersQueryError.message || 'Could not load the Delivery Rider roster.' : null;
+
   const assignedBranch = assignedBranches?.find(
     (branch) => branch.id === selectedBranchId,
   );
+
   const geofence = assignedBranch?.geofence ?? null;
   const activeRiders = riders.filter((rider) => rider.status === 'active').length;
-
-  const loadRiders = useCallback(async (signal: AbortSignal) => {
-    if (!selectedBranchId) {
-      setRiders([]);
-      setRidersError(null);
-      setRidersLoading(false);
-      return;
-    }
-
-    setRidersLoading(true);
-    setRidersError(null);
-
-    try {
-      const response = await apiFetch(
-        `/riders?branchId=${encodeURIComponent(selectedBranchId)}`,
-        { signal },
-      );
-      const data: unknown = await response.json().catch(() => null);
-      if (!response.ok) {
-        throw new Error(apiErrorMessage(data, 'Could not load the Delivery Rider roster.'));
-      }
-
-      const rawRiders =
-        data && typeof data === 'object' && Array.isArray((data as { riders?: unknown }).riders)
-          ? (data as { riders: unknown[] }).riders
-          : [];
-      const mapped = rawRiders.filter(isApiRiderRow).map((rider) => ({
-        id: rider.id,
-        name: rider.name,
-        plateNumber: rider.plate,
-        status: toFleetStatus(rider.status),
-        apiStatus: rider.status,
-        currentOrder: rider.current_order,
-        lastUpdated: formatRelativeTime(rider.updated_at || rider.created_at),
-      }));
-      setRiders(mapped);
-    } catch (error) {
-      if (signal.aborted) return;
-      setRiders([]);
-      setRidersError(error instanceof Error ? error.message : 'Could not load the Delivery Rider roster.');
-    } finally {
-      if (!signal.aborted) setRidersLoading(false);
-    }
-  }, [selectedBranchId]);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    const timeout = window.setTimeout(() => controller.abort(), 5_000);
-    void loadRiders(controller.signal);
-    return () => {
-      window.clearTimeout(timeout);
-      controller.abort();
-    };
-  }, [loadRiders, ridersRefreshKey]);
 
   // Positions are intentionally empty until the API receives authoritative
   // SinoTrack ST-901 → Traccar vehicle telemetry. Never place riders at a
@@ -166,8 +139,8 @@ export function FleetOverview() {
   const positionedRiders: PositionedFleetRider[] = [];
 
   const refreshRiders = useCallback(() => {
-    setRidersRefreshKey((current) => current + 1);
-  }, []);
+    void queryClient.invalidateQueries({ queryKey: ['riders', selectedBranchId] });
+  }, [queryClient, selectedBranchId]);
 
   return (
     <div className="flex-1 overflow-y-auto">

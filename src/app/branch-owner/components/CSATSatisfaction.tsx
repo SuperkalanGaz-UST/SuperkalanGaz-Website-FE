@@ -1,10 +1,11 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Header } from './Header';
 import { KPICard } from './KPICard';
 import { Star, MessageSquare, AlertCircle, RefreshCw } from 'lucide-react';
-import { apiFetch } from '../../lib/api';
+import { apiFetch, fetchJson } from '../../lib/api';
 import { useBranch } from '../contexts/BranchContext';
 
 // ── shared types ─────────────────────────────────────────────────────────────
@@ -57,45 +58,39 @@ export function RatingStars({ value }: { value: number }) {
 // ── component ─────────────────────────────────────────────────────────────────
 
 export function CSATSatisfaction() {
-  const { selectedBranch } = useBranch();
+  const { selectedBranch, selectedBranchId } = useBranch();
 
-  const [summary, setSummary] = useState<SummaryRow | null>(null);
-  const [ratings, setRatings] = useState<RatingRow[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
+  const queryClient = useQueryClient();
   const PREVIEW_ROWS = 5;
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const [summaryRes, ratingsRes] = await Promise.all([
-        apiFetch('/csat/summary'),
-        apiFetch('/csat/ratings?resolution=all'),
-      ]);
-      
-      if (summaryRes.ok) {
-        const summaryData = await summaryRes.json() as { summary: SummaryRow };
-        setSummary(summaryData.summary);
-      }
-      if (ratingsRes.ok) {
-        const ratingsData = await ratingsRes.json() as { ratings: RatingRow[] };
-        setRatings(ratingsData.ratings);
-      }
-    } catch {
-      setError('Failed to load data');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const {
+    data: summaryData,
+    isLoading: summaryLoading,
+  } = useQuery({
+    queryKey: ['csat-summary', selectedBranchId],
+    queryFn: () => fetchJson<{ summary: SummaryRow }>('/csat/summary'),
+    staleTime: 30_000,
+  });
+  const summary = summaryData?.summary ?? null;
 
-  useEffect(() => { void load(); }, [load, selectedBranch]);
+  const {
+    data: ratingsData,
+    isLoading: ratingsLoading,
+    error: ratingsError,
+  } = useQuery({
+    queryKey: ['csat-ratings', selectedBranchId],
+    queryFn: () => fetchJson<{ ratings: RatingRow[] }>('/csat/ratings?resolution=all'),
+    staleTime: 30_000,
+  });
+  const ratings = ratingsData?.ratings ?? [];
+  const error = ratingsError ? 'Failed to load data' : null;
+
+  const loading = summaryLoading || ratingsLoading;
 
   // All ratings (newest first) — already sorted by backend
   const allRatings = ratings;
-  // Complaints = 1–3★ Open (flagged for resolution)
-  const complaints = ratings.filter((r) => r.stars <= 3 && r.resolution_status === 'Open');
+  // Complaints = 1–3★ (flagged for resolution)
+  const complaints = ratings.filter((r) => r.stars <= 3);
 
   const navigate = (screen: string) =>
     window.dispatchEvent(new CustomEvent('navigate', { detail: screen }));
@@ -108,51 +103,66 @@ export function CSATSatisfaction() {
 
       <div className="p-8">
         {/* KPI tiles */}
-        <div className="grid grid-cols-3 gap-6 mb-8">
-          {/* Average rating */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 relative flex flex-col min-h-[120px]">
-            <div
-              className="absolute top-4 right-4 w-9 h-9 rounded-full flex items-center justify-center"
-              style={{ backgroundColor: '#f59e0b26' }}
-            >
-              <Star className="w-4 h-4 text-[#f59e0b]" />
-            </div>
-            <div className="text-sm font-medium text-gray-500 pr-12">Average Rating</div>
-            {loading ? (
-              <div className="text-3xl font-bold text-gray-400 mt-2">—</div>
-            ) : (
-              <div className="flex items-center gap-2 mt-2 leading-none">
-                <div className="text-3xl font-bold text-gray-900">
-                  {summary?.average_stars != null ? summary.average_stars.toFixed(1) : '—'}
-                </div>
-                {summary?.average_stars != null && (
-                  <div className="flex gap-0.5 mt-0.5">
-                    {[1, 2, 3, 4, 5].map((s) => (
-                      <Star
-                        key={s}
-                        className={`w-4 h-4 ${s <= Math.round(summary.average_stars!) ? 'fill-[#f59e0b] text-[#f59e0b]' : 'text-gray-300'}`}
-                      />
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-            <div className="text-xs text-gray-400 mt-auto pt-3">out of 5.0</div>
-          </div>
+        <div className="grid grid-cols-4 gap-6 mb-8 items-stretch">
+          <KPICard
+            title="Average Rating"
+            value={loading ? '—' : (summary?.average_stars != null ? summary.average_stars.toFixed(1) : '—')}
+            icon={<Star className="w-4 h-4 text-[#f59e0b]" />}
+            accentColor="#f59e0b"
+            subtitle="out of 5.0"
+          />
 
           <KPICard
             title="Total Ratings Received"
             value={loading ? '—' : (summary?.total_ratings ?? 0).toString()}
             icon={<MessageSquare className="w-4 h-4 text-[#f59e0b]" />}
             accentColor="#f59e0b"
+            subtitle="&#8203;"
           />
           <KPICard
-            title="Open Complaints (1–3★)"
+            title="Open Complaints"
             value={loading ? '—' : (summary?.open_count ?? 0).toString()}
             icon={<AlertCircle className="w-4 h-4 text-[#ef4444]" />}
             accentColor="#ef4444"
-            alert={(summary?.open_count ?? 0) > 0}
+            subtitle="&#8203;"
           />
+
+          {/* Ratings Breakdown Card */}
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-3.5 relative flex flex-col h-full">
+            <div className="flex items-start justify-between mb-2">
+              <div className="flex items-start gap-1.5 pt-1.5">
+                <div className="text-sm font-medium text-gray-500">Ratings breakdown</div>
+              </div>
+            </div>
+            
+            <div className="flex flex-col gap-1 mt-auto pb-1">
+              {loading ? (
+                <div className="text-sm text-gray-400 py-2">Loading...</div>
+              ) : (
+                (() => {
+                  // Compute counts cleanly
+                  const counts: Record<number, number> = { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 };
+                  ratings.forEach(r => {
+                    const star = Math.round(r.stars);
+                    if (star >= 1 && star <= 5) counts[star]++;
+                  });
+                  const maxCount = Math.max(...Object.values(counts), 1);
+
+                  return [5, 4, 3, 2, 1].map((star) => {
+                    const percent = (counts[star] / maxCount) * 100;
+                    return (
+                      <div key={star} className="flex items-center gap-2">
+                        <span className="text-[10px] font-medium text-gray-500 w-2 leading-none">{star}</span>
+                        <div className="flex-1 h-1 bg-gray-100 rounded-full overflow-hidden">
+                          <div className="h-full bg-[#f59e0b] rounded-full transition-all duration-500" style={{ width: `${percent}%` }} />
+                        </div>
+                      </div>
+                    );
+                  });
+                })()
+              )}
+            </div>
+          </div>
         </div>
 
         {/* ── Ratings table ──────────────────────────────────────────── */}
@@ -161,7 +171,10 @@ export function CSATSatisfaction() {
             <h3 className="font-semibold text-gray-900">Customer Ratings &amp; Reviews</h3>
             <div className="flex items-center gap-3">
               <button
-                onClick={() => void load()}
+                onClick={() => {
+                  void queryClient.invalidateQueries({ queryKey: ['csat-summary'] });
+                  void queryClient.invalidateQueries({ queryKey: ['csat-ratings'] });
+                }}
                 disabled={loading}
                 className="text-gray-400 hover:text-gray-600 transition-colors disabled:opacity-40"
                 title="Refresh"
@@ -190,11 +203,11 @@ export function CSATSatisfaction() {
               </colgroup>
               <thead>
                 <tr className="border-b border-gray-200">
-                  <th className="text-left text-[11px] font-medium text-gray-500 pb-3 px-2">Customer / ID</th>
-                  <th className="text-left text-[11px] font-medium text-gray-500 pb-3 px-2">Delivery ID</th>
-                  <th className="text-left text-[11px] font-medium text-gray-500 pb-3 px-2">Rating</th>
-                  <th className="text-left text-[11px] font-medium text-gray-500 pb-3 px-2">Comment</th>
-                  <th className="text-left text-[11px] font-medium text-gray-500 pb-3 px-2">Date</th>
+                  <th className="text-left text-xs font-semibold text-gray-700 pb-3 px-2">Customer / ID</th>
+                  <th className="text-left text-xs font-semibold text-gray-700 pb-3 px-2">Delivery ID</th>
+                  <th className="text-left text-xs font-semibold text-gray-700 pb-3 px-2">Rating</th>
+                  <th className="text-left text-xs font-semibold text-gray-700 pb-3 px-2">Comment</th>
+                  <th className="text-left text-xs font-semibold text-gray-700 pb-3 px-2">Date</th>
                 </tr>
               </thead>
               <tbody>
@@ -229,12 +242,25 @@ export function CSATSatisfaction() {
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-semibold text-gray-900">Complaint Log</h3>
-            <button
-              onClick={() => navigate('complaint-log-full')}
-              className="text-[11px] text-[#007BC1] hover:text-[#005a8f] transition-colors"
-            >
-              View all
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => {
+                  void queryClient.invalidateQueries({ queryKey: ['csat-summary'] });
+                  void queryClient.invalidateQueries({ queryKey: ['csat-ratings'] });
+                }}
+                disabled={loading}
+                className="text-gray-400 hover:text-gray-600 transition-colors disabled:opacity-40"
+                title="Refresh"
+              >
+                <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+              </button>
+              <button
+                onClick={() => navigate('complaint-log-full')}
+                className="text-[11px] text-[#007BC1] hover:text-[#005a8f] transition-colors"
+              >
+                View all
+              </button>
+            </div>
           </div>
 
           <div className="overflow-x-auto">
@@ -250,13 +276,13 @@ export function CSATSatisfaction() {
               </colgroup>
               <thead>
                 <tr className="border-b border-gray-200">
-                  <th className="text-left text-[11px] font-medium text-gray-500 pb-3 px-2">Customer / ID</th>
-                  <th className="text-left text-[11px] font-medium text-gray-500 pb-3 px-2">Delivery ID</th>
-                  <th className="text-left text-[11px] font-medium text-gray-500 pb-3 px-2">Rating</th>
-                  <th className="text-left text-[11px] font-medium text-gray-500 pb-3 px-2">Complaint / Desc</th>
-                  <th className="text-left text-[11px] font-medium text-gray-500 pb-3 px-2">Status</th>
-                  <th className="text-left text-[11px] font-medium text-gray-500 pb-3 px-2">Resolution</th>
-                  <th className="text-left text-[11px] font-medium text-gray-500 pb-3 px-2">Resolved At</th>
+                  <th className="text-left text-xs font-semibold text-gray-700 pb-3 px-2">Customer / ID</th>
+                  <th className="text-left text-xs font-semibold text-gray-700 pb-3 px-2">Delivery ID</th>
+                  <th className="text-left text-xs font-semibold text-gray-700 pb-3 px-2">Rating</th>
+                  <th className="text-left text-xs font-semibold text-gray-700 pb-3 px-2">Complaint / Desc</th>
+                  <th className="text-left text-xs font-semibold text-gray-700 pb-3 px-2">Status</th>
+                  <th className="text-left text-xs font-semibold text-gray-700 pb-3 px-2">Resolution</th>
+                  <th className="text-left text-xs font-semibold text-gray-700 pb-3 px-2">Resolved At</th>
                 </tr>
               </thead>
               <tbody>

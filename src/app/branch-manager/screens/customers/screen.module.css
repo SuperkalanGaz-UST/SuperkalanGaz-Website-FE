@@ -53,7 +53,8 @@
 
 /* Customer detail dialog — click-through order history + loyalty standing. */
 .dialogOverlay { position: fixed; inset: 0; background-color: rgba(0, 0, 0, 0.5); z-index: 50; display: flex; align-items: center; justify-content: center; padding: 1rem; }
-.dialogContent { background-color: var(--card); border-radius: var(--radius-lg); width: 100%; max-width: 640px; max-height: calc(100vh - 2rem); overflow-y: auto; box-shadow: var(--shadow-lg); display: flex; flex-direction: column; }
+.dialogContent { background-color: var(--card); border-radius: var(--radius-lg); width: 100%; max-width: 640px; max-height: calc(100vh - 2rem); overflow-y: auto; box-shadow: var(--shadow-lg); display: flex; flex-direction: column; scrollbar-width: none; }
+.dialogContent::-webkit-scrollbar { display: none; }
 .dialogHeader { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--border); }
 .dialogTitle { font-size: 1.125rem; font-weight: 700; color: var(--foreground); margin-bottom: 0.25rem; }
 .dialogSubtitle { font-size: 0.8125rem; color: var(--muted-foreground); }

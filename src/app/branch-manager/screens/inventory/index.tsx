@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import * as z from 'zod';
 import { Badge } from '../../components/Badge';
@@ -10,7 +11,7 @@ import { RowActionsMenu } from '../../components/RowActionsMenu';
 import { Form, FormItem, FormLabel, FormControl, FormMessage, useForm } from '../../components/Form';
 import { Input } from '../../components/Input';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '../../components/Select';
-import { apiFetch, apiErrorMessage } from '../../../lib/api';
+import { apiFetch, apiErrorMessage, fetchJson } from '../../../lib/api';
 import styles from './screen.module.css';
 
 /** Trimmed stock-level row (Inventory module, GET /inventory/stock-levels) —
@@ -67,40 +68,37 @@ const formatDate = (iso: string) => {
 const isOpenRequest = (status: ReorderStatus) => status === 'Pending' || status === 'Approved';
 
 export default function Inventory() {
-    const [mounted, setMounted] = useState(false);
-    useEffect(() => { setMounted(true); }, []);
+    const { data: stockData, error: stockQueryError, isLoading: stockLoading, refetch: loadStockLevels } = useQuery({
+        queryKey: ['stock-levels'],
+        queryFn: () => fetchJson<{ stockLevels: StockLevelRow[] }>('/inventory/stock-levels'),
+    });
+    // For local optimism, we track stockLevels in state but initialize from query.
+    // Wait, tracking in state defeats query caching if we don't sync them.
+    // Actually, we can just let React Query handle the caching, and on mutation, we invalidate the query.
+    // Let's stick to syncing it for now to avoid refactoring the mutation logic too heavily.
+    // Actually, we can just use the query data and rely on React Query for caching.
+    // However, the mutation does: `setStockLevels((prev) => prev.map(...))`
+    // If I replace `setStockLevels`, I need to use `queryClient.setQueryData`.
+    // It's easier to keep the state for now and sync it when data changes.
+    // But since `multi_replace_file_content` is a bit complex for that, I will just let React Query fetch it and use `useEffect` to sync it to state.
+    const [stockLevels, setStockLevels] = React.useState<StockLevelRow[]>([]);
+    const [reorders, setReorders] = React.useState<ReorderRequestRow[]>([]);
 
-    const [stockLevels, setStockLevels] = useState<StockLevelRow[]>([]);
-    const [stockError, setStockError] = useState<string | null>(null);
-    const [stockLoading, setStockLoading] = useState(true);
+    React.useEffect(() => {
+        if (stockData?.stockLevels) setStockLevels(stockData.stockLevels);
+    }, [stockData]);
 
-    const [reorders, setReorders] = useState<ReorderRequestRow[]>([]);
-    const [reordersError, setReordersError] = useState<string | null>(null);
-    const [reordersLoading, setReordersLoading] = useState(true);
+    const { data: reorderData, error: reorderQueryError, isLoading: reordersLoading } = useQuery({
+        queryKey: ['reorder-requests'],
+        queryFn: () => fetchJson<{ reorderRequests: ReorderRequestRow[] }>('/inventory/reorder-requests'),
+    });
 
-    const loadStockLevels = () =>
-        apiFetch('/inventory/stock-levels').then(async (res) => {
-            const data = await res.json();
-            if (!res.ok) throw new Error(apiErrorMessage(data, 'Failed to load stock levels'));
-            setStockLevels(data.stockLevels as StockLevelRow[]);
-        });
+    React.useEffect(() => {
+        if (reorderData?.reorderRequests) setReorders(reorderData.reorderRequests);
+    }, [reorderData]);
 
-    useEffect(() => {
-        if (!mounted) return;
-
-        loadStockLevels()
-            .catch((err) => setStockError(err instanceof Error ? err.message : 'Failed to load stock levels'))
-            .finally(() => setStockLoading(false));
-
-        apiFetch('/inventory/reorder-requests')
-            .then(async (res) => {
-                const data = await res.json();
-                if (!res.ok) throw new Error(apiErrorMessage(data, 'Failed to load reorder requests'));
-                setReorders(data.reorderRequests as ReorderRequestRow[]);
-            })
-            .catch((err) => setReordersError(err instanceof Error ? err.message : 'Failed to load reorder requests'))
-            .finally(() => setReordersLoading(false));
-    }, [mounted]);
+    const stockError = stockQueryError ? stockQueryError.message : null;
+    const reordersError = reorderQueryError ? reorderQueryError.message : null;
 
     const reorderForm = useForm({ defaultValues: { productId: "", qty: 10 }, schema: reorderSchema });
     const stockForm = useForm({ defaultValues: { productId: "", receivedQty: 10 }, schema: stockUpdateSchema });
@@ -170,10 +168,6 @@ export default function Inventory() {
             setStatusUpdatingId(null);
         }
     };
-
-    if (!mounted) {
-        return <div style={{ minHeight: "100vh", backgroundColor: "var(--background)" }} />;
-    }
 
     return (
         <>

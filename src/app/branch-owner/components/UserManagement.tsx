@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Header } from './Header';
 import {
   Eye,
@@ -13,7 +14,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useBranch } from '../contexts/BranchContext';
-import { apiFetch, apiErrorMessage } from '../../lib/api';
+import { apiFetch, apiErrorMessage, fetchJson } from '../../lib/api';
 
 interface BranchManager {
   id: string;
@@ -127,77 +128,45 @@ export function UserManagement() {
   // A multi-branch owner manages managers across ALL their branches at once; a
   // single-branch owner stays scoped to their one branch.
   const isMultiBranch = availableBranches.length > 1;
-  const [managers, setManagers] = useState<BranchManager[]>([]);
-  const [invitations, setInvitations] = useState<DeliveryRiderInvitation[]>([]);
-  const [loading, setLoading] = useState(true);
+
+  const queryClient = useQueryClient();
+
+  const managerQueryKey = useMemo(() => ['users', 'branch-manager', isMultiBranch ? 'all' : selectedBranchId], [isMultiBranch, selectedBranchId]);
+  const { data: managersData, isLoading: managersLoading } = useQuery({
+    queryKey: managerQueryKey,
+    queryFn: () => fetchJson<{ users: ProfileRow[] }>(
+      isMultiBranch
+        ? '/users?role=branch-manager'
+        : `/users?role=branch-manager&branchId=${encodeURIComponent(selectedBranchId ?? '')}`
+    ),
+    enabled: isMultiBranch || !!selectedBranchId,
+    staleTime: 30_000,
+  });
+
+  const invitationQueryKey = useMemo(() => ['delivery-rider-invitations', isMultiBranch ? 'all' : selectedBranchId], [isMultiBranch, selectedBranchId]);
+  const { data: invitationsData, isLoading: invitationsLoading } = useQuery({
+    queryKey: invitationQueryKey,
+    queryFn: () => fetchJson<{ invitations: DeliveryRiderInvitation[] }>(
+      isMultiBranch
+        ? '/delivery-rider-invitations'
+        : `/delivery-rider-invitations?branchId=${encodeURIComponent(selectedBranchId ?? '')}`
+    ),
+    enabled: isMultiBranch || !!selectedBranchId,
+    staleTime: 30_000,
+  });
+
+  const managers = useMemo(() => (managersData?.users ?? []).map(toManager), [managersData]);
+  const invitations = invitationsData?.invitations ?? [];
+  const loading = managersLoading || invitationsLoading;
+
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState<RoleFilter>('all');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
 
-  const loadAccounts = useCallback(async () => {
-    setLoading(true);
-    if (!isMultiBranch && !selectedBranchId) {
-      setManagers([]);
-      setInvitations([]);
-      setLoading(false);
-      return;
-    }
-    try {
-      // Multi-branch owners see every manager across all their branches: the API
-      // scopes an unqualified list to the caller's own branches. Single-branch
-      // owners stay pinned to their one selected branch.
-      const managerRequest = apiFetch(
-        isMultiBranch
-          ? '/users?role=branch-manager'
-          : `/users?role=branch-manager&branchId=${encodeURIComponent(selectedBranchId ?? '')}`,
-      );
-      const invitationRequest = apiFetch(
-        isMultiBranch
-          ? '/delivery-rider-invitations'
-          : `/delivery-rider-invitations?branchId=${encodeURIComponent(selectedBranchId ?? '')}`,
-      );
-      const [managerResult, invitationResult] = await Promise.allSettled([
-        managerRequest,
-        invitationRequest,
-      ]);
-
-      if (managerResult.status === 'fulfilled') {
-        const data = await managerResult.value.json();
-        if (!managerResult.value.ok) {
-          setManagers([]);
-          toast.error(apiErrorMessage(data, 'Failed to load Branch Managers'));
-        } else {
-          setManagers((data.users as ProfileRow[]).map(toManager));
-        }
-      } else {
-        setManagers([]);
-        toast.error('Branch Manager accounts are temporarily unavailable.');
-      }
-
-      if (invitationResult.status === 'fulfilled') {
-        const data = await invitationResult.value.json();
-        if (!invitationResult.value.ok) {
-          setInvitations([]);
-          toast.error(apiErrorMessage(data, 'Failed to load Delivery Rider invitations'));
-        } else {
-          setInvitations(data.invitations as DeliveryRiderInvitation[]);
-        }
-      } else {
-        setInvitations([]);
-        toast.error('Delivery Rider invitations are temporarily unavailable.');
-      }
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to load users');
-      setManagers([]);
-      setInvitations([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [selectedBranchId, isMultiBranch]);
-
-  useEffect(() => {
-    loadAccounts();
-  }, [loadAccounts]);
+  const refreshAccounts = useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: managerQueryKey });
+    void queryClient.invalidateQueries({ queryKey: invitationQueryKey });
+  }, [queryClient, managerQueryKey, invitationQueryKey]);
 
   const filteredManagers = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
@@ -382,7 +351,7 @@ export function UserManagement() {
         toast.success('Branch manager account created successfully.');
       }
 
-      await loadAccounts();
+      refreshAccounts();
       handleCloseModal();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Something went wrong');
@@ -398,7 +367,7 @@ export function UserManagement() {
       const data = await res.json();
       if (!res.ok) throw new Error(apiErrorMessage(data, 'Deactivation failed'));
       toast.success('Branch manager account deactivated.');
-      await loadAccounts();
+      refreshAccounts();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Deactivation failed');
     } finally {
@@ -438,7 +407,7 @@ export function UserManagement() {
       }
       toast.success('Delivery Rider invitation sent.');
       setShowInviteModal(false);
-      await loadAccounts();
+      refreshAccounts();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Could not send the invitation');
     } finally {
@@ -462,7 +431,7 @@ export function UserManagement() {
           ? 'Delivery Rider invitation reissued.'
           : 'Delivery Rider invitation resent.',
       );
-      await loadAccounts();
+      refreshAccounts();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Could not resend the invitation');
     } finally {
@@ -494,7 +463,7 @@ export function UserManagement() {
       toast.success('Delivery Rider invitation revoked.');
       setShowRevokeDialog(false);
       setInvitationToRevoke(null);
-      await loadAccounts();
+      refreshAccounts();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Could not revoke the invitation');
     } finally {
@@ -602,16 +571,16 @@ export function UserManagement() {
             <table className="w-full min-w-[980px]">
               <thead>
                 <tr className="border-b border-gray-200">
-                  <th className="text-left text-[11px] font-medium text-gray-600 pb-3">Name</th>
-                  <th className="text-left text-[11px] font-medium text-gray-600 pb-3">Email</th>
-                  <th className="text-left text-[11px] font-medium text-gray-600 pb-3">Role</th>
+                  <th className="text-left text-xs font-semibold text-gray-700 pb-3">Name</th>
+                  <th className="text-left text-xs font-semibold text-gray-700 pb-3">Email</th>
+                  <th className="text-left text-xs font-semibold text-gray-700 pb-3">Role</th>
                   {isMultiBranch && (
-                    <th className="text-left text-[11px] font-medium text-gray-600 pb-3">Branch</th>
+                    <th className="text-left text-xs font-semibold text-gray-700 pb-3">Branch</th>
                   )}
-                  <th className="text-left text-[11px] font-medium text-gray-600 pb-3">Status</th>
-                  <th className="text-left text-[11px] font-medium text-gray-600 pb-3">Date Created</th>
-                  <th className="text-left text-[11px] font-medium text-gray-600 pb-3">Last Login</th>
-                  <th className="text-left text-[11px] font-medium text-gray-600 pb-3">Actions</th>
+                  <th className="text-left text-xs font-semibold text-gray-700 pb-3">Status</th>
+                  <th className="text-left text-xs font-semibold text-gray-700 pb-3">Date Created</th>
+                  <th className="text-left text-xs font-semibold text-gray-700 pb-3">Last Login</th>
+                  <th className="text-left text-xs font-semibold text-gray-700 pb-3">Actions</th>
                 </tr>
               </thead>
               <tbody>

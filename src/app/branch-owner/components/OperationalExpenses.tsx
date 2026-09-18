@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Area,
   AreaChart,
@@ -79,41 +80,30 @@ const axisProps = {
 };
 
 export function OperationalExpenses() {
-  const [months, setMonths] = useState<MonthExpenses[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [loadAttempt, setLoadAttempt] = useState(0);
+  const queryClient = useQueryClient();
 
-  useEffect(() => {
-    let active = true;
-    const descriptors = Array.from({ length: 6 }, (_, index) => monthDescriptor(new Date(), index - 5));
+  const descriptors = useMemo(() => Array.from({ length: 6 }, (_, index) => monthDescriptor(new Date(), index - 5)), []);
 
-    const load = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const results = await Promise.all(
-          descriptors.map(async (month) => ({ ...month, expenses: await fetchExpenses(month.key) })),
-        );
-        if (active) setMonths(results);
-      } catch (loadError) {
-        if (active) {
-          setMonths([]);
-          const message = loadError instanceof Error ? loadError.message : 'Failed to load expenses';
-          setError(
-            message === 'Caller has no active branch'
-              ? 'No active branch is assigned to this account. Contact your Franchise Administrator.'
-              : message,
-          );
-        }
-      } finally {
-        if (active) setLoading(false);
-      }
-    };
+  const {
+    data: monthsData,
+    isLoading: loading,
+    error: queryError,
+  } = useQuery({
+    queryKey: ['expenses-6-months', descriptors.map(d => d.key)],
+    queryFn: async () => {
+      return await Promise.all(
+        descriptors.map(async (month) => ({ ...month, expenses: await fetchExpenses(month.key) })),
+      );
+    },
+    staleTime: 30_000,
+  });
 
-    void load();
-    return () => { active = false; };
-  }, [loadAttempt]);
+  const months = monthsData ?? [];
+  const error = queryError ? 
+    (queryError.message === 'Caller has no active branch' 
+      ? 'No active branch is assigned to this account. Contact your Franchise Administrator.' 
+      : (queryError.message || 'Failed to load expenses')) 
+    : null;
 
   const currentExpenses = useMemo(() => months.at(-1)?.expenses ?? [], [months]);
   const currentTotal = currentExpenses.reduce((sum, expense) => sum + Number(expense.amount), 0);
@@ -151,7 +141,7 @@ export function OperationalExpenses() {
             <span>{error}</span>
             <button
               type="button"
-              onClick={() => setLoadAttempt((attempt) => attempt + 1)}
+              onClick={() => void queryClient.invalidateQueries({ queryKey: ['expenses-6-months'] })}
               className="shrink-0 rounded-md border border-red-300 bg-white px-3 py-1.5 font-medium text-red-700 transition-colors hover:bg-red-100"
             >
               Retry
@@ -295,12 +285,12 @@ export function OperationalExpenses() {
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-gray-200">
-                    <th className="pb-3 pr-4 text-left text-[11px] font-medium text-gray-600">Date</th>
-                    <th className="pb-3 pr-4 text-left text-[11px] font-medium text-gray-600">Reference no.</th>
-                    <th className="pb-3 pr-4 text-left text-[11px] font-medium text-gray-600">Category</th>
-                    <th className="pb-3 pr-4 text-left text-[11px] font-medium text-gray-600">Description</th>
-                    <th className="pb-3 pr-4 text-right text-[11px] font-medium text-gray-600">Amount</th>
-                    <th className="pb-3 text-left text-[11px] font-medium text-gray-600">Recorded by</th>
+                    <th className="pb-3 pr-4 text-left text-xs font-semibold text-gray-700">Date</th>
+                    <th className="pb-3 pr-4 text-left text-xs font-semibold text-gray-700">Reference no.</th>
+                    <th className="pb-3 pr-4 text-left text-xs font-semibold text-gray-700">Category</th>
+                    <th className="pb-3 pr-4 text-left text-xs font-semibold text-gray-700">Description</th>
+                    <th className="pb-3 pr-4 text-right text-xs font-semibold text-gray-700">Amount</th>
+                    <th className="pb-3 text-left text-xs font-semibold text-gray-700">Recorded by</th>
                   </tr>
                 </thead>
                 <tbody>

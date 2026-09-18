@@ -54,10 +54,8 @@ export function BranchManagerApp() {
         <AppHeader
           title={SCREEN_TITLES[activeScreen] ?? 'Overview'}
           description={
-            activeScreen === 'expenses'
-              ? 'Record and review your branch expenses for the current month.'
-              : activeScreen === 'settings'
-                ? 'Manage your personal details and account security.'
+            activeScreen === 'settings'
+              ? 'Manage your personal details and account security.'
               : undefined
           }
           badge={
@@ -70,7 +68,7 @@ export function BranchManagerApp() {
         />
 
         <main style={{ flex: 1, padding: '2rem', overflowY: 'auto' }}>
-          {activeScreen === 'overview' && <Overview />}
+          {activeScreen === 'overview' && <Overview onViewOrders={viewCustomerOrders} />}
           {activeScreen === 'orders' && <Orders initialSearch={ordersCustomerSearch} />}
           {activeScreen === 'inventory' && <Inventory />}
           {activeScreen === 'customers' && <Customers onViewOrders={viewCustomerOrders} />}

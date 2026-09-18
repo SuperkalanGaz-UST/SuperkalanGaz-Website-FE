@@ -1,6 +1,7 @@
 'use client';
 
 import { ComponentType, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Bell,
   Building2,
@@ -10,7 +11,7 @@ import {
   Package,
   Tag,
 } from 'lucide-react';
-import { apiErrorMessage, apiFetch } from '../lib/api';
+import { apiErrorMessage, apiFetch, fetchJson } from '../lib/api';
 
 type NotificationType =
   | 'price-update'
@@ -71,42 +72,42 @@ function relativeTime(value: string): string {
  * done here: the NestJS API derives role + branch scope from the verified JWT.
  */
 export function NotificationCenter() {
+  const queryClient = useQueryClient();
   const [isOpen, setIsOpen] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
-  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
-  const [unreadCount, setUnreadCount] = useState(0);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const loadNotifications = useCallback(async () => {
-    try {
-      const response = await apiFetch('/notifications?limit=50');
-      const data = (await response.json().catch(() => null)) as NotificationsResponse | null;
-      if (!response.ok || !data) {
-        throw new Error(apiErrorMessage(data, 'Could not load notifications.'));
-      }
+  const { data: notificationsData, isLoading, error: queryError } = useQuery({
+    queryKey: ['notifications'],
+    queryFn: () => fetchJson<NotificationsResponse>('/notifications?limit=50'),
+    refetchInterval: 60_000,
+    staleTime: 30_000,
+  });
 
-      setNotifications(data.notifications);
-      setUnreadCount(data.unread_count);
-      setError(null);
-    } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : 'Could not load notifications.');
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
+  const [localNotifications, setLocalNotifications] = useState<NotificationItem[] | null>(null);
 
   useEffect(() => {
-    void loadNotifications();
-    const interval = window.setInterval(() => void loadNotifications(), 60_000);
-    const handleRefresh = () => void loadNotifications();
-    window.addEventListener('notifications:refresh', handleRefresh);
+    if (notificationsData) {
+      setLocalNotifications(notificationsData.notifications);
+    }
+  }, [notificationsData]);
+
+  const notifications = localNotifications ?? [];
+  const unreadCount = localNotifications 
+    ? localNotifications.filter(n => !n.is_read).length 
+    : (notificationsData?.unread_count ?? 0);
+  const error = queryError ? (queryError.message || 'Could not load notifications.') : null;
+
+  const refreshNotifications = useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: ['notifications'] });
+  }, [queryClient]);
+
+  useEffect(() => {
+    window.addEventListener('notifications:refresh', refreshNotifications);
     return () => {
-      window.clearInterval(interval);
-      window.removeEventListener('notifications:refresh', handleRefresh);
+      window.removeEventListener('notifications:refresh', refreshNotifications);
     };
-  }, [loadNotifications]);
+  }, [refreshNotifications]);
 
   useEffect(() => {
     function handlePointerDown(event: MouseEvent) {
@@ -139,26 +140,21 @@ export function NotificationCenter() {
   async function markRead(notification: NotificationItem) {
     if (notification.is_read) return;
 
-    setNotifications((items) =>
-      items.map((item) => (item.id === notification.id ? { ...item, is_read: true } : item)),
-    );
-    setUnreadCount((count) => Math.max(0, count - 1));
+    setLocalNotifications((items) => items ? items.map((item) => (item.id === notification.id ? { ...item, is_read: true } : item)) : items);
 
     const response = await apiFetch(`/notifications/${notification.id}/read`, { method: 'POST' });
-    if (!response.ok) void loadNotifications();
+    if (!response.ok) refreshNotifications();
   }
 
   async function markAllRead() {
     if (unreadCount === 0) return;
 
+    setLocalNotifications((items) => items ? items.map((item) => ({ ...item, is_read: true })) : items);
+
     const response = await apiFetch('/notifications/read-all', { method: 'POST' });
     if (!response.ok) {
-      void loadNotifications();
-      return;
+      refreshNotifications();
     }
-
-    setNotifications((items) => items.map((item) => ({ ...item, is_read: true })));
-    setUnreadCount(0);
   }
 
   return (
@@ -167,7 +163,7 @@ export function NotificationCenter() {
         type="button"
         onClick={() => {
           setIsOpen((open) => !open);
-          if (!isOpen) void loadNotifications();
+          if (!isOpen) refreshNotifications();
         }}
         className="relative flex h-8 w-8 items-center justify-center text-[#007BC1] transition-colors hover:text-[#00639b] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#007BC1]/30 rounded-full"
         aria-label={`Notifications${unreadCount ? `, ${unreadCount} unread` : ''}`}
@@ -206,7 +202,7 @@ export function NotificationCenter() {
                 <p className="text-sm text-gray-500">{error}</p>
                 <button
                   type="button"
-                  onClick={() => void loadNotifications()}
+                  onClick={() => refreshNotifications()}
                   className="mt-2 text-xs font-semibold text-[#007BC1]"
                 >
                   Try again

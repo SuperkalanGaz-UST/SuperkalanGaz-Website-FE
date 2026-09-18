@@ -1,41 +1,35 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Header } from './Header';
 import { Pagination } from './Pagination';
 import { ArrowLeft, RefreshCw, Search } from 'lucide-react';
-import { apiFetch } from '../../lib/api';
+import { fetchJson } from '../../lib/api';
 import { useBranch } from '../contexts/BranchContext';
 import { RatingRow, RatingStars, formatDate } from './CSATSatisfaction';
 
 export function CustomerRatingsFull({ onBack }: { onBack: () => void }) {
-  const { selectedBranch } = useBranch();
+  const { selectedBranchId } = useBranch();
 
-  const [ratings, setRatings] = useState<RatingRow[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
   const [currentPage, setCurrentPage] = useState(1);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterRating, setFilterRating] = useState('all');
 
   const ITEMS_PER_PAGE = 10;
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const r = await apiFetch('/csat/ratings?resolution=all');
-      const data = await r.json() as { ratings: RatingRow[] };
-      if (!r.ok) throw new Error('Failed to load');
-      setRatings(data.ratings);
-    } catch {
-      setError('Failed to load ratings. Please refresh.');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => { void load(); }, [load, selectedBranch]);
+  const {
+    data,
+    isLoading: loading,
+    error: queryError,
+  } = useQuery({
+    queryKey: ['csat-ratings', selectedBranchId],
+    queryFn: () => fetchJson<{ ratings: RatingRow[] }>('/csat/ratings?resolution=all'),
+    staleTime: 30_000,
+  });
+  const ratings = data?.ratings ?? [];
+  const error = queryError ? 'Failed to load ratings. Please refresh.' : null;
 
   const filteredData = useMemo(() => {
     return ratings.filter((row) => {
@@ -110,7 +104,7 @@ export function CustomerRatingsFull({ onBack }: { onBack: () => void }) {
               </button>
             )}
             <button
-              onClick={() => void load()}
+              onClick={() => void queryClient.invalidateQueries({ queryKey: ['csat-ratings'] })}
               disabled={loading}
               className="text-gray-400 hover:text-gray-600 transition-colors disabled:opacity-40 ml-auto"
               title="Refresh"
@@ -132,11 +126,11 @@ export function CustomerRatingsFull({ onBack }: { onBack: () => void }) {
               </colgroup>
               <thead>
                 <tr className="border-b border-gray-200">
-                  <th className="text-left text-[11px] font-medium text-gray-600 pb-3 px-3 whitespace-nowrap">Customer / ID</th>
-                  <th className="text-left text-[11px] font-medium text-gray-600 pb-3 px-3 whitespace-nowrap">Delivery ID</th>
-                  <th className="text-left text-[11px] font-medium text-gray-600 pb-3 px-3 whitespace-nowrap">Rating</th>
-                  <th className="text-left text-[11px] font-medium text-gray-600 pb-3 px-3 whitespace-nowrap">Comment</th>
-                  <th className="text-left text-[11px] font-medium text-gray-600 pb-3 px-3 whitespace-nowrap">Date</th>
+                  <th className="text-left text-xs font-semibold text-gray-700 pb-3 px-3 whitespace-nowrap">Customer / ID</th>
+                  <th className="text-left text-xs font-semibold text-gray-700 pb-3 px-3 whitespace-nowrap">Delivery ID</th>
+                  <th className="text-left text-xs font-semibold text-gray-700 pb-3 px-3 whitespace-nowrap">Rating</th>
+                  <th className="text-left text-xs font-semibold text-gray-700 pb-3 px-3 whitespace-nowrap">Comment</th>
+                  <th className="text-left text-xs font-semibold text-gray-700 pb-3 px-3 whitespace-nowrap">Date</th>
                 </tr>
               </thead>
               <tbody>

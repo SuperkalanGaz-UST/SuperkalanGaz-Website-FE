@@ -44,33 +44,13 @@ export function CSATSatisfaction() {
         </div>
 
         <div className="grid grid-cols-3 gap-6 mb-8">
-          {/* Average Rating card — styled to match dashboard KPICard */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 relative flex flex-col min-h-[120px] h-full">
-            <div
-              className="absolute top-4 right-4 w-9 h-9 rounded-full flex items-center justify-center"
-              style={{ backgroundColor: '#f59e0b26' }}
-            >
-              <Star className="w-4 h-4 text-[#f59e0b]" />
-            </div>
-            <div className="text-sm font-medium text-gray-500 pr-12">Average Rating</div>
-            <div className="flex items-center gap-2 mt-2 leading-none">
-              <div className="text-3xl font-bold text-gray-900">{currentData.rating}</div>
-              <div className="flex gap-0.5 mt-0.5">
-                {[1, 2, 3, 4, 5].map((star) => (
-                  <Star
-                    key={star}
-                    className={`w-4 h-4 ${
-                      star <= currentData.stars ? 'fill-[#f59e0b] text-[#f59e0b]' : 'text-gray-300'
-                    }`}
-                  />
-                ))}
-              </div>
-            </div>
-            <div className="flex items-center gap-1 text-xs font-medium mt-auto pt-3 text-green-600">
-              <ArrowUpRight className="w-3.5 h-3.5" />
-              <span>+0.2 from last month</span>
-            </div>
-          </div>
+          <KPICard
+            title="Average Rating"
+            value={currentData.rating.toString()}
+            icon={<Star className="w-4 h-4 text-[#f59e0b]" />}
+            accentColor="#f59e0b"
+            trend={{ text: '+0.2 from last month', direction: 'up', positive: true }}
+          />
 
           <KPICard
             title="Total Ratings Received"
@@ -84,7 +64,7 @@ export function CSATSatisfaction() {
             value={currentData.complaints.toString()}
             icon={<AlertCircle className="w-4 h-4 text-[#ef4444]" />}
             accentColor="#ef4444"
-            trend={{ text: '-1 from last month', direction: 'down', positive: true }}
+            trend={{ text: '-1 from last month', direction: 'down', positive: false }}
           />
         </div>
 

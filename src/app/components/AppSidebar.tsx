@@ -152,29 +152,29 @@ export function AppSidebar({ entries, activeScreen, onNavigate }: AppSidebarProp
             aria-label="Compact navigation"
           >
             <div className="flex flex-col items-center justify-start gap-1">
-              {entries.map((entry, index) => {
-                const isActive = entryIsActive(entry, activeScreen);
-                const startsStandaloneEntries =
-                  index > 0 && !!entries[index - 1].children && !entry.children;
+              {entries
+                .flatMap((entry): (SidebarNavLeaf | SidebarNavEntry)[] => (entry.children ? entry.children : [entry]))
+                .map((item, index) => {
+                  if (!item.icon) return null;
+                  const isActive = activeScreen === item.id;
+                  const Icon = item.icon;
 
-                return (
-                  <button
-                    key={entry.label}
-                    type="button"
-                    onClick={() => handleRailEntry(entry)}
-                    aria-label={entry.label}
-                    aria-current={isActive ? 'page' : undefined}
-                    title={entry.label}
-                    className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl transition-colors ${
-                      isActive ? 'bg-white/15 text-white' : 'text-white/95 hover:bg-white/10'
-                    } ${startsStandaloneEntries ? 'mt-2' : ''}`}
-                  >
-                    {/* Keep the visual icon identical to the expanded state;
-                        the 44px button remains only as an accessible hit area. */}
-                    <entry.icon className="h-[18px] w-[18px] shrink-0" />
-                  </button>
-                );
-              })}
+                  return (
+                    <button
+                      key={item.id || item.label}
+                      type="button"
+                      onClick={() => onNavigate(item.id!)}
+                      aria-label={item.label}
+                      aria-current={isActive ? 'page' : undefined}
+                      title={item.label}
+                      className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl transition-colors ${
+                        isActive ? 'bg-white/15 text-white' : 'text-white/95 hover:bg-white/10'
+                      }`}
+                    >
+                      <Icon className="h-[18px] w-[18px] shrink-0" />
+                    </button>
+                  );
+                })}
             </div>
           </nav>
         )}

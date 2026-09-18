@@ -58,7 +58,7 @@ export function Dashboard() {
             value={branchData.csatScore}
             icon={<Star className="w-4 h-4 text-[#f59e0b]" />}
             accentColor="#f59e0b"
-            trend={branchData.trends.csat}
+            trend={undefined}
           />
           <KPICard
             title="Loyalty Claims This Month"

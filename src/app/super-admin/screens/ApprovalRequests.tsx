@@ -1,6 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { CheckCircle2, FileText, RotateCcw, Search, XCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { governanceApi } from '../api';
@@ -54,29 +55,18 @@ function PayloadDetails({ request }: { request: GovernanceRequest }) {
 }
 
 export function ApprovalRequests() {
-  const [requests, setRequests] = useState<GovernanceRequest[] | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [filter, setFilter] = useState<'all' | GovernanceRequestStatus>('pending');
   const [search, setSearch] = useState('');
   const [reason, setReason] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [temporaryPassword, setTemporaryPassword] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
-    setError(null);
-    try {
-      const rows = await governanceApi.requests();
-      setRequests(rows);
-      setSelectedId((current) =>
-        current && rows.some((row) => row.id === current) ? current : rows[0]?.id ?? null,
-      );
-    } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : 'Could not load requests.');
-    }
-  }, []);
-
-  useEffect(() => void load(), [load]);
+  const { data: requests, error: queryError, refetch: load } = useQuery({
+    queryKey: ['approval-requests'],
+    queryFn: () => governanceApi.requests(),
+  });
+  const error = queryError ? queryError.message : null;
 
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();

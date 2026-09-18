@@ -2,13 +2,14 @@
 
 import Image from "next/image";
 import React, { useCallback, useEffect, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Wrench, PenLine, AlertTriangle, ShieldCheck, Truck, History, Plus, RefreshCw, Check, ArrowLeft, ArrowRight } from "lucide-react";
 import { Badge } from "../../components/Badge";
 import { Button } from "../../components/Button";
 import { Progress } from "../../components/Progress";
 import { Input } from "../../components/Input";
-import { apiFetch, apiErrorMessage } from "../../../lib/api";
+import { apiFetch, apiErrorMessage, fetchJson } from "../../../lib/api";
 import styles from "./screen.module.css";
 
 /** A vehicle row from GET /vehicles (story BM-US-09). */
@@ -102,9 +103,19 @@ const vehicleSetupSteps = [
 
 export default function VehicleManagementPage() {
     const [mounted, setMounted] = useState(false);
-    const [vehicles, setVehicles] = useState<VehicleRow[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
+    const queryClient = useQueryClient();
+
+    const {
+        data: vehiclesData,
+        isLoading: loading,
+        error: vehiclesQueryError,
+    } = useQuery({
+        queryKey: ['vehicles'],
+        queryFn: () => fetchJson<{ vehicles: VehicleRow[] }>('/vehicles'),
+        staleTime: 30_000,
+    });
+    const vehicles = vehiclesData?.vehicles ?? [];
+    const error = vehiclesQueryError ? vehiclesQueryError.message : null;
 
     const [registrationOpen, setRegistrationOpen] = useState(false);
     const [plateNumber, setPlateNumber] = useState("");
@@ -137,23 +148,7 @@ export default function VehicleManagementPage() {
 
     useEffect(() => { setMounted(true); }, []);
 
-    const loadVehicles = useCallback(async () => {
-        setLoading(true);
-        setError(null);
-        try {
-            const res = await apiFetch('/vehicles');
-            const data = await res.json();
-            if (!res.ok) throw new Error(apiErrorMessage(data, 'Failed to load vehicles'));
-            setVehicles(data.vehicles as VehicleRow[]);
-        } catch (err) {
-            setError(err instanceof Error ? err.message : 'Failed to load vehicles');
-            setVehicles([]);
-        } finally {
-            setLoading(false);
-        }
-    }, []);
-
-    useEffect(() => { void loadVehicles(); }, [loadVehicles]);
+    useEffect(() => { setMounted(true); }, []);
 
     if (!mounted) {
         return <div style={{ minHeight: "100vh", backgroundColor: "var(--background)" }} />;
@@ -235,7 +230,7 @@ export default function VehicleManagementPage() {
             if (!res.ok) throw new Error(apiErrorMessage(data, 'Failed to register vehicle'));
 
             const created = data.vehicle as VehicleRow;
-            setVehicles(prev => [...prev, created].sort((a, b) => a.plate_number.localeCompare(b.plate_number)));
+            void queryClient.invalidateQueries({ queryKey: ['vehicles'] });
             toast.success(`${created.plate_number} was registered.`);
             setRegistrationOpen(false);
             setPlateNumber("");
@@ -270,7 +265,7 @@ export default function VehicleManagementPage() {
             if (!res.ok) throw new Error(apiErrorMessage(data, 'Failed to connect the SinoTrack ST-901'));
 
             const updated = data.vehicle as VehicleRow;
-            setVehicles(prev => prev.map(vehicle => vehicle.id === updated.id ? updated : vehicle));
+            void queryClient.invalidateQueries({ queryKey: ['vehicles'] });
             if (updated.gps_provisioning_status === 'provisioned') {
                 toast.success(`${updated.plate_number} is now connected to its SinoTrack ST-901.`);
             } else {
@@ -318,14 +313,14 @@ export default function VehicleManagementPage() {
                 if (res.status === 409) {
                     toast.error(apiErrorMessage(data, 'A newer reading was already recorded'));
                     closeUpdateDialog();
-                    await loadVehicles();
+                    void queryClient.invalidateQueries({ queryKey: ['vehicles'] });
                     return;
                 }
                 setDialogError(apiErrorMessage(data, 'Failed to save reading'));
                 return;
             }
             const updated = data.vehicle as VehicleRow;
-            setVehicles(prev => prev.map(v => v.id === updated.id ? updated : v));
+            void queryClient.invalidateQueries({ queryKey: ['vehicles'] });
             if (updated.status === 'maintenance') {
                 toast.warning(`${updated.plate_number} reached its PMS interval and is flagged for maintenance.`);
             } else {
@@ -347,14 +342,14 @@ export default function VehicleManagementPage() {
             if (!res.ok) {
                 if (res.status === 409) {
                     toast.error('This vehicle is not currently flagged for maintenance.');
-                    await loadVehicles();
+                    void queryClient.invalidateQueries({ queryKey: ['vehicles'] });
                     return;
                 }
                 toast.error(apiErrorMessage(data, 'Failed to reset PMS'));
                 return;
             }
             const updated = data.vehicle as VehicleRow;
-            setVehicles(prev => prev.map(v => v.id === updated.id ? updated : v));
+            void queryClient.invalidateQueries({ queryKey: ['vehicles'] });
             toast.success(`${updated.plate_number} marked serviced — PMS counter reset.`);
         } catch (err) {
             toast.error(err instanceof Error ? err.message : 'Failed to reset PMS');
@@ -373,7 +368,7 @@ export default function VehicleManagementPage() {
             if (!res.ok) throw new Error(apiErrorMessage(data, 'Failed to retry GPS provisioning'));
 
             const updated = data.vehicle as VehicleRow;
-            setVehicles(prev => prev.map(v => v.id === updated.id ? updated : v));
+            void queryClient.invalidateQueries({ queryKey: ['vehicles'] });
             if (updated.gps_provisioning_status === 'provisioned') {
                 toast.success(`${updated.plate_number} GPS device is now ready.`);
             } else {
@@ -435,7 +430,7 @@ export default function VehicleManagementPage() {
             ) : error ? (
                 <div className={styles.emptyState}>
                     <div style={{ marginBottom: '0.75rem' }}>{error}</div>
-                    <Button variant="outline" size="sm" onClick={() => void loadVehicles()}>Try again</Button>
+                    <Button variant="outline" size="sm" onClick={() => void queryClient.invalidateQueries({ queryKey: ['vehicles'] })}>Try again</Button>
                 </div>
             ) : vehicles.length === 0 ? (
                 <div className={styles.emptyState}>No vehicles on this branch&apos;s roster yet.</div>

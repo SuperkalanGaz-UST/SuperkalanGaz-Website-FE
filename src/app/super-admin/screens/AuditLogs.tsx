@@ -1,6 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Download, FileClock, Search, Tags, UserCheck } from 'lucide-react';
 import { governanceApi } from '../api';
 import type { AuditCategory, AuditEvent } from '../types';
@@ -69,22 +70,14 @@ export function AuditLogs({ category }: { category: VisibleAuditCategory }) {
     : priceMode
       ? 'Approved Price History'
       : 'Ownership History';
-  const [events, setEvents] = useState<AuditEvent[] | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
-  const [error, setError] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
-    setError(null);
-    try {
-      const rows = await governanceApi.audit(category);
-      setEvents(rows);
-      setSelectedId((current) => current ?? rows[0]?.id ?? null);
-    } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : 'Could not load audit history.');
-    }
-  }, [category]);
-  useEffect(() => void load(), [load]);
+  const { data: events, error: queryError, refetch: load } = useQuery({
+    queryKey: ['audit-logs', category],
+    queryFn: () => governanceApi.audit(category),
+  });
+  const error = queryError ? queryError.message : null;
 
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();

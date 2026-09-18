@@ -28,7 +28,7 @@ const NAV_ENTRIES: SidebarNavEntry[] = [
     icon: BarChart2,
     label: 'Analytics',
     children: [
-      { icon: TrendingUp, label: 'Order Analytics', id: 'order-analytics' },
+      { icon: TrendingUp, label: 'Orders', id: 'order-analytics' },
       { icon: BarChart3, label: 'Sales', id: 'sales-overview' },
       { icon: Wallet, label: 'Running Costs', id: 'operational-expenses' },
     ],

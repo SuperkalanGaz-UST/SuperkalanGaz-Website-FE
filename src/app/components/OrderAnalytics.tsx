@@ -41,14 +41,14 @@ export function OrderAnalytics() {
             value="108"
             icon={<XCircle className="w-4 h-4 text-[#ef4444]" />}
             accentColor="#ef4444"
-            trend={{ text: '-1.5% from last month', direction: 'down', positive: true }}
+            trend={{ text: '-1.5% from last month', direction: 'down', positive: false }}
           />
           <KPICard
             title="Avg. Delivery Completion Rate"
             value="96.4%"
             icon={<Truck className="w-4 h-4 text-[#1A6FBF]" />}
             accentColor="#1A6FBF"
-            subtitle="Across all branches"
+            trend={{ text: 'Across all branches', direction: 'up', positive: true }}
           />
         </div>
 

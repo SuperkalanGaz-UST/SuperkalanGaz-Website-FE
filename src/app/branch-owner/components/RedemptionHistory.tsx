@@ -52,16 +52,16 @@ export function RedemptionHistory() {
         <table className="w-full">
           <thead>
             <tr className="border-b border-gray-200">
-              <th className="text-left text-[11px] font-medium text-gray-600 pb-3">
+              <th className="text-left text-xs font-semibold text-gray-700 pb-3">
                 Customer Name
               </th>
-              <th className="text-left text-[11px] font-medium text-gray-600 pb-3">
+              <th className="text-left text-xs font-semibold text-gray-700 pb-3">
                 Redemption Date
               </th>
-              <th className="text-left text-[11px] font-medium text-gray-600 pb-3">
+              <th className="text-left text-xs font-semibold text-gray-700 pb-3">
                 Approved By
               </th>
-              <th className="text-left text-[11px] font-medium text-gray-600 pb-3">
+              <th className="text-left text-xs font-semibold text-gray-700 pb-3">
                 Status
               </th>
             </tr>

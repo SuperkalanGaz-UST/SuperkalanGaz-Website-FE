@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ArrowLeft, CheckCircle2, Eye, EyeOff, Mail } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, Eye, EyeOff, Mail, X } from 'lucide-react';
 import { InputOTP, InputOTPGroup, InputOTPSlot } from './ui/input-otp';
 import {
   Account,
@@ -11,6 +11,7 @@ import {
   updatePassword,
   verifyPasswordResetCode,
 } from '../lib/auth';
+import { apiFetch } from '../lib/api';
 
 interface LoginProps {
   onLogin: (account: Account) => void;
@@ -28,6 +29,7 @@ export function Login({
   onInvitationActivation,
 }: LoginProps) {
   const [username, setUsername] = useState('');
+  const [recoveryUsername, setRecoveryUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [forgotPassword, setForgotPassword] = useState(false);
@@ -60,13 +62,34 @@ export function Login({
     e.preventDefault();
     setError('');
 
-    if (!username.trim()) {
-      setError('Enter your username or email address.');
+    const emailStr = recoveryUsername.trim();
+    if (!emailStr) {
+      setError('Enter your email address.');
+      return;
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(emailStr)) {
+      setError('Please enter a valid email address.');
       return;
     }
 
     setLoading(true);
-    const { error: resetError } = await requestPasswordReset(username);
+
+    try {
+      const response = await apiFetch(`/auth/check-email?email=${encodeURIComponent(emailStr)}`);
+      const data = await response.json();
+      
+      if (!data.exists) {
+        setError('No account found with this email.');
+        setLoading(false);
+        return;
+      }
+    } catch (e) {
+      console.warn('Failed to verify email existence', e);
+    }
+
+    const { error: resetError } = await requestPasswordReset(recoveryUsername);
     setLoading(false);
 
     if (resetError) {
@@ -87,7 +110,7 @@ export function Login({
     }
 
     setLoading(true);
-    const { error: verificationError } = await verifyPasswordResetCode(username, resetCode);
+    const { error: verificationError } = await verifyPasswordResetCode(recoveryUsername, resetCode);
     setLoading(false);
     if (verificationError) setError(verificationError);
     // Success emits PASSWORD_RECOVERY. App keeps that temporary session out of
@@ -98,7 +121,7 @@ export function Login({
     setError('');
     setNotice('');
     setLoading(true);
-    const { error: resetError } = await requestPasswordReset(username);
+    const { error: resetError } = await requestPasswordReset(recoveryUsername);
     setLoading(false);
     if (resetError) {
       setError(resetError);
@@ -163,6 +186,9 @@ export function Login({
     setResetCode('');
     setNotice('');
     setError('');
+    setRecoveryUsername('');
+    setUsername('');
+    setPassword('');
   };
 
   const passwordField = (
@@ -181,7 +207,7 @@ export function Login({
         onChange={(e) => onChange(e.target.value)}
         autoComplete={autoComplete}
         required
-        className="w-full px-4 py-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-[#007BC1] focus:border-transparent outline-none pr-12 text-sm"
+        className="w-full px-4 py-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-[#007BC1] focus:border-transparent outline-none pr-12 text-sm [&::-ms-reveal]:hidden [&::-ms-clear]:hidden"
       />
       <button
         type="button"
@@ -189,7 +215,7 @@ export function Login({
         aria-label={visible ? 'Hide password' : 'Show password'}
         className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
       >
-        {visible ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+        {visible ? <Eye className="w-5 h-5" /> : <EyeOff className="w-5 h-5" />}
       </button>
     </div>
   );
@@ -408,12 +434,15 @@ export function Login({
               <input
                 id="recovery-username"
                 type="text"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
+                value={recoveryUsername}
+                onChange={(e) => {
+                  setRecoveryUsername(e.target.value);
+                  if (error) setError('');
+                }}
                 autoComplete="username"
                 autoFocus
                 required
-                className="w-full px-4 py-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-[#007BC1] focus:border-transparent outline-none text-sm"
+                className="w-full px-4 py-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-[#007BC1] focus:border-transparent outline-none text-sm transition-none"
               />
             </div>
 
@@ -435,9 +464,23 @@ export function Login({
 
     return (
       <>
-        <h1 className="text-3xl font-bold text-gray-900 mb-10">Login</h1>
+        <h1 className="text-3xl font-bold text-gray-900 mb-10">Sign In</h1>
 
         <form onSubmit={handleSubmit}>
+          {error && (
+            <div className="mb-6 flex items-start justify-between p-3 bg-red-50 border border-red-200 rounded-md">
+              <p className="text-sm text-red-600 font-medium" role="alert">{error}</p>
+              <button 
+                type="button" 
+                onClick={() => setError('')}
+                className="text-red-400 hover:text-red-600 mt-0.5"
+                aria-label="Dismiss"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+
           <div className="mb-6">
             <label htmlFor="username" className="block text-sm font-normal text-gray-700 mb-2">
               Username or email
@@ -446,7 +489,10 @@ export function Login({
               id="username"
               type="text"
               value={username}
-              onChange={(e) => setUsername(e.target.value)}
+              onChange={(e) => {
+                setUsername(e.target.value);
+                if (error) setError('');
+              }}
               autoComplete="username"
               required
               className="w-full px-4 py-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-[#007BC1] focus:border-transparent outline-none text-sm"
@@ -460,7 +506,10 @@ export function Login({
             {passwordField(
               'password',
               password,
-              setPassword,
+              (val) => {
+                setPassword(val);
+                if (error) setError('');
+              },
               showPassword,
               () => setShowPassword((visible) => !visible),
               'current-password',
@@ -473,6 +522,9 @@ export function Login({
               onClick={() => {
                 setForgotPassword(true);
                 setError('');
+                setUsername('');
+                setPassword('');
+                setRecoveryUsername('');
               }}
               className="text-sm font-medium text-[#007BC1] hover:text-[#006399] hover:underline"
             >
@@ -480,16 +532,12 @@ export function Login({
             </button>
           </div>
 
-          {error && (
-            <p className="text-sm text-red-600 mb-4" role="alert">{error}</p>
-          )}
-
           <button
             type="submit"
             disabled={loading}
             className="w-full bg-[#007BC1] text-white py-3.5 rounded-md font-medium hover:bg-[#006399] transition-colors text-base disabled:opacity-60 disabled:cursor-not-allowed"
           >
-            {loading ? 'Signing in…' : 'Login'}
+            {loading ? 'Signing in…' : 'Sign In'}
           </button>
         </form>
 

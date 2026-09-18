@@ -1,18 +1,22 @@
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
-import { Flame, Star, ShoppingCart, Truck, AlertTriangle } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { Flame, Star, StarHalf, ShoppingCart, Truck, AlertTriangle, MoreVertical } from 'lucide-react';
 import { KPICard } from '../../../components/KPICard';
 import { Badge } from '../../components/Badge';
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '../../components/Chart';
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from 'recharts';
-import { apiFetch, apiErrorMessage } from '../../../lib/api';
+import { fetchJson } from '../../../lib/api';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '../../../components/ui/dialog';
+import { Carousel, CarouselContent, CarouselItem, type CarouselApi } from '../../../components/ui/carousel';
 import styles from './screen.module.css';
 
 /** Trimmed Service Request row (SRD module, GET /service-requests) — only the
  * fields this dashboard's KPIs and "Recent Orders" table need. */
 interface SRRow {
     id: string;
+    sr_code: string;
     status: 'Pending' | 'Dispatched' | 'En Route' | 'Delivered' | 'Cancelled' | 'Under Review';
     customer_name: string;
     quantity: number;
@@ -47,7 +51,7 @@ const RECENT_ORDERS_LIMIT = 6;
 const STAR_LEVELS = [1, 2, 3, 4, 5] as const;
 
 const chartConfig = {
-    count: { label: 'Reviews', color: 'var(--primary)' }
+    count: { label: 'Reviews', color: '#007BC1' }
 };
 
 const getStatusVariant = (status: SRRow['status']) => {
@@ -64,7 +68,14 @@ const getStatusVariant = (status: SRRow['status']) => {
 const formatTime = (iso: string) => {
     const d = new Date(iso);
     if (Number.isNaN(d.getTime())) return '—';
-    return new Intl.DateTimeFormat('en-PH', { timeZone: 'Asia/Manila', hour: 'numeric', minute: '2-digit' }).format(d);
+    return new Intl.DateTimeFormat('en-US', { 
+        timeZone: 'Asia/Manila', 
+        month: '2-digit', 
+        day: '2-digit', 
+        year: 'numeric',
+        hour: 'numeric', 
+        minute: '2-digit' 
+    }).format(d);
 };
 
 /** Branch operations run on Philippine time regardless of the viewer's own
@@ -72,84 +83,82 @@ const formatTime = (iso: string) => {
 const phDateKey = (iso: string) =>
     new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(new Date(iso));
 
-export default function Dashboard() {
-    const [mounted, setMounted] = useState(false);
-    useEffect(() => { setMounted(true); }, []);
+interface DashboardProps {
+    onViewOrders?: (searchTerm: string) => void;
+}
 
-    const [requests, setRequests] = useState<SRRow[]>([]);
-    const [requestsError, setRequestsError] = useState<string | null>(null);
-    const [requestsLoading, setRequestsLoading] = useState(true);
+const CustomTick = ({ x, y, payload }: any) => {
+    return (
+        <g transform={`translate(${x},${y})`}>
+            <text x={-2} y={0} dy={16} textAnchor="end" fill="#9ca3af" fontSize={12} fontWeight={500}>
+                {payload.value}
+            </text>
+            <g transform="translate(2, 6)">
+                <Star size={12} fill="#f59e0b" color="#f59e0b" />
+            </g>
+        </g>
+    );
+};
 
-    const [ridersMap, setRidersMap] = useState<Record<string, string>>({});
+export default function Dashboard({ onViewOrders }: DashboardProps = {}) {
+    const [carouselApi, setCarouselApi] = useState<CarouselApi>();
+    const [currentSlide, setCurrentSlide] = useState(0);
 
-    const [csat, setCsat] = useState<CsatSummary | null>(null);
-    const [csatError, setCsatError] = useState<string | null>(null);
-    const [csatLoading, setCsatLoading] = useState(true);
+    React.useEffect(() => {
+        if (!carouselApi) return;
+        
+        setCurrentSlide(carouselApi.selectedScrollSnap());
+        
+        carouselApi.on('select', () => {
+            setCurrentSlide(carouselApi.selectedScrollSnap());
+        });
+    }, [carouselApi]);
 
-    const [starCounts, setStarCounts] = useState<Record<number, number> | null>(null);
+    const { data: requestsData, error: requestsQueryError, isLoading: requestsLoading } = useQuery({
+        queryKey: ['service-requests'],
+        queryFn: () => fetchJson<{ serviceRequests: SRRow[] }>('/service-requests'),
+    });
+    const requests = requestsData?.serviceRequests ?? [];
+    const requestsError = requestsQueryError ? requestsQueryError.message : null;
 
-    const [stockLevels, setStockLevels] = useState<StockLevelRow[]>([]);
-    const [stockLevelsError, setStockLevelsError] = useState<string | null>(null);
-    const [stockLevelsLoading, setStockLevelsLoading] = useState(true);
+    const { data: ridersData } = useQuery({
+        queryKey: ['riders'],
+        queryFn: () => fetchJson<{ riders: RiderRow[] }>('/riders'),
+    });
+    const ridersMap = useMemo(() => {
+        const map: Record<string, string> = {};
+        if (ridersData?.riders) {
+            for (const r of ridersData.riders) map[r.id] = r.name;
+        }
+        return map;
+    }, [ridersData]);
 
-    useEffect(() => {
-        if (!mounted) return;
+    const { data: csatData, error: csatQueryError, isLoading: csatLoading } = useQuery({
+        queryKey: ['csat-summary'],
+        queryFn: () => fetchJson<{ summary: CsatSummary }>('/csat/summary'),
+    });
+    const csat = csatData?.summary ?? null;
+    const csatError = csatQueryError ? csatQueryError.message : null;
 
-        apiFetch('/service-requests')
-            .then(async (res) => {
-                const data = await res.json();
-                if (!res.ok) throw new Error(apiErrorMessage(data, 'Failed to load orders'));
-                setRequests(data.serviceRequests as SRRow[]);
-            })
-            .catch((err) => setRequestsError(err instanceof Error ? err.message : 'Failed to load orders'))
-            .finally(() => setRequestsLoading(false));
+    const { data: ratingsData } = useQuery({
+        queryKey: ['csat-ratings-all'],
+        queryFn: () => fetchJson<{ ratings: { stars: number }[] }>('/csat/ratings?resolution=all'),
+    });
+    const starCounts = useMemo(() => {
+        if (!ratingsData?.ratings) return null;
+        const counts: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+        for (const r of ratingsData.ratings) {
+            counts[r.stars] = (counts[r.stars] ?? 0) + 1;
+        }
+        return counts;
+    }, [ratingsData]);
 
-        // Best-effort — a rider name is a nicety on the recent-orders table, not
-        // worth surfacing its own error state if it fails.
-        apiFetch('/riders')
-            .then(async (res) => {
-                const data = await res.json();
-                if (!res.ok) return;
-                const map: Record<string, string> = {};
-                for (const r of data.riders as RiderRow[]) map[r.id] = r.name;
-                setRidersMap(map);
-            })
-            .catch(() => { /* rider names are optional */ });
-
-        // GET /csat/summary is already filtered to the logged-in BM's branch by the JWT.
-        apiFetch('/csat/summary')
-            .then(async (res) => {
-                const data = await res.json();
-                if (!res.ok) throw new Error(apiErrorMessage(data, 'Failed to load CSAT'));
-                setCsat(data.summary as CsatSummary);
-            })
-            .catch((err) => setCsatError(err instanceof Error ? err.message : 'Failed to load CSAT'))
-            .finally(() => setCsatLoading(false));
-
-        // /csat/summary has no star-by-star breakdown (only branch-owner's
-        // reports/summary does) — /csat/ratings?resolution=all does, so the
-        // distribution chart is built client-side from the raw list.
-        apiFetch('/csat/ratings?resolution=all')
-            .then(async (res) => {
-                const data = await res.json();
-                if (!res.ok) return;
-                const counts: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
-                for (const r of data.ratings as { stars: number }[]) {
-                    counts[r.stars] = (counts[r.stars] ?? 0) + 1;
-                }
-                setStarCounts(counts);
-            })
-            .catch(() => { /* chart just shows nothing without this */ });
-
-        apiFetch('/inventory/stock-levels')
-            .then(async (res) => {
-                const data = await res.json();
-                if (!res.ok) throw new Error(apiErrorMessage(data, 'Failed to load stock levels'));
-                setStockLevels(data.stockLevels as StockLevelRow[]);
-            })
-            .catch((err) => setStockLevelsError(err instanceof Error ? err.message : 'Failed to load stock levels'))
-            .finally(() => setStockLevelsLoading(false));
-    }, [mounted]);
+    const { data: stockData, error: stockQueryError, isLoading: stockLevelsLoading } = useQuery({
+        queryKey: ['stock-levels'],
+        queryFn: () => fetchJson<{ stockLevels: StockLevelRow[] }>('/inventory/stock-levels'),
+    });
+    const stockLevels = stockData?.stockLevels ?? [];
+    const stockLevelsError = stockQueryError ? stockQueryError.message : null;
 
     const todayKey = useMemo(() => phDateKey(new Date().toISOString()), []);
 
@@ -165,13 +174,11 @@ export default function Dashboard() {
     const stockAlerts = useMemo(() => stockLevels.filter(isStockAlert), [stockLevels]);
 
     const csatChartData = useMemo(
-        () => STAR_LEVELS.map((stars) => ({ rating: `${stars}★`, count: starCounts?.[stars] ?? 0 })),
+        () => STAR_LEVELS.map((stars) => ({ rating: String(stars), count: starCounts?.[stars] ?? 0 })),
         [starCounts],
     );
 
-    if (!mounted) {
-        return <div style={{ minHeight: '100vh', backgroundColor: 'var(--background)' }} />;
-    }
+
 
     return (
         <>
@@ -193,17 +200,12 @@ export default function Dashboard() {
                     value={stockLevelsLoading ? '…' : String(stockAlerts.length)}
                     icon={<AlertTriangle className="w-4 h-4 text-[#ef4444]" />}
                     accentColor="#ef4444"
-                    alert={stockAlerts.length > 0}
                 />
                 <KPICard
-                    title="Avg CSAT"
+                    title="Average CSAT"
                     value={csatLoading ? '…' : String(csat?.average_stars ?? '—')}
                     icon={<Star className="w-4 h-4 text-[#f59e0b]" />}
                     accentColor="#f59e0b"
-                    // No prior-period figure exists from this endpoint, so show
-                    // the total rating count as context instead of a fabricated
-                    // trend delta.
-                    trend={csat ? { text: `${csat.total_ratings} rating${csat.total_ratings !== 1 ? 's' : ''} total`, direction: 'up', positive: true } : undefined}
                 />
             </div>
 
@@ -217,12 +219,12 @@ export default function Dashboard() {
                             <table className={styles.table}>
                                 <thead>
                                     <tr>
-                                        <th>Order #</th>
+                                        <th>Request ID</th>
                                         <th>Customer</th>
                                         <th>Items</th>
                                         <th>Status</th>
                                         <th>Rider</th>
-                                        <th>Time</th>
+                                        <th>Date & Time</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -236,8 +238,12 @@ export default function Dashboard() {
                                         <tr><td colSpan={6} className={styles.emptyState}>No orders yet.</td></tr>
                                     )}
                                     {!requestsLoading && !requestsError && recentOrders.map(order => (
-                                        <tr key={order.id}>
-                                            <td className={styles.monoText}>#{order.id.slice(0, 8).toUpperCase()}</td>
+                                        <tr 
+                                            key={order.id} 
+                                            className="cursor-pointer"
+                                            onClick={() => onViewOrders?.(order.sr_code)}
+                                        >
+                                            <td className={styles.monoText}>{order.sr_code}</td>
                                             <td className={styles.boldText}>{order.customer_name}</td>
                                             <td>{order.quantity}x {order.cylinder_size}</td>
                                             <td>
@@ -254,50 +260,138 @@ export default function Dashboard() {
                 </div>
 
                 <div className={styles.sideColumn}>
-                    <div className={styles.card}>
-                        <div className={styles.cardHeader}>
-                            <h2 className={styles.cardTitle}>Critical Alerts</h2>
-                        </div>
-                        <div className={styles.alertList}>
-                            {stockLevelsLoading && <div className={styles.emptyState}>Loading…</div>}
-                            {!stockLevelsLoading && stockLevelsError && (
-                                <div className={styles.emptyState}>{stockLevelsError}</div>
-                            )}
-                            {!stockLevelsLoading && !stockLevelsError && stockAlerts.length === 0 && (
-                                <div className={styles.emptyState}>All stock levels are healthy.</div>
-                            )}
-                            {!stockLevelsLoading && !stockLevelsError && stockAlerts.map(alert => (
-                                <div key={alert.product_id} className={styles.alertItem}>
-                                    <Flame className={styles.alertIcon} size={20} />
-                                    <div className={styles.alertText}>
-                                        <strong>{alert.product_name}</strong>
-                                        <br />
-                                        {alert.current_qty} remaining (threshold: {alert.threshold_qty})
+                    <Carousel setApi={setCarouselApi} className="w-full">
+                        <CarouselContent>
+                            <CarouselItem>
+                                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 flex flex-col">
+                                    <Dialog>
+                                        <div className={`${styles.cardHeader} flex items-center justify-between`}>
+                                            <h2 className={styles.cardTitle}>Critical Alerts</h2>
+                                            <DialogTrigger asChild>
+                                                <button className="text-[11px] text-gray-500 hover:text-gray-700 font-medium cursor-pointer">See all</button>
+                                            </DialogTrigger>
+                                        </div>
+                                        <div className="flex flex-col gap-2 p-4">
+                                            {stockLevelsLoading && <div className={styles.emptyState}>Loading…</div>}
+                                            {!stockLevelsLoading && stockLevelsError && (
+                                                <div className={styles.emptyState}>{stockLevelsError}</div>
+                                            )}
+                                            {!stockLevelsLoading && !stockLevelsError && stockAlerts.length === 0 && (
+                                                <div className={styles.emptyState}>All stock levels are healthy.</div>
+                                            )}
+                                            {!stockLevelsLoading && !stockLevelsError && stockAlerts.slice(0, 3).map(alert => (
+                                                <div key={alert.product_id} className="flex items-center justify-between p-3 rounded-xl bg-red-50 border border-red-100 shadow-sm">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center shadow-sm">
+                                                            <AlertTriangle className="w-4 h-4 text-[#dc2626]" />
+                                                        </div>
+                                                        <div className="flex flex-col">
+                                                            <span className="text-sm font-semibold text-gray-900 leading-none">{alert.product_name}</span>
+                                                            <span className="text-[11px] text-gray-500 mt-1">{alert.current_qty} remaining (Threshold: {alert.threshold_qty})</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                        
+                                        <DialogContent className="max-w-md" aria-describedby={undefined}>
+                                            <DialogHeader className="border-b border-gray-100 pb-3">
+                                                <DialogTitle className={styles.cardTitle}>All Critical Alerts</DialogTitle>
+                                            </DialogHeader>
+                                            <div className="flex flex-col gap-3 max-h-[60vh] overflow-y-auto mt-1">
+                                                {stockAlerts.map(alert => (
+                                                    <div key={alert.product_id} className="flex items-center justify-between p-3 rounded-xl bg-red-50 border border-red-100 shadow-sm">
+                                                        <div className="flex items-center gap-3">
+                                                            <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center shadow-sm">
+                                                                <AlertTriangle className="w-4 h-4 text-[#dc2626]" />
+                                                            </div>
+                                                            <div className="flex flex-col">
+                                                                <span className="text-sm font-semibold text-gray-900 leading-none">{alert.product_name}</span>
+                                                                <span className="text-[11px] text-gray-500 mt-1">{alert.current_qty} remaining (Threshold: {alert.threshold_qty})</span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                                {stockAlerts.length === 0 && (
+                                                    <div className="text-center text-gray-500 py-8">No alerts found.</div>
+                                                )}
+                                            </div>
+                                        </DialogContent>
+                                    </Dialog>
+                                </div>
+                            </CarouselItem>
+
+                            <CarouselItem>
+                                <div className={styles.card}>
+                                    <div className={styles.cardHeader}>
+                                        <h2 className={styles.cardTitle}>CSAT Overview</h2>
+                                    </div>
+                                    <div className="p-6 pt-2">
+                                        {csatError ? (
+                                            <div className={styles.emptyState}>{csatError}</div>
+                                        ) : csatLoading ? (
+                                            <div className={styles.emptyState}>Loading…</div>
+                                        ) : (
+                                            <div className="flex flex-col gap-6">
+                                                <div className="flex items-center justify-center gap-4">
+                                                    <div className="text-6xl font-bold text-[#f59e0b] tracking-tighter">
+                                                        {csat?.average_stars ? csat.average_stars.toFixed(1) : '0.0'}
+                                                    </div>
+                                                    <div className="flex flex-col gap-1 mt-1">
+                                                        <div className="flex gap-1">
+                                                            {[1, 2, 3, 4, 5].map((star) => {
+                                                                const rating = csat?.average_stars ?? 0;
+                                                                if (rating >= star) {
+                                                                    return <Star key={star} size={20} className="text-[#f59e0b] fill-[#f59e0b]" />;
+                                                                } else if (rating >= star - 0.5) {
+                                                                    return <StarHalf key={star} size={20} className="text-[#f59e0b] fill-[#f59e0b]" />;
+                                                                } else {
+                                                                    return <Star key={star} size={20} className="text-gray-200 fill-gray-200" />;
+                                                                }
+                                                            })}
+                                                        </div>
+                                                        <div className="text-sm text-gray-500 font-medium ml-1">
+                                                            {csat?.total_ratings ?? 0} reviews
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                <div className="flex flex-col gap-3">
+                                                    {[5, 4, 3, 2, 1].map((star) => {
+                                                        const count = starCounts?.[star] ?? 0;
+                                                        const total = csat?.total_ratings || 1;
+                                                        const percentage = csat?.total_ratings ? Math.round((count / total) * 100) : 0;
+                                                        return (
+                                                            <div key={star} className="flex items-center gap-3">
+                                                                <span className="w-3 text-sm font-medium text-gray-500 text-center">{star}</span>
+                                                                <div className="flex-1 h-2.5 bg-gray-100 rounded-full overflow-hidden">
+                                                                    <div 
+                                                                        className="h-full bg-[#f59e0b] rounded-full" 
+                                                                        style={{ width: `${percentage}%` }}
+                                                                    />
+                                                                </div>
+                                                                <span className="w-8 text-sm text-gray-500 text-right">{percentage}%</span>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
-                            ))}
-                        </div>
-                    </div>
+                            </CarouselItem>
+                        </CarouselContent>
+                    </Carousel>
 
-                    <div className={styles.card}>
-                        <div className={styles.cardHeader}>
-                            <h2 className={styles.cardTitle}>CSAT Overview</h2>
-                        </div>
-                        <div className={styles.chartWrapper}>
-                            {csatError ? (
-                                <div className={styles.emptyState}>{csatError}</div>
-                            ) : (
-                                <ChartContainer config={chartConfig}>
-                                    <BarChart data={csatChartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                                        <XAxis dataKey="rating" axisLine={false} tickLine={false} tickMargin={10} />
-                                        <YAxis axisLine={false} tickLine={false} allowDecimals={false} />
-                                        <ChartTooltip content={<ChartTooltipContent />} cursor={{ fill: 'var(--muted)', opacity: 0.4 }} />
-                                        <Bar dataKey="count" fill="var(--color-count)" radius={[4, 4, 0, 0]} maxBarSize={40} />
-                                    </BarChart>
-                                </ChartContainer>
-                            )}
-                        </div>
+                    <div className="flex justify-center items-center gap-2 -mt-1">
+                        {[0, 1].map((index) => (
+                            <button
+                                key={index}
+                                onClick={() => carouselApi?.scrollTo(index)}
+                                className={`h-2 rounded-full transition-all duration-300 ${currentSlide === index ? 'bg-gray-800 w-4' : 'bg-gray-300 w-2 hover:bg-gray-400'}`}
+                                aria-label={`Go to slide ${index + 1}`}
+                            />
+                        ))}
                     </div>
                 </div>
             </div>

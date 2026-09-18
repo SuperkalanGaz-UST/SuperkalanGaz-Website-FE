@@ -61,3 +61,53 @@
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
+
+/* Thin global scrollbars */
+* {
+  scrollbar-width: thin;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.3);
+}
+
+::-webkit-scrollbar-button,
+::-webkit-scrollbar-button:single-button,
+::-webkit-scrollbar-button:single-button:vertical:decrement,
+::-webkit-scrollbar-button:single-button:vertical:increment {
+  width: 0 !important;
+  height: 0 !important;
+  display: none !important;
+  -webkit-appearance: none !important;
+  appearance: none !important;
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Hide arrow up and down (spin buttons) in number inputs */
+input::-webkit-outer-spin-button,
+input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  appearance: none;
+  margin: 0;
+}
+input[type=number] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
