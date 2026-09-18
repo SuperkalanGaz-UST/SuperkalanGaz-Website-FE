@@ -21,6 +21,7 @@ type BranchDataShape = {
     loyalty?: KPITrend;
   };
   dailyOrderVolume: { day: string; orders: number }[];
+  hourlyOrderVolume: { hour: string; orders: number }[];
   csatTrendData: { month: string; score: number }[];
   earningsToday: { hour: string; earnings: number }[];
   earningsThisMonth: { week: string; earnings: number }[];
@@ -51,6 +52,7 @@ export function useBranchData(): BranchDataShape {
     stockLevel: 0,
     trends: {},
     dailyOrderVolume: [],
+    hourlyOrderVolume: [],
     csatTrendData: [],
     earningsToday: [],
     earningsThisMonth: [],
@@ -112,6 +114,7 @@ export function useBranchData(): BranchDataShape {
           earningsToday: metrics?.earningsToday ?? [],
           earningsThisMonth: metrics?.earningsThisMonth ?? [],
           dailyOrderVolume: metrics?.dailyOrderVolume ?? [],
+          hourlyOrderVolume: metrics?.hourlyOrderVolume ?? [],
           completionRate: metrics ? `${Number(metrics.deliveryCompletionRate ?? 0).toFixed(1)}%` : '—',
           csatScore: average === null || average === undefined ? '—' : average.toFixed(1),
           trends,
