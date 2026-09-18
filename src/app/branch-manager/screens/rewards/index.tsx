@@ -456,10 +456,7 @@ export default function Rewards() {
             const found = data.redemption as RedemptionRow;
             // Switch to "all" so the row is visible, then prepend the found row.
             setActiveTab('all');
-            setRedemptions((prev) => {
-                const without = prev.filter((r) => r.id !== found.id);
-                return [found, ...without];
-            });
+            void queryClient.invalidateQueries({ queryKey: ['redemptions'] });
             toast.success(`Found redemption for ${found.customer_name ?? 'customer'} — status: ${found.status}`);
             setCodeSearch('');
         } catch (err) {

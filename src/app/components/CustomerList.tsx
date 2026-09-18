@@ -128,7 +128,6 @@ export function CustomerList({ onViewCustomer }: { onViewCustomer: () => void })
           <KPICard
             title="Avg. Rating"
             value={(allCustomers.reduce((s, c) => s + c.avgRating, 0) / allCustomers.length).toFixed(1)}
-            subtitle="out of 5"
             icon={<Star className="w-4 h-4 text-[#a855f7]" />}
             accentColor="#a855f7"
           />

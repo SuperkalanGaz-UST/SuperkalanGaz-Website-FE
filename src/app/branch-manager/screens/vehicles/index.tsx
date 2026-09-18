@@ -368,7 +368,7 @@ export default function VehicleManagementPage() {
             if (!res.ok) throw new Error(apiErrorMessage(data, 'Failed to retry GPS provisioning'));
 
             const updated = data.vehicle as VehicleRow;
-            setVehicles(prev => prev.map(v => v.id === updated.id ? updated : v));
+            void queryClient.invalidateQueries({ queryKey: ['vehicles'] });
             if (updated.gps_provisioning_status === 'provisioned') {
                 toast.success(`${updated.plate_number} GPS device is now ready.`);
             } else {

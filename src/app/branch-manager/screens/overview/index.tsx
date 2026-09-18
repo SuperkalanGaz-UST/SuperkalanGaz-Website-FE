@@ -2,7 +2,7 @@
 
 import React, { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Flame, Star, ShoppingCart, Truck, AlertTriangle, MoreVertical } from 'lucide-react';
+import { Flame, Star, StarHalf, ShoppingCart, Truck, AlertTriangle, MoreVertical } from 'lucide-react';
 import { KPICard } from '../../../components/KPICard';
 import { Badge } from '../../components/Badge';
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '../../components/Chart';
@@ -280,9 +280,9 @@ export default function Dashboard({ onViewOrders }: DashboardProps = {}) {
                                                 <div className={styles.emptyState}>All stock levels are healthy.</div>
                                             )}
                                             {!stockLevelsLoading && !stockLevelsError && stockAlerts.slice(0, 3).map(alert => (
-                                                <div key={alert.product_id} className="flex items-center justify-between p-3 rounded-xl bg-white border border-gray-100 shadow-sm">
+                                                <div key={alert.product_id} className="flex items-center justify-between p-3 rounded-xl bg-red-50 border border-red-100 shadow-sm">
                                                     <div className="flex items-center gap-3">
-                                                        <div className="w-8 h-8 rounded-full bg-red-50 flex items-center justify-center shadow-sm">
+                                                        <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center shadow-sm">
                                                             <AlertTriangle className="w-4 h-4 text-[#dc2626]" />
                                                         </div>
                                                         <div className="flex flex-col">
@@ -300,9 +300,9 @@ export default function Dashboard({ onViewOrders }: DashboardProps = {}) {
                                             </DialogHeader>
                                             <div className="flex flex-col gap-3 max-h-[60vh] overflow-y-auto mt-1">
                                                 {stockAlerts.map(alert => (
-                                                    <div key={alert.product_id} className="flex items-center justify-between p-3 rounded-xl bg-white border border-gray-100 shadow-sm">
+                                                    <div key={alert.product_id} className="flex items-center justify-between p-3 rounded-xl bg-red-50 border border-red-100 shadow-sm">
                                                         <div className="flex items-center gap-3">
-                                                            <div className="w-8 h-8 rounded-full bg-red-50 flex items-center justify-center shadow-sm">
+                                                            <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center shadow-sm">
                                                                 <AlertTriangle className="w-4 h-4 text-[#dc2626]" />
                                                             </div>
                                                             <div className="flex flex-col">
@@ -326,19 +326,56 @@ export default function Dashboard({ onViewOrders }: DashboardProps = {}) {
                                     <div className={styles.cardHeader}>
                                         <h2 className={styles.cardTitle}>CSAT Overview</h2>
                                     </div>
-                                    <div className={styles.chartWrapper}>
+                                    <div className="p-6 pt-2">
                                         {csatError ? (
                                             <div className={styles.emptyState}>{csatError}</div>
+                                        ) : csatLoading ? (
+                                            <div className={styles.emptyState}>Loading…</div>
                                         ) : (
-                                            <ChartContainer config={chartConfig}>
-                                                <BarChart data={csatChartData} margin={{ top: 20, right: 10, left: -20, bottom: 5 }}>
-                                                    <CartesianGrid stroke="#f3f4f6" strokeDasharray="3 3" vertical={false} />
-                                                    <XAxis dataKey="rating" axisLine={false} tickLine={false} tickMargin={10} tick={<CustomTick />} />
-                                                    <YAxis axisLine={false} tickLine={false} allowDecimals={false} tickMargin={10} tick={{ fill: '#9ca3af', fontSize: 12 }} />
-                                                    <ChartTooltip content={<ChartTooltipContent />} cursor={{ fill: 'var(--muted)', opacity: 0.4 }} />
-                                                    <Bar dataKey="count" fill="var(--color-count)" radius={[4, 4, 0, 0]} maxBarSize={40} />
-                                                </BarChart>
-                                            </ChartContainer>
+                                            <div className="flex flex-col gap-6">
+                                                <div className="flex items-center justify-center gap-4">
+                                                    <div className="text-6xl font-bold text-[#f59e0b] tracking-tighter">
+                                                        {csat?.average_stars ? csat.average_stars.toFixed(1) : '0.0'}
+                                                    </div>
+                                                    <div className="flex flex-col gap-1 mt-1">
+                                                        <div className="flex gap-1">
+                                                            {[1, 2, 3, 4, 5].map((star) => {
+                                                                const rating = csat?.average_stars ?? 0;
+                                                                if (rating >= star) {
+                                                                    return <Star key={star} size={20} className="text-[#f59e0b] fill-[#f59e0b]" />;
+                                                                } else if (rating >= star - 0.5) {
+                                                                    return <StarHalf key={star} size={20} className="text-[#f59e0b] fill-[#f59e0b]" />;
+                                                                } else {
+                                                                    return <Star key={star} size={20} className="text-gray-200 fill-gray-200" />;
+                                                                }
+                                                            })}
+                                                        </div>
+                                                        <div className="text-sm text-gray-500 font-medium ml-1">
+                                                            {csat?.total_ratings ?? 0} reviews
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                <div className="flex flex-col gap-3">
+                                                    {[5, 4, 3, 2, 1].map((star) => {
+                                                        const count = starCounts?.[star] ?? 0;
+                                                        const total = csat?.total_ratings || 1;
+                                                        const percentage = csat?.total_ratings ? Math.round((count / total) * 100) : 0;
+                                                        return (
+                                                            <div key={star} className="flex items-center gap-3">
+                                                                <span className="w-3 text-sm font-medium text-gray-500 text-center">{star}</span>
+                                                                <div className="flex-1 h-2.5 bg-gray-100 rounded-full overflow-hidden">
+                                                                    <div 
+                                                                        className="h-full bg-[#f59e0b] rounded-full" 
+                                                                        style={{ width: `${percentage}%` }}
+                                                                    />
+                                                                </div>
+                                                                <span className="w-8 text-sm text-gray-500 text-right">{percentage}%</span>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
                                         )}
                                     </div>
                                 </div>
