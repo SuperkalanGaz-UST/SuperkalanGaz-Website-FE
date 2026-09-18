@@ -24,6 +24,7 @@ type BranchDataShape = {
   hourlyOrderVolume: { hour: string; orders: number }[];
   csatTrendData: { month: string; score: number }[];
   earningsToday: { hour: string; earnings: number }[];
+  earningsThisWeek: { day: string; earnings: number }[];
   earningsThisMonth: { week: string; earnings: number }[];
 };
 
@@ -55,6 +56,7 @@ export function useBranchData(): BranchDataShape {
     hourlyOrderVolume: [],
     csatTrendData: [],
     earningsToday: [],
+    earningsThisWeek: [],
     earningsThisMonth: [],
   });
 
@@ -112,6 +114,7 @@ export function useBranchData(): BranchDataShape {
           slaBreaches: metrics ? String(metrics.slaBreaches) : '—',
           loyaltyRedemptions: metrics ? String(metrics.loyaltyClaimsThisMonth) : '—',
           earningsToday: metrics?.earningsToday ?? [],
+          earningsThisWeek: metrics?.earningsThisWeek ?? [],
           earningsThisMonth: metrics?.earningsThisMonth ?? [],
           dailyOrderVolume: metrics?.dailyOrderVolume ?? [],
           hourlyOrderVolume: metrics?.hourlyOrderVolume ?? [],

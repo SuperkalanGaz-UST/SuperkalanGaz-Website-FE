@@ -5,9 +5,6 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Area,
   AreaChart,
-  Bar,
-  BarChart,
-  Cell,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -21,7 +18,13 @@ import {
 } from '../../lib/expenses';
 import { Header } from './Header';
 import { KPICard } from './KPICard';
+import { Select } from './Select';
 import { Wallet, Fuel, Wrench, Zap, Package, Building2 } from 'lucide-react';
+
+const TREND_CATEGORY_OPTIONS = [
+  { value: 'all', label: 'All Categories' },
+  ...EXPENSE_CATEGORIES.map((category) => ({ value: category, label: category })),
+];
 
 const CATEGORY_COLORS: Record<ExpenseCategory, string> = {
   'Gasoline, Fuel & Oil': '#007BC1',
@@ -98,7 +101,7 @@ export function OperationalExpenses() {
     staleTime: 30_000,
   });
 
-  const months = monthsData ?? [];
+  const months = useMemo(() => monthsData ?? [], [monthsData]);
   const error = queryError ? 
     (queryError.message === 'Caller has no active branch' 
       ? 'No active branch is assigned to this account. Contact your Franchise Administrator.' 
@@ -119,10 +122,73 @@ export function OperationalExpenses() {
     [currentExpenses],
   );
 
-  const trendData = months.map((month) => ({
-    month: month.label,
-    amount: month.expenses.reduce((sum, expense) => sum + Number(expense.amount), 0),
-  }));
+  const [trendGranularity, setTrendGranularity] = useState<'month' | 'week' | 'day'>('month');
+  const [trendCategory, setTrendCategory] = useState<'all' | ExpenseCategory>('all');
+
+  const monthlyTrendData = useMemo(
+    () => months.map((month) => ({
+      label: month.label,
+      amount: month.expenses
+        .filter((expense) => trendCategory === 'all' || expense.category === trendCategory)
+        .reduce((sum, expense) => sum + Number(expense.amount), 0),
+    })),
+    [months, trendCategory],
+  );
+
+  // Weekly (ISO, Monday-start) buckets across the full 6-month window already
+  // in memory — no new fetch, same re-derive-from-what-we-have approach as Day.
+  const weeklyTrendData = useMemo(() => {
+    const byWeek = new Map<string, { weekStart: Date; amount: number }>();
+    for (const month of months) {
+      for (const expense of month.expenses) {
+        if (trendCategory !== 'all' && expense.category !== trendCategory) continue;
+        const [year, monthNum, day] = expense.expense_date.split('-').map(Number);
+        const date = new Date(year, monthNum - 1, day);
+        const isoWeekday = date.getDay() === 0 ? 7 : date.getDay();
+        const weekStart = new Date(date);
+        weekStart.setDate(date.getDate() - (isoWeekday - 1));
+        const key = `${weekStart.getFullYear()}-${String(weekStart.getMonth() + 1).padStart(2, '0')}-${String(weekStart.getDate()).padStart(2, '0')}`;
+        const existing = byWeek.get(key) ?? { weekStart, amount: 0 };
+        existing.amount += Number(expense.amount);
+        byWeek.set(key, existing);
+      }
+    }
+    return [...byWeek.values()]
+      .sort((a, b) => a.weekStart.getTime() - b.weekStart.getTime())
+      .map((entry) => ({
+        label: new Intl.DateTimeFormat('en-PH', { month: 'short', day: 'numeric' }).format(entry.weekStart),
+        amount: entry.amount,
+      }));
+  }, [months, trendCategory]);
+
+  // "Zoomed in" view: always the current (latest fetched) month's day-by-day
+  // totals — mirrors the Order Volume chart's Hour view always meaning today.
+  const dailyTrendData = useMemo(() => {
+    const currentMonth = months.at(-1);
+    if (!currentMonth) return [];
+    const [year, month] = currentMonth.key.split('-').map(Number);
+    const daysInMonth = new Date(year, month, 0).getDate();
+    const byDay = new Map<string, number>();
+    for (const expense of currentMonth.expenses) {
+      if (trendCategory !== 'all' && expense.category !== trendCategory) continue;
+      byDay.set(expense.expense_date, (byDay.get(expense.expense_date) ?? 0) + Number(expense.amount));
+    }
+    return Array.from({ length: daysInMonth }, (_, index) => {
+      const day = index + 1;
+      const dateKey = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+      return { label: String(day), amount: byDay.get(dateKey) ?? 0 };
+    });
+  }, [months, trendCategory]);
+
+  const trendData = trendGranularity === 'month' ? monthlyTrendData
+    : trendGranularity === 'week' ? weeklyTrendData
+    : dailyTrendData;
+  const trendSubtitle = [
+    trendGranularity === 'month' ? 'Last six months'
+      : trendGranularity === 'week' ? 'Weekly totals over the last six months'
+      : `Daily breakdown for ${months.at(-1)?.label ?? 'this month'}`,
+    trendCategory === 'all' ? null : trendCategory,
+  ].filter(Boolean).join(' — ');
 
   const categoryTotal = (category: ExpenseCategory) =>
     categoryData.find((entry) => entry.category === category)?.amount ?? 0;
@@ -198,10 +264,32 @@ export function OperationalExpenses() {
 
         {!error && (
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-            <div className="mb-5 flex items-center justify-between">
+            <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
               <div>
                 <h3 className="font-semibold text-gray-900">Total Expense Trend</h3>
-                <p className="mt-1 text-xs text-gray-500">Last six months of recorded branch expenses</p>
+                <p className="mt-1 text-xs text-gray-500">{trendSubtitle}</p>
+              </div>
+              <div className="flex flex-wrap items-center gap-3">
+                <Select
+                  value={trendCategory}
+                  onChange={(value) => setTrendCategory(value as 'all' | ExpenseCategory)}
+                  options={TREND_CATEGORY_OPTIONS}
+                  className="w-48"
+                />
+                <div className="flex rounded-lg border border-gray-200 p-0.5 text-sm">
+                  {(['day', 'week', 'month'] as const).map((granularity) => (
+                    <button
+                      key={granularity}
+                      type="button"
+                      onClick={() => setTrendGranularity(granularity)}
+                      className={`px-3 py-1 rounded-md capitalize transition-colors ${
+                        trendGranularity === granularity ? 'bg-[#007BC1] text-white' : 'text-gray-600 hover:text-gray-900'
+                      }`}
+                    >
+                      {granularity}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
             <ResponsiveContainer width="100%" height={280}>
@@ -212,7 +300,7 @@ export function OperationalExpenses() {
                     <stop offset="100%" stopColor="#007BC1" stopOpacity={0.02} />
                   </linearGradient>
                 </defs>
-                <XAxis dataKey="month" {...axisProps} style={{ fontSize: '11px' }} tick={{ dy: 4 }} />
+                <XAxis dataKey="label" {...axisProps} style={{ fontSize: '11px' }} tick={{ dy: 4 }} />
                 <YAxis {...axisProps} style={{ fontSize: '11px' }} tickFormatter={(value) => `₱${Math.round(Number(value) / 1000)}k`} width={52} />
                 <Tooltip formatter={(value) => [formatPeso(Number(value)), 'Expenses']} />
                 <Area
@@ -226,42 +314,6 @@ export function OperationalExpenses() {
                 />
               </AreaChart>
             </ResponsiveContainer>
-          </div>
-        )}
-
-        {!error && (
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-              <h3 className="mb-4 font-semibold text-gray-900">Expenses by Category</h3>
-              <ResponsiveContainer width="100%" height={320}>
-                <BarChart data={categoryData} margin={{ top: 4, right: 4, left: 0, bottom: 45 }}>
-                  <XAxis dataKey="category" interval={0} angle={-30} textAnchor="end" height={75} tick={{ fontSize: 10, fill: '#64748b' }} {...axisProps} />
-                  <YAxis {...axisProps} style={{ fontSize: '11px' }} tickFormatter={(value) => `₱${Math.round(Number(value) / 1000)}k`} width={52} />
-                  <Tooltip formatter={(value) => [formatPeso(Number(value)), 'Amount']} cursor={{ fill: 'rgba(0, 123, 193, 0.06)' }} />
-                  <Bar dataKey="amount" radius={[4, 4, 0, 0]}>
-                    {categoryData.map((entry) => (
-                      <Cell key={entry.category} fill={entry.color} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-              <h3 className="mb-4 font-semibold text-gray-900">Expense Distribution</h3>
-              <ResponsiveContainer width="100%" height={320}>
-                <BarChart data={categoryData} layout="vertical" margin={{ top: 0, right: 20, left: 42, bottom: 0 }}>
-                  <XAxis type="number" hide />
-                  <YAxis dataKey="category" type="category" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#4b5563' }} width={145} />
-                  <Tooltip formatter={(value) => [formatPeso(Number(value)), 'Amount']} cursor={{ fill: 'rgba(0, 123, 193, 0.06)' }} />
-                  <Bar dataKey="amount" radius={[0, 4, 4, 0]} barSize={16}>
-                    {categoryData.map((entry) => (
-                      <Cell key={entry.category} fill={entry.color} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
           </div>
         )}
 
