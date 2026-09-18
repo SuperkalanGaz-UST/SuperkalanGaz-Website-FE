@@ -45,7 +45,7 @@ export function OrderAnalytics() {
         </div>
 
         <div className="grid grid-cols-1 gap-6 mb-8">
-          <DailyOrderVolumeChart data={branchData.dailyOrderVolume} />
+          <DailyOrderVolumeChart dailyData={branchData.dailyOrderVolume} hourlyData={branchData.hourlyOrderVolume} />
         </div>
 
         <DeliveryCompletionTable
