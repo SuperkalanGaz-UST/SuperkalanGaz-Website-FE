@@ -36,18 +36,6 @@
 
 
 
-.chartGrid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 1.5rem;
-}
-
-@media (max-width: 900px) {
-    .chartGrid {
-        grid-template-columns: 1fr;
-    }
-}
-
 .card {
     background-color: var(--card);
     border: 1px solid var(--border);
@@ -74,6 +62,19 @@
 
 .chartWrapper {
     height: 260px;
+}
+
+.chartWrapperLarge {
+    height: 380px;
+}
+
+.cardHeaderFlex {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+    flex-wrap: wrap;
+    gap: 0.75rem;
 }
 
 .bottomGrid {

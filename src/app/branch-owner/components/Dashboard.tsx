@@ -53,6 +53,12 @@ export function Dashboard() {
             value={branchData.ordersToday}
             icon={<ShoppingCart className="w-4 h-4 text-[#007BC1]" />}
             trend={branchData.trends.orders}
+            tooltip={(
+              <div className="flex flex-col gap-1">
+                <span>{branchData.totalOrders} total orders this month</span>
+                <span>{branchData.ordersLastMonth} orders last month</span>
+              </div>
+            )}
           />
           <KPICard
             title="Delivery Completion Rate"
@@ -60,6 +66,13 @@ export function Dashboard() {
             icon={<Truck className="w-4 h-4 text-[#16A34A]" />}
             accentColor="#16A34A"
             trend={branchData.trends.completion}
+            tooltip={(
+              <div className="flex flex-col gap-1">
+                <span>{branchData.completedDeliveries} completed deliveries</span>
+                <span>{branchData.cancelledFailedDeliveries} cancelled/failed</span>
+                <span>{branchData.slaBreaches} SLA breaches</span>
+              </div>
+            )}
           />
           <KPICard
             title="Average CSAT Score"
@@ -67,6 +80,9 @@ export function Dashboard() {
             icon={<Star className="w-4 h-4 text-[#f59e0b]" />}
             accentColor="#f59e0b"
             trend={undefined}
+            tooltip={branchData.trends.csat
+              ? <span>{branchData.trends.csat.text}</span>
+              : <span>No ratings yet this month.</span>}
           />
           <KPICard
             title="Loyalty Claims This Month"
@@ -74,6 +90,7 @@ export function Dashboard() {
             icon={<Gift className="w-4 h-4 text-[#9333EA]" />}
             accentColor="#9333EA"
             trend={branchData.trends.loyalty}
+            tooltip={<span>Rewards redeemed by repeat customers this month.</span>}
           />
         </div>
 

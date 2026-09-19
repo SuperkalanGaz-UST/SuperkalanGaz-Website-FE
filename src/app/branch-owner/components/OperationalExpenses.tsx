@@ -197,6 +197,9 @@ export function OperationalExpenses() {
   const recentExpenses = currentExpenses.slice(0, 6);
   const placeholder = loading ? '—' : '';
 
+  const pctOfTotal = (amount: number) =>
+    currentTotal > 0 ? `${((amount / currentTotal) * 100).toFixed(1)}% of this month's total` : 'No expenses recorded yet';
+
   return (
     <div className="flex-1 overflow-y-auto">
       <Header title="Operational Expenses" />
@@ -223,6 +226,7 @@ export function OperationalExpenses() {
               icon={<Wallet className="w-4 h-4 text-[#007BC1]" />}
               accentColor="#007BC1"
               titleClassName="min-h-[40px]"
+              tooltip={loading ? undefined : <span>{currentExpenses.length} transactions recorded this month</span>}
             />
             <KPICard
               title="Fuel & Oil"
@@ -230,6 +234,7 @@ export function OperationalExpenses() {
               icon={<Fuel className="w-4 h-4 text-[#007BC1]" />}
               accentColor="#007BC1"
               titleClassName="min-h-[40px]"
+              tooltip={loading ? undefined : <span>{pctOfTotal(categoryTotal('Gasoline, Fuel & Oil'))}</span>}
             />
             <KPICard
               title="Repairs"
@@ -237,6 +242,7 @@ export function OperationalExpenses() {
               icon={<Wrench className="w-4 h-4 text-[#007BC1]" />}
               accentColor="#007BC1"
               titleClassName="min-h-[40px]"
+              tooltip={loading ? undefined : <span>{pctOfTotal(categoryTotal('Repairs & Maintenance'))}</span>}
             />
             <KPICard
               title="Utilities & Comms"
@@ -244,6 +250,7 @@ export function OperationalExpenses() {
               icon={<Zap className="w-4 h-4 text-[#2E86C1]" />}
               accentColor="#2E86C1"
               titleClassName="min-h-[40px]"
+              tooltip={loading ? undefined : <span>{pctOfTotal(utilitiesAndCommunication)}</span>}
             />
             <KPICard
               title="Branch Supplies"
@@ -251,6 +258,7 @@ export function OperationalExpenses() {
               icon={<Package className="w-4 h-4 text-[#2E86C1]" />}
               accentColor="#2E86C1"
               titleClassName="min-h-[40px]"
+              tooltip={loading ? undefined : <span>{pctOfTotal(categoryTotal('Branch Supplies'))}</span>}
             />
             <KPICard
               title="Facility Costs"
@@ -258,6 +266,7 @@ export function OperationalExpenses() {
               icon={<Building2 className="w-4 h-4 text-[#2E86C1]" />}
               accentColor="#2E86C1"
               titleClassName="min-h-[40px]"
+              tooltip={loading ? undefined : <span>{pctOfTotal(categoryTotal('Facility Costs'))}</span>}
             />
           </div>
         )}

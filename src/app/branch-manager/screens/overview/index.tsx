@@ -10,6 +10,7 @@ import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from 'recharts';
 import { fetchJson } from '../../../lib/api';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '../../../components/ui/dialog';
 import { Carousel, CarouselContent, CarouselItem, type CarouselApi } from '../../../components/ui/carousel';
+import { Tooltip, TooltipContent, TooltipTrigger } from '../../../components/ui/tooltip';
 import styles from './screen.module.css';
 
 /** Trimmed Service Request row (SRD module, GET /service-requests) — only the
@@ -118,7 +119,7 @@ export default function Dashboard({ onViewOrders }: DashboardProps = {}) {
         queryKey: ['service-requests'],
         queryFn: () => fetchJson<{ serviceRequests: SRRow[] }>('/service-requests'),
     });
-    const requests = requestsData?.serviceRequests ?? [];
+    const requests = useMemo(() => requestsData?.serviceRequests ?? [], [requestsData]);
     const requestsError = requestsQueryError ? requestsQueryError.message : null;
 
     const { data: ridersData } = useQuery({
@@ -157,7 +158,7 @@ export default function Dashboard({ onViewOrders }: DashboardProps = {}) {
         queryKey: ['stock-levels'],
         queryFn: () => fetchJson<{ stockLevels: StockLevelRow[] }>('/inventory/stock-levels'),
     });
-    const stockLevels = stockData?.stockLevels ?? [];
+    const stockLevels = useMemo(() => stockData?.stockLevels ?? [], [stockData]);
     const stockLevelsError = stockQueryError ? stockQueryError.message : null;
 
     const todayKey = useMemo(() => phDateKey(new Date().toISOString()), []);
@@ -172,6 +173,17 @@ export default function Dashboard({ onViewOrders }: DashboardProps = {}) {
     );
     const recentOrders = useMemo(() => requests.slice(0, RECENT_ORDERS_LIMIT), [requests]);
     const stockAlerts = useMemo(() => stockLevels.filter(isStockAlert), [stockLevels]);
+
+    const todaysStatusCounts = useMemo(() => {
+        const counts: Record<string, number> = {};
+        for (const r of requests) {
+            if (phDateKey(r.requested_at) !== todayKey) continue;
+            counts[r.status] = (counts[r.status] ?? 0) + 1;
+        }
+        return counts;
+    }, [requests, todayKey]);
+    const dispatchedCount = useMemo(() => requests.filter((r) => r.status === 'Dispatched').length, [requests]);
+    const enRouteCount = useMemo(() => requests.filter((r) => r.status === 'En Route').length, [requests]);
 
     const csatChartData = useMemo(
         () => STAR_LEVELS.map((stars) => ({ rating: String(stars), count: starCounts?.[stars] ?? 0 })),
@@ -188,24 +200,59 @@ export default function Dashboard({ onViewOrders }: DashboardProps = {}) {
                     value={requestsLoading ? '…' : String(totalOrdersToday)}
                     icon={<ShoppingCart className="w-4 h-4 text-[#007BC1]" />}
                     accentColor="#007BC1"
+                    tooltip={requestsLoading ? undefined : (
+                        <div className="flex flex-col gap-1">
+                            <span className="font-semibold">Today&apos;s orders by status</span>
+                            {Object.keys(todaysStatusCounts).length === 0
+                                ? <span className="text-gray-500">No orders yet today.</span>
+                                : Object.entries(todaysStatusCounts).map(([status, count]) => (
+                                    <span key={status}>{status}: {count}</span>
+                                ))}
+                        </div>
+                    )}
                 />
                 <KPICard
                     title="Active Deliveries"
                     value={requestsLoading ? '…' : String(activeDeliveries)}
                     icon={<Truck className="w-4 h-4 text-[#16A34A]" />}
                     accentColor="#16A34A"
+                    tooltip={requestsLoading ? undefined : (
+                        <div className="flex flex-col gap-1">
+                            <span className="font-semibold">In-progress deliveries</span>
+                            <span>Dispatched: {dispatchedCount}</span>
+                            <span>En Route: {enRouteCount}</span>
+                        </div>
+                    )}
                 />
                 <KPICard
                     title="Low Stock Alerts"
                     value={stockLevelsLoading ? '…' : String(stockAlerts.length)}
                     icon={<AlertTriangle className="w-4 h-4 text-[#ef4444]" />}
                     accentColor="#ef4444"
+                    tooltip={stockLevelsLoading ? undefined : (
+                        <div className="flex flex-col gap-1">
+                            <span className="font-semibold">Low stock items</span>
+                            {stockAlerts.length === 0
+                                ? <span className="text-gray-500">All stock levels are healthy.</span>
+                                : stockAlerts.slice(0, 5).map((alert) => (
+                                    <span key={alert.product_id}>{alert.product_name}: {alert.current_qty} left (threshold {alert.threshold_qty})</span>
+                                ))}
+                        </div>
+                    )}
                 />
                 <KPICard
                     title="Average CSAT"
                     value={csatLoading ? '…' : String(csat?.average_stars ?? '—')}
                     icon={<Star className="w-4 h-4 text-[#f59e0b]" />}
                     accentColor="#f59e0b"
+                    tooltip={csatLoading ? undefined : (
+                        <div className="flex flex-col gap-1">
+                            <span className="font-semibold">{csat?.total_ratings ?? 0} total ratings</span>
+                            {[5, 4, 3, 2, 1].map((star) => (
+                                <span key={star}>{star}★: {starCounts?.[star] ?? 0}</span>
+                            ))}
+                        </div>
+                    )}
                 />
             </div>
 
@@ -362,16 +409,23 @@ export default function Dashboard({ onViewOrders }: DashboardProps = {}) {
                                                         const total = csat?.total_ratings || 1;
                                                         const percentage = csat?.total_ratings ? Math.round((count / total) * 100) : 0;
                                                         return (
-                                                            <div key={star} className="flex items-center gap-3">
-                                                                <span className="w-3 text-sm font-medium text-gray-500 text-center">{star}</span>
-                                                                <div className="flex-1 h-2.5 bg-gray-100 rounded-full overflow-hidden">
-                                                                    <div 
-                                                                        className="h-full bg-[#f59e0b] rounded-full" 
-                                                                        style={{ width: `${percentage}%` }}
-                                                                    />
-                                                                </div>
-                                                                <span className="w-8 text-sm text-gray-500 text-right">{percentage}%</span>
-                                                            </div>
+                                                            <Tooltip key={star}>
+                                                                <TooltipTrigger asChild>
+                                                                    <div className="flex items-center gap-3 cursor-default">
+                                                                        <span className="w-3 text-sm font-medium text-gray-500 text-center">{star}</span>
+                                                                        <div className="flex-1 h-2.5 bg-gray-100 rounded-full overflow-hidden">
+                                                                            <div
+                                                                                className="h-full bg-[#f59e0b] rounded-full"
+                                                                                style={{ width: `${percentage}%` }}
+                                                                            />
+                                                                        </div>
+                                                                        <span className="w-8 text-sm text-gray-500 text-right">{percentage}%</span>
+                                                                    </div>
+                                                                </TooltipTrigger>
+                                                                <TooltipContent side="top">
+                                                                    {count} rating{count === 1 ? '' : 's'} at {star}★ ({percentage}% of {total})
+                                                                </TooltipContent>
+                                                            </Tooltip>
                                                         );
                                                     })}
                                                 </div>

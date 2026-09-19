@@ -12,6 +12,7 @@ import { Button } from "../../components/Button";
 import { Input } from "../../components/Input";
 import { Form, FormControl, FormDescription, FormItem, FormLabel, FormMessage, useForm } from "../../components/Form";
 import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend, ChartLegendContent } from "../../components/Chart";
+import { Tabs, TabsList, TabsTrigger } from "../../components/Tabs";
 import styles from "./screen.module.css";
 
 const generateTimeSeriesData = (days: number) => {
@@ -58,8 +59,17 @@ const csatChartConfig = { csat: { label: "Avg CSAT Score", color: "#f59e0b" } };
 const deliveryChartConfig = { onTime: { label: "On-Time", color: "var(--primary)" }, late: { label: "Late", color: "#ef4444" } };
 const productChartConfig = { value: { label: "Percentage", color: "var(--primary)" } };
 
+const CHART_TABS = [
+    { value: "orders", label: "Order Volume Trend" },
+    { value: "csat", label: "CSAT Score Trend" },
+    { value: "delivery", label: "Delivery Performance" },
+    { value: "products", label: "Orders by Product Breakdown" },
+] as const;
+type ChartCategory = (typeof CHART_TABS)[number]["value"];
+
 export default function AnalyticsPage() {
     const [period, setPeriod] = useState("30 Days");
+    const [chartCategory, setChartCategory] = useState<ChartCategory>("orders");
     const [mounted, setMounted] = React.useState(false);
 
     React.useEffect(() => {
@@ -83,6 +93,11 @@ export default function AnalyticsPage() {
 
     const totalOrders = chartData.reduce((acc, curr) => acc + curr.orders, 0);
     const revenueEst = totalOrders * 950;
+    const totalOnTime = chartData.reduce((acc, curr) => acc + curr.onTime, 0);
+    const totalLate = chartData.reduce((acc, curr) => acc + curr.late, 0);
+    const avgCsat = chartData.length
+        ? (chartData.reduce((acc, curr) => acc + curr.csat, 0) / chartData.length).toFixed(2)
+        : '—';
 
     if (!mounted) {
         return <div style={{ minHeight: "100vh", backgroundColor: "var(--background)" }} />;
@@ -114,6 +129,12 @@ export default function AnalyticsPage() {
                     icon={<ShoppingCart className="w-4 h-4 text-[#007BC1]" />}
                     accentColor="#007BC1"
                     trend={{ text: '+12% from last period', direction: 'up', positive: true }}
+                    tooltip={(
+                        <div className="flex flex-col gap-1">
+                            <span>Estimated at ₱950 per order</span>
+                            <span>Over the last {period}</span>
+                        </div>
+                    )}
                 />
                 <KPICard
                     title="Delivery Completion Rate"
@@ -122,6 +143,12 @@ export default function AnalyticsPage() {
                     icon={<Truck className="w-4 h-4 text-[#16A34A]" />}
                     accentColor="#16A34A"
                     trend={{ text: '+2.1% from last period', direction: 'up', positive: true }}
+                    tooltip={(
+                        <div className="flex flex-col gap-1">
+                            <span>{totalOnTime} on-time deliveries</span>
+                            <span>{totalLate} late deliveries</span>
+                        </div>
+                    )}
                 />
                 <KPICard
                     title="Average CSAT Score"
@@ -130,6 +157,12 @@ export default function AnalyticsPage() {
                     icon={<Star className="w-4 h-4 text-[#f59e0b]" />}
                     accentColor="#f59e0b"
                     trend={{ text: '-0.1 from last period', direction: 'down', positive: false }}
+                    tooltip={(
+                        <div className="flex flex-col gap-1">
+                            <span>{avgCsat} average over the last {period}</span>
+                            <span>Target: 4.5</span>
+                        </div>
+                    )}
                 />
                 <KPICard
                     title="Loyalty Redemptions"
@@ -138,13 +171,23 @@ export default function AnalyticsPage() {
                     icon={<Gift className="w-4 h-4 text-[#9333EA]" />}
                     accentColor="#9333EA"
                     trend={{ text: '+3 from last period', direction: 'up', positive: true }}
+                    tooltip={<span>Customers earn a free refill every {form.values.loyaltyThreshold} orders.</span>}
                 />
             </div>
 
-            <div className={styles.chartGrid}>
-                <div className={styles.card}>
-                    <h3 className={styles.cardTitle}>Order Volume Trend</h3>
-                    <div className={styles.chartWrapper}>
+            <div className={styles.card}>
+                <div className={styles.cardHeaderFlex}>
+                    <h3 className={styles.cardTitle}>{CHART_TABS.find((t) => t.value === chartCategory)?.label}</h3>
+                    <Tabs value={chartCategory} onValueChange={setChartCategory}>
+                        <TabsList>
+                            {CHART_TABS.map((t) => (
+                                <TabsTrigger key={t.value} value={t.value}>{t.label}</TabsTrigger>
+                            ))}
+                        </TabsList>
+                    </Tabs>
+                </div>
+                <div className={styles.chartWrapperLarge}>
+                    {chartCategory === "orders" && (
                         <ChartContainer config={orderChartConfig}>
                             <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                                 <defs>
@@ -160,11 +203,8 @@ export default function AnalyticsPage() {
                                 <Area type="monotone" dataKey="orders" stroke="var(--color-orders)" strokeWidth={3} fillOpacity={1} fill="url(#colorOrders)" />
                             </AreaChart>
                         </ChartContainer>
-                    </div>
-                </div>
-                <div className={styles.card}>
-                    <h3 className={styles.cardTitle}>CSAT Score Trend</h3>
-                    <div className={styles.chartWrapper}>
+                    )}
+                    {chartCategory === "csat" && (
                         <ChartContainer config={csatChartConfig}>
                             <LineChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                                 <CartesianGrid strokeDasharray="3 3" vertical={false} />
@@ -175,14 +215,8 @@ export default function AnalyticsPage() {
                                 <Line type="monotone" dataKey="csat" stroke="var(--color-csat)" strokeWidth={3} dot={false} activeDot={{ r: 6, fill: "var(--color-csat)" }} />
                             </LineChart>
                         </ChartContainer>
-                    </div>
-                </div>
-            </div>
-
-            <div className={styles.chartGrid}>
-                <div className={styles.card}>
-                    <h3 className={styles.cardTitle}>Delivery Performance</h3>
-                    <div className={styles.chartWrapper}>
+                    )}
+                    {chartCategory === "delivery" && (
                         <ChartContainer config={deliveryChartConfig}>
                             <BarChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                                 <CartesianGrid strokeDasharray="3 3" vertical={false} />
@@ -194,11 +228,8 @@ export default function AnalyticsPage() {
                                 <Bar dataKey="late" stackId="a" fill="var(--color-late)" radius={[4, 4, 0, 0]} />
                             </BarChart>
                         </ChartContainer>
-                    </div>
-                </div>
-                <div className={styles.card}>
-                    <h3 className={styles.cardTitle}>Orders by Product Breakdown</h3>
-                    <div className={styles.chartWrapper}>
+                    )}
+                    {chartCategory === "products" && (
                         <ChartContainer config={productChartConfig}>
                             <PieChart>
                                 <Pie data={mockProductData} cx="50%" cy="50%" innerRadius={60} outerRadius={90} paddingAngle={5} dataKey="value" stroke="none" label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`}>
@@ -221,7 +252,7 @@ export default function AnalyticsPage() {
                                 <ChartLegend content={<ChartLegendContent />} />
                             </PieChart>
                         </ChartContainer>
-                    </div>
+                    )}
                 </div>
             </div>
 

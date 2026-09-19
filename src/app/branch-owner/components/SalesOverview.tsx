@@ -137,6 +137,7 @@ export function SalesOverview() {
             icon={<TrendingUp className="w-4 h-4 text-[#007BC1]" />}
             accentColor="#007BC1"
             trend={salesLoading ? undefined : { text: `${revenueChange >= 0 ? '+' : ''}${revenueChange.toFixed(1)}% from last month`, direction: revenueChange >= 0 ? 'up' : 'down', positive: revenueChange >= 0 }}
+            tooltip={salesLoading ? undefined : <span>Previous month: ₱{previousRevenue.toLocaleString()}</span>}
           />
           <KPICard
             title="Total Orders Completed"
@@ -144,6 +145,12 @@ export function SalesOverview() {
             icon={<ShoppingBag className="w-4 h-4 text-[#007BC1]" />}
             accentColor="#007BC1"
             trend={undefined}
+            tooltip={salesLoading ? undefined : (
+              <div className="flex flex-col gap-1">
+                <span>{currentMetrics?.totalOrders ?? 0} total orders this month</span>
+                <span>{currentMetrics?.cancelledFailedDeliveries ?? 0} cancelled/failed</span>
+              </div>
+            )}
           />
           <KPICard
             title="Revenue vs Last Month"
@@ -151,6 +158,7 @@ export function SalesOverview() {
             icon={<ArrowUpRight className="w-4 h-4 text-[#22c55e]" />}
             accentColor="#22c55e"
             trend={salesLoading ? undefined : { text: 'Compared to last month', direction: revenueChange >= 0 ? 'up' : 'down', positive: revenueChange >= 0 }}
+            tooltip={salesLoading ? undefined : <span>₱{(currentRevenue - previousRevenue).toLocaleString()} difference from last month</span>}
           />
         </div>
 

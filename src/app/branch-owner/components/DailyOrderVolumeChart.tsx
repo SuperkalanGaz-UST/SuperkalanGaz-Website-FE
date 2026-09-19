@@ -44,7 +44,11 @@ export function DailyOrderVolumeChart({ dailyData, hourlyData }: DailyOrderVolum
           <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
           <XAxis dataKey={isDay ? 'day' : 'hour'} stroke="#9ca3af" style={{ fontSize: '12px' }} />
           <YAxis stroke="#9ca3af" style={{ fontSize: '12px' }} />
-          <Tooltip />
+          <Tooltip
+            cursor={{ fill: '#f3f4f6' }}
+            contentStyle={{ borderRadius: '8px', borderColor: '#e5e7eb', fontSize: '12px' }}
+            formatter={(value: number) => [`${value} orders`, isDay ? 'Day' : 'Hour']}
+          />
           <Bar dataKey="orders" fill="#007BC1" radius={[4, 4, 0, 0]} />
         </BarChart>
       </ResponsiveContainer>
