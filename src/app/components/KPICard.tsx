@@ -1,5 +1,6 @@
 import React, { ReactNode } from 'react';
 import { ArrowUpRight, ArrowDownRight } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipTrigger } from './ui/tooltip';
 
 export interface KPITrend {
   /** e.g. "+10.2% from yesterday" */
@@ -25,10 +26,12 @@ interface KPICardProps {
   accentColor?: string;
   trend?: KPITrend;
   titleClassName?: string;
+  /** Extra detail shown in a popup on hover — a breakdown, context, etc. */
+  tooltip?: ReactNode;
 }
 
-export function KPICard({ title, value, subtitle, icon, alert, accentColor = '#007BC1', trend, titleClassName = '' }: KPICardProps) {
-  return (
+export function KPICard({ title, value, subtitle, icon, alert, accentColor = '#007BC1', trend, titleClassName = '', tooltip }: KPICardProps) {
+  const card = (
     <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-3.5 relative flex flex-col h-full">
       <div className="flex items-start justify-between mb-1">
         <div className="flex items-start gap-1.5 pt-1.5">
@@ -78,5 +81,16 @@ export function KPICard({ title, value, subtitle, icon, alert, accentColor = '#0
         </div>
       )}
     </div>
+  );
+
+  if (!tooltip) return card;
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{card}</TooltipTrigger>
+      <TooltipContent side="top" className="max-w-[240px] text-left leading-relaxed">
+        {tooltip}
+      </TooltipContent>
+    </Tooltip>
   );
 }

@@ -7,6 +7,7 @@ import { KPICard } from './KPICard';
 import { Star, MessageSquare, AlertCircle, RefreshCw } from 'lucide-react';
 import { apiFetch, fetchJson } from '../../lib/api';
 import { useBranch } from '../contexts/BranchContext';
+import { Tooltip, TooltipContent, TooltipTrigger } from '../../components/ui/tooltip';
 
 // ── shared types ─────────────────────────────────────────────────────────────
 
@@ -148,15 +149,24 @@ export function CSATSatisfaction() {
                   });
                   const maxCount = Math.max(...Object.values(counts), 1);
 
+                  const totalRatings = ratings.length;
                   return [5, 4, 3, 2, 1].map((star) => {
                     const percent = (counts[star] / maxCount) * 100;
                     return (
-                      <div key={star} className="flex items-center gap-2">
-                        <span className="text-[10px] font-medium text-gray-500 w-2 leading-none">{star}</span>
-                        <div className="flex-1 h-1 bg-gray-100 rounded-full overflow-hidden">
-                          <div className="h-full bg-[#f59e0b] rounded-full transition-all duration-500" style={{ width: `${percent}%` }} />
-                        </div>
-                      </div>
+                      <Tooltip key={star}>
+                        <TooltipTrigger asChild>
+                          <div className="flex items-center gap-2 cursor-default">
+                            <span className="text-[10px] font-medium text-gray-500 w-2 leading-none">{star}</span>
+                            <div className="flex-1 h-1 bg-gray-100 rounded-full overflow-hidden">
+                              <div className="h-full bg-[#f59e0b] rounded-full transition-all duration-500" style={{ width: `${percent}%` }} />
+                            </div>
+                          </div>
+                        </TooltipTrigger>
+                        <TooltipContent side="top">
+                          {counts[star]} rating{counts[star] === 1 ? '' : 's'} at {star}★
+                          {totalRatings > 0 ? ` (${Math.round((counts[star] / totalRatings) * 100)}% of all ratings)` : ''}
+                        </TooltipContent>
+                      </Tooltip>
                     );
                   });
                 })()

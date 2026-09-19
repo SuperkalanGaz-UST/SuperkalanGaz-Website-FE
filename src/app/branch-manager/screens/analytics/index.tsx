@@ -93,6 +93,11 @@ export default function AnalyticsPage() {
 
     const totalOrders = chartData.reduce((acc, curr) => acc + curr.orders, 0);
     const revenueEst = totalOrders * 950;
+    const totalOnTime = chartData.reduce((acc, curr) => acc + curr.onTime, 0);
+    const totalLate = chartData.reduce((acc, curr) => acc + curr.late, 0);
+    const avgCsat = chartData.length
+        ? (chartData.reduce((acc, curr) => acc + curr.csat, 0) / chartData.length).toFixed(2)
+        : '—';
 
     if (!mounted) {
         return <div style={{ minHeight: "100vh", backgroundColor: "var(--background)" }} />;
@@ -124,6 +129,12 @@ export default function AnalyticsPage() {
                     icon={<ShoppingCart className="w-4 h-4 text-[#007BC1]" />}
                     accentColor="#007BC1"
                     trend={{ text: '+12% from last period', direction: 'up', positive: true }}
+                    tooltip={(
+                        <div className="flex flex-col gap-1">
+                            <span>Estimated at ₱950 per order</span>
+                            <span>Over the last {period}</span>
+                        </div>
+                    )}
                 />
                 <KPICard
                     title="Delivery Completion Rate"
@@ -132,6 +143,12 @@ export default function AnalyticsPage() {
                     icon={<Truck className="w-4 h-4 text-[#16A34A]" />}
                     accentColor="#16A34A"
                     trend={{ text: '+2.1% from last period', direction: 'up', positive: true }}
+                    tooltip={(
+                        <div className="flex flex-col gap-1">
+                            <span>{totalOnTime} on-time deliveries</span>
+                            <span>{totalLate} late deliveries</span>
+                        </div>
+                    )}
                 />
                 <KPICard
                     title="Average CSAT Score"
@@ -140,6 +157,12 @@ export default function AnalyticsPage() {
                     icon={<Star className="w-4 h-4 text-[#f59e0b]" />}
                     accentColor="#f59e0b"
                     trend={{ text: '-0.1 from last period', direction: 'down', positive: false }}
+                    tooltip={(
+                        <div className="flex flex-col gap-1">
+                            <span>{avgCsat} average over the last {period}</span>
+                            <span>Target: 4.5</span>
+                        </div>
+                    )}
                 />
                 <KPICard
                     title="Loyalty Redemptions"
@@ -148,6 +171,7 @@ export default function AnalyticsPage() {
                     icon={<Gift className="w-4 h-4 text-[#9333EA]" />}
                     accentColor="#9333EA"
                     trend={{ text: '+3 from last period', direction: 'up', positive: true }}
+                    tooltip={<span>Customers earn a free refill every {form.values.loyaltyThreshold} orders.</span>}
                 />
             </div>
 
