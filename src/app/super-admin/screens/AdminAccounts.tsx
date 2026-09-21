@@ -1,15 +1,17 @@
 'use client';
 
-import { useCallback, useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   AlertCircle,
+  CheckCircle2,
   Loader2,
   Mail,
   MailPlus,
   MoreHorizontal,
   Search,
   ShieldCheck,
+  Upload,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -31,6 +33,30 @@ import {
 } from '../components/GovernanceUi';
 import { SuperAdminHeader } from '../components/SuperAdminHeader';
 
+interface ParsedInviteRow {
+  name: string;
+  email: string;
+  error: string | null;
+}
+
+// A controlled two-column admin list, not arbitrary user data — a full
+// RFC4180 parser is overkill here.
+function parseInvitationCsv(text: string): ParsedInviteRow[] {
+  const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  if (lines.length === 0) return [];
+  const startIndex = /name/i.test(lines[0]) && /email/i.test(lines[0]) ? 1 : 0;
+
+  return lines.slice(startIndex).map((line) => {
+    const [rawName = '', rawEmail = ''] = line.split(',');
+    const name = rawName.trim().replace(/^"|"$/g, '');
+    const email = rawEmail.trim().replace(/^"|"$/g, '').toLowerCase();
+    let error: string | null = null;
+    if (name.length < 2) error = 'Name is too short.';
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) error = 'Invalid email address.';
+    return { name, email, error };
+  });
+}
+
 export function AdminAccounts() {
   const [accountSearch, setAccountSearch] = useState('');
   const [invitationSearch, setInvitationSearch] = useState('');
@@ -40,6 +66,12 @@ export function AdminAccounts() {
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [submittingInvite, setSubmittingInvite] = useState(false);
   const [actingInvitationId, setActingInvitationId] = useState<string | null>(null);
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [bulkFileName, setBulkFileName] = useState<string | null>(null);
+  const [bulkRows, setBulkRows] = useState<ParsedInviteRow[]>([]);
+  const [bulkSubmitting, setBulkSubmitting] = useState(false);
+  const [bulkResult, setBulkResult] = useState<{ succeeded: number; failed: { email: string; message: string }[] } | null>(null);
+  const bulkFileInputRef = useRef<HTMLInputElement>(null);
 
   const { data, error: queryError, refetch: load } = useQuery({
     queryKey: ['admin-accounts'],
@@ -47,7 +79,7 @@ export function AdminAccounts() {
   });
   
   const accounts = data?.accounts ?? null;
-  const invitations = data?.invitations ?? [];
+  const invitations = useMemo(() => data?.invitations ?? [], [data]);
   const error = queryError ? queryError.message : null;
 
   const visibleAccounts = useMemo(() => {
@@ -108,6 +140,54 @@ export function AdminAccounts() {
     }
   };
 
+  const validBulkRows = useMemo(() => bulkRows.filter((row) => !row.error), [bulkRows]);
+
+  const handleBulkFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setBulkFileName(file.name);
+    setBulkResult(null);
+    setBulkRows(parseInvitationCsv(await file.text()));
+  };
+
+  const submitBulkImport = async () => {
+    if (validBulkRows.length === 0) return;
+    setBulkSubmitting(true);
+    const results = await Promise.allSettled(
+      validBulkRows.map((row) => governanceApi.inviteFranchiseAdministrator(row.name, row.email)),
+    );
+    const failed: { email: string; message: string }[] = [];
+    let succeeded = 0;
+    results.forEach((result, index) => {
+      if (result.status === 'fulfilled') {
+        succeeded += 1;
+      } else {
+        failed.push({
+          email: validBulkRows[index].email,
+          message: result.reason instanceof Error ? result.reason.message : 'Could not send this invitation.',
+        });
+      }
+    });
+    setBulkResult({ succeeded, failed });
+    setBulkSubmitting(false);
+    if (succeeded > 0) {
+      await load();
+      toast.success(`${succeeded} invitation${succeeded === 1 ? '' : 's'} sent.`);
+    }
+    if (failed.length > 0) {
+      toast.error(`${failed.length} invitation${failed.length === 1 ? '' : 's'} failed.`);
+    }
+  };
+
+  const closeBulkDialog = () => {
+    if (bulkSubmitting) return;
+    setBulkOpen(false);
+    setBulkRows([]);
+    setBulkFileName(null);
+    setBulkResult(null);
+    if (bulkFileInputRef.current) bulkFileInputRef.current.value = '';
+  };
+
   const updateInvitation = async (
     invitation: FranchiseAdminInvitation,
     action: 'resend' | 'revoke',
@@ -147,14 +227,24 @@ export function AdminAccounts() {
         title="Franchise Administrator Accounts"
         description="Invite and manage Franchise Administrator access."
         actions={
-          <button
-            type="button"
-            onClick={() => setInviteOpen(true)}
-            className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-[#007BC1] px-5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[#00679f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#007BC1] focus-visible:ring-offset-2"
-          >
-            <MailPlus className="h-4 w-4" aria-hidden="true" />
-            Invite Franchise Administrator
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setBulkOpen(true)}
+              className="inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white px-5 text-sm font-semibold text-gray-700 shadow-sm transition-colors hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#007BC1] focus-visible:ring-offset-2"
+            >
+              <Upload className="h-4 w-4" aria-hidden="true" />
+              Bulk import
+            </button>
+            <button
+              type="button"
+              onClick={() => setInviteOpen(true)}
+              className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-[#007BC1] px-5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[#00679f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#007BC1] focus-visible:ring-offset-2"
+            >
+              <MailPlus className="h-4 w-4" aria-hidden="true" />
+              Invite Franchise Administrator
+            </button>
+          </div>
         }
       />
 
@@ -434,6 +524,118 @@ export function AdminAccounts() {
               </button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={bulkOpen}
+        onOpenChange={(open) => {
+          if (bulkSubmitting) return;
+          if (!open) closeBulkDialog();
+          else setBulkOpen(true);
+        }}
+      >
+        <DialogContent className="rounded-2xl border-gray-200 bg-white sm:max-w-xl">
+          <DialogHeader>
+            <span className="mb-2 flex h-11 w-11 items-center justify-center rounded-xl bg-blue-50 text-[#007BC1]">
+              <Upload className="h-5 w-5" aria-hidden="true" />
+            </span>
+            <DialogTitle>Bulk import Franchise Administrators</DialogTitle>
+            <DialogDescription className="leading-6 text-gray-500">
+              Upload a CSV with <code>name,email</code> columns (one header row, one Franchise
+              Administrator per row). Each valid row sends its own invitation — recipients still
+              verify their email and set their own password.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="py-2">
+            <input
+              ref={bulkFileInputRef}
+              type="file"
+              accept=".csv,text/csv"
+              onChange={(event) => void handleBulkFileSelect(event)}
+              className="block w-full text-sm text-gray-700 file:mr-4 file:h-10 file:rounded-lg file:border-0 file:bg-gray-100 file:px-4 file:text-sm file:font-semibold file:text-gray-700 hover:file:bg-gray-200"
+            />
+
+            {bulkRows.length > 0 && (
+              <div className="mt-4 max-h-64 overflow-y-auto rounded-lg border border-gray-200">
+                <table className="w-full text-left text-sm">
+                  <thead className="bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
+                    <tr>
+                      <th className="px-4 py-2">Name</th>
+                      <th className="px-4 py-2">Email</th>
+                      <th className="px-4 py-2">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {bulkRows.map((row, index) => (
+                      <tr key={index}>
+                        <td className="px-4 py-2">{row.name || '—'}</td>
+                        <td className="px-4 py-2">{row.email || '—'}</td>
+                        <td className="px-4 py-2">
+                          {row.error ? (
+                            <span className="text-xs font-medium text-red-600">{row.error}</span>
+                          ) : (
+                            <span className="text-xs font-medium text-green-600">Ready</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {bulkFileName && bulkRows.length > 0 && (
+              <p className="mt-2 text-xs text-gray-500">
+                {validBulkRows.length} of {bulkRows.length} row{bulkRows.length === 1 ? '' : 's'} in{' '}
+                {bulkFileName} are ready to send.
+              </p>
+            )}
+
+            {bulkResult && (
+              <div className="mt-4 flex flex-col gap-2 rounded-xl border border-gray-200 bg-gray-50 p-4 text-sm">
+                <div className="flex items-center gap-2 text-green-700">
+                  <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
+                  {bulkResult.succeeded} invitation{bulkResult.succeeded === 1 ? '' : 's'} sent.
+                </div>
+                {bulkResult.failed.map((failure, index) => (
+                  <div key={index} className="flex items-start gap-2 text-red-700">
+                    <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+                    <span>
+                      {failure.email}: {failure.message}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <button
+              type="button"
+              disabled={bulkSubmitting}
+              onClick={closeBulkDialog}
+              className="h-10 rounded-lg border border-gray-300 px-4 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+            >
+              Close
+            </button>
+            <button
+              type="button"
+              disabled={bulkSubmitting || validBulkRows.length === 0}
+              onClick={() => void submitBulkImport()}
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-[#007BC1] px-4 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {bulkSubmitting ? (
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+              ) : (
+                <Upload className="h-4 w-4" aria-hidden="true" />
+              )}
+              {bulkSubmitting
+                ? 'Sending…'
+                : `Send ${validBulkRows.length || ''} invitation${validBulkRows.length === 1 ? '' : 's'}`}
+            </button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
