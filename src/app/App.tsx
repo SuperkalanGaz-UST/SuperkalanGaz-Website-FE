@@ -6,9 +6,11 @@ import dynamic from 'next/dynamic';
 import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Toaster } from './components/ui/sonner';
+import { IdleLogoutWarningDialog } from './components/IdleLogoutWarningDialog';
 import { Login } from './components/Login';
 import { LogoutConfirmationDialog } from './components/LogoutConfirmationDialog';
 import { AccountProvider } from './contexts/AccountContext';
+import { useIdleTimer } from './hooks/useIdleTimer';
 import {
   Account,
   accountFromUser,
@@ -38,6 +40,10 @@ const BranchManagerApp = dynamic(
 );
 
 const AUTH_RESTORE_TIMEOUT_MS = 5_000;
+// Super Admin manages account access/security config, so it gets a stricter
+// idle-timeout than the operational personas — 15 minutes, warned 60s ahead.
+const IDLE_TIMEOUT_MS = 15 * 60_000;
+const IDLE_WARNING_SECONDS = 60;
 
 export default function App() {
   const [account, setAccount] = useState<Account | null>(null);
@@ -46,7 +52,19 @@ export default function App() {
   const [invitationActivation, setInvitationActivation] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
+  const [showIdleWarning, setShowIdleWarning] = useState(false);
   const passwordRecoveryRef = useRef(false);
+
+  const idleTimer = useIdleTimer({
+    enabled: account?.role === 'super-admin',
+    idleMs: IDLE_TIMEOUT_MS,
+    warningMs: IDLE_WARNING_SECONDS * 1000,
+    onWarning: () => setShowIdleWarning(true),
+    onTimeout: () => {
+      setShowIdleWarning(false);
+      void handleLogout();
+    },
+  });
 
   useEffect(() => {
     let mounted = true;
@@ -211,6 +229,14 @@ export default function App() {
             loggingOut={loggingOut}
             onOpenChange={setShowLogoutConfirm}
             onConfirm={handleLogout}
+          />
+          <IdleLogoutWarningDialog
+            open={showIdleWarning}
+            warningSeconds={IDLE_WARNING_SECONDS}
+            onStayLoggedIn={() => {
+              setShowIdleWarning(false);
+              idleTimer.reset();
+            }}
           />
         </AccountProvider>
       ) : (
