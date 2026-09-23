@@ -9,7 +9,7 @@ export function LoyaltyProgram() {
       </div>
 
       <div className="p-8">
-        <LoyaltyTrackDashboard scopeLabel="Illustrative cross-branch data" />
+        <LoyaltyTrackDashboard />
       </div>
     </div>
   );

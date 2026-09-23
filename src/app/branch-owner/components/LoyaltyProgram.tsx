@@ -5,7 +5,7 @@ import { useBranch } from '../contexts/BranchContext';
 import { LoyaltyTrackDashboard } from '../../components/LoyaltyTrackDashboard';
 
 export function LoyaltyProgram() {
-  const { selectedBranch } = useBranch();
+  const { selectedBranchId } = useBranch();
 
   return (
     <div className="flex-1 overflow-y-auto">
@@ -14,7 +14,7 @@ export function LoyaltyProgram() {
       </div>
 
       <div className="p-8">
-        <LoyaltyTrackDashboard scopeLabel={`Illustrative data for ${selectedBranch}`} />
+        <LoyaltyTrackDashboard branchId={selectedBranchId} />
       </div>
     </div>
   );

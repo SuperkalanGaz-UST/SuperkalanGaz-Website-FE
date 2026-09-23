@@ -98,13 +98,14 @@ export function Dashboard() {
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-semibold text-gray-900">Earnings</h3>
-            <div className="flex rounded-lg border border-gray-200 p-0.5 text-sm">
+            <div className="flex rounded-lg border border-gray-200 p-0.5">
               {EARNINGS_PERIODS.map(({ value, label }) => (
                 <button
                   key={value}
                   type="button"
                   onClick={() => setEarningsPeriod(value)}
-                  className={`px-3 py-1 rounded-md transition-colors ${
+                  style={{ fontSize: '14px' }}
+                  className={`px-1.5 py-0.5 rounded-md transition-colors ${
                     earningsPeriod === value ? 'bg-[#007BC1] text-white' : 'text-gray-600 hover:text-gray-900'
                   }`}
                 >

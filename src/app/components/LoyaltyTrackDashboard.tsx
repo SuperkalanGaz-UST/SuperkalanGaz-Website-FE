@@ -1,6 +1,7 @@
 'use client';
 
-import { Fragment, useMemo, useState, type ReactNode } from 'react';
+import { Fragment, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import {
   Building2,
   Clock3,
@@ -8,55 +9,18 @@ import {
   RefreshCw,
   Star,
   UsersRound,
+  PlusCircle,
+  MinusCircle,
+  Info,
 } from 'lucide-react';
+import { fetchJson } from '../lib/api';
 
-type LoyaltyTrack = 'household' | 'commercial';
-
-interface HouseholdMember {
-  id: string;
-  member: string;
-  phone: string;
-  pointsBalance: number;
-  pointsEarnedThisMonth: number;
-  expiringIn30Days: number;
-  nextExpiry: string;
-  lastActivity: string;
-  activityType: 'earned' | 'redeemed';
-}
-
-interface CommercialAccount {
-  id: string;
-  business: string;
-  phone: string;
-  cylinderSize: string;
-  currentCycle: number;
-  qualifyingPurchasesThisMonth: number;
-  lastQualifyingPurchase: string;
-}
-
-interface LoyaltyTrackDashboardProps {
-  scopeLabel: string;
-}
-
-const householdMembers: HouseholdMember[] = [
-  { id: 'HH-001', member: 'Maria Santos', phone: '+639171234567', pointsBalance: 2450, pointsEarnedThisMonth: 180, expiringIn30Days: 1200, nextExpiry: 'Mar 14, 2027', lastActivity: 'Earned from 11 kg purchase', activityType: 'earned' },
-  { id: 'HH-002', member: 'Juan Dela Cruz', phone: '+639212221111', pointsBalance: 1875, pointsEarnedThisMonth: 120, expiringIn30Days: 0, nextExpiry: 'Nov 7, 2026', lastActivity: 'Redeemed merchandise', activityType: 'redeemed' },
-  { id: 'HH-003', member: 'Lola Basyang', phone: '+639204443333', pointsBalance: 620, pointsEarnedThisMonth: 90, expiringIn30Days: 620, nextExpiry: 'Jan 26, 2027', lastActivity: 'Earned from 11 kg purchase', activityType: 'earned' },
-  { id: 'HH-004', member: 'Pedro Penduko', phone: '+639195551122', pointsBalance: 3210, pointsEarnedThisMonth: 240, expiringIn30Days: 450, nextExpiry: 'Apr 11, 2027', lastActivity: 'Earned from 22 kg purchase', activityType: 'earned' },
-  { id: 'HH-005', member: 'Carlos Miguel', phone: '+639223334444', pointsBalance: 2120, pointsEarnedThisMonth: 160, expiringIn30Days: 0, nextExpiry: 'Oct 3, 2026', lastActivity: 'Redeemed merchandise', activityType: 'redeemed' },
-  { id: 'HH-006', member: 'Sofia Cruz', phone: '+639237778888', pointsBalance: 410, pointsEarnedThisMonth: 70, expiringIn30Days: 0, nextExpiry: 'Dec 12, 2026', lastActivity: 'Earned from 11 kg purchase', activityType: 'earned' },
-];
-
-const commercialAccounts: CommercialAccount[] = [
-  { id: 'COM-001', business: "Aling Nena's Eatery", phone: '+639178123456', cylinderSize: '11 kg', currentCycle: 28, qualifyingPurchasesThisMonth: 4, lastQualifyingPurchase: 'Aug 20, 2026' },
-  { id: 'COM-002', business: 'Rizal Hardware Supply', phone: '+639212345678', cylinderSize: '22 kg', currentCycle: 24, qualifyingPurchasesThisMonth: 3, lastQualifyingPurchase: 'Aug 18, 2026' },
-  { id: 'COM-003', business: 'Manila Grill House', phone: '+639345678901', cylinderSize: '22 kg', currentCycle: 30, qualifyingPurchasesThisMonth: 5, lastQualifyingPurchase: 'Aug 21, 2026' },
-  { id: 'COM-004', business: 'QC Laundry Hub', phone: '+639456789012', cylinderSize: '22 kg', currentCycle: 17, qualifyingPurchasesThisMonth: 2, lastQualifyingPurchase: 'Aug 17, 2026' },
-  { id: 'COM-005', business: 'Tagaytay View Resort', phone: '+639567890123', cylinderSize: '50 kg', currentCycle: 29, qualifyingPurchasesThisMonth: 6, lastQualifyingPurchase: 'Aug 22, 2026' },
-  { id: 'COM-006', business: "Baker's Choice Bakeshop", phone: '+639678901234', cylinderSize: '22 kg', currentCycle: 15, qualifyingPurchasesThisMonth: 3, lastQualifyingPurchase: 'Aug 16, 2026' },
-];
+type Member = { id: string; name: string; phone: string; pointsBalance: number; expiringIn30Days: number; nextExpiry: string | null; lastActivity: string | null; lastActivityType: string | null };
+type Account = { id: string; business: string; phone: string; currentCycle: number; qualifyingPurchasesThisMonth: number; lastQualifyingPurchase: string | null };
+type Overview = { household: { pointsEarnedThisMonth: number; activeMembers: number; expiringPoints: number; membersWithExpiringPoints: number; members: Member[] }; commercial: { qualifyingPurchasesThisMonth: number; activeAccounts: number; nearReward: number; accounts: Account[] } };
 
 const numberFormatter = new Intl.NumberFormat('en-PH');
+const date = (value: string | null) => value ? new Intl.DateTimeFormat('en-PH', { dateStyle: 'medium' }).format(new Date(value)) : 'No activity';
 
 function MetricCard({
   label,
@@ -68,7 +32,7 @@ function MetricCard({
   label: string;
   value: string;
   detail: string;
-  icon: ReactNode;
+  icon: React.ReactNode;
   tone?: 'blue' | 'amber';
 }) {
   const toneClasses = tone === 'amber'
@@ -98,7 +62,7 @@ function PrimaryMetricCard({
   eyebrow: string;
   label: string;
   value: string;
-  icon: ReactNode;
+  icon: React.ReactNode;
 }) {
   return (
     <article className="relative min-h-40 overflow-hidden rounded-2xl border border-[#a9d4ee] bg-gradient-to-br from-white via-[#f5faff] to-[#e8f3ff] p-6 shadow-sm">
@@ -116,15 +80,9 @@ function PrimaryMetricCard({
   );
 }
 
-function HouseholdPanel({ hidden }: { hidden: boolean }) {
-  const [expandedMemberId, setExpandedMemberId] = useState<string | null>(null);
-
-  const metrics = useMemo(() => ({
-    activeMembers: householdMembers.length,
-    pointsEarned: householdMembers.reduce((total, member) => total + member.pointsEarnedThisMonth, 0),
-    expiringPoints: householdMembers.reduce((total, member) => total + member.expiringIn30Days, 0),
-    membersWithExpiringPoints: householdMembers.filter((member) => member.expiringIn30Days > 0).length,
-  }), []);
+function Household({ data, hidden }: { data?: Overview['household']; hidden: boolean }) {
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const ledger = useQuery({ queryKey: ['customer-loyalty', expanded], queryFn: () => fetchJson<{ ledger: { household_transactions: Array<{ type: string; points_delta: number; created_at: string }> } }>(`/loyalty/customers/${expanded}`), enabled: !!expanded });
 
   return (
     <section id="household-loyalty-panel" role="tabpanel" aria-labelledby="household-loyalty-tab" hidden={hidden} className="space-y-6">
@@ -132,19 +90,19 @@ function HouseholdPanel({ hidden }: { hidden: boolean }) {
         <PrimaryMetricCard
           eyebrow="Household Points Overview"
           label="Points Earned This Month"
-          value={numberFormatter.format(metrics.pointsEarned)}
+          value={numberFormatter.format(data?.pointsEarnedThisMonth ?? 0)}
           icon={<Star className="h-7 w-7 fill-current" aria-hidden="true" />}
         />
         <MetricCard
           label="Active Household Members"
-          value={numberFormatter.format(metrics.activeMembers)}
-          detail="Shown in this preview"
+          value={numberFormatter.format(data?.activeMembers ?? 0)}
+          detail="Active branch customers"
           icon={<UsersRound className="h-6 w-6" aria-hidden="true" />}
         />
         <MetricCard
           label="Points Expiring in 30 Days"
-          value={numberFormatter.format(metrics.expiringPoints)}
-          detail={`Across ${metrics.membersWithExpiringPoints} members`}
+          value={numberFormatter.format(data?.expiringPoints ?? 0)}
+          detail={`Across ${data?.membersWithExpiringPoints ?? 0} members`}
           icon={<Clock3 className="h-6 w-6" aria-hidden="true" />}
           tone="amber"
         />
@@ -154,9 +112,7 @@ function HouseholdPanel({ hidden }: { hidden: boolean }) {
         <div className="flex flex-col gap-2 border-b border-gray-100 px-6 py-5 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
             <h2 className="text-lg font-semibold text-[#101828]">Household Points Ledger</h2>
-            <p className="text-xs text-gray-500">Points expire 12 months after they are earned.</p>
           </div>
-          <span className="w-fit rounded-full bg-gray-100 px-3 py-1 text-[11px] font-medium text-gray-600">Illustrative data</span>
         </div>
 
         <div className="overflow-x-auto">
@@ -167,8 +123,8 @@ function HouseholdPanel({ hidden }: { hidden: boolean }) {
               <col className="w-[12%]" />
               <col className="w-[15%]" />
               <col className="w-[13%]" />
-              <col className="w-[19%]" />
-              <col className="w-[10%]" />
+              <col className="w-[16%]" />
+              <col className="w-[13%]" />
             </colgroup>
             <thead className="bg-gray-50/80">
               <tr>
@@ -178,23 +134,25 @@ function HouseholdPanel({ hidden }: { hidden: boolean }) {
               </tr>
             </thead>
             <tbody>
-              {householdMembers.map((member) => {
-                const isExpanded = expandedMemberId === member.id;
+              {(data?.members ?? []).map((member) => {
+                const isExpanded = expanded === member.id;
                 return (
                   <Fragment key={member.id}>
                     <tr className="border-t border-gray-100 transition-colors hover:bg-gray-50/70">
-                      <td className="px-5 py-4 text-sm font-semibold text-[#101828]">{member.member}</td>
+                      <td className="px-5 py-4 text-sm font-semibold text-[#101828]">{member.name}</td>
                       <td className="px-5 py-4 text-sm text-gray-600">{member.phone}</td>
                       <td className="px-5 py-4 text-sm font-semibold text-[#101828]">{numberFormatter.format(member.pointsBalance)}</td>
                       <td className={`px-5 py-4 text-sm font-medium ${member.expiringIn30Days > 0 ? 'text-amber-600' : 'text-gray-400'}`}>
                         {member.expiringIn30Days > 0 ? numberFormatter.format(member.expiringIn30Days) : '—'}
                       </td>
-                      <td className="px-5 py-4 text-sm text-gray-600">{member.nextExpiry}</td>
-                      <td className={`px-5 py-4 text-sm ${member.activityType === 'earned' ? 'text-emerald-700' : 'text-gray-700'}`}>{member.lastActivity}</td>
+                      <td className="px-5 py-4 text-sm text-gray-600">{date(member.nextExpiry)}</td>
+                      <td className={`px-5 py-4 text-sm ${member.lastActivityType === 'earned' ? 'text-emerald-700' : 'text-gray-700'}`}>
+                        {member.lastActivityType ? `${member.lastActivityType} · ${date(member.lastActivity)}` : 'No activity'}
+                      </td>
                       <td className="px-5 py-4">
                         <button
                           type="button"
-                          onClick={() => setExpandedMemberId(isExpanded ? null : member.id)}
+                          onClick={() => setExpanded(isExpanded ? null : member.id)}
                           aria-expanded={isExpanded}
                           className="text-sm font-semibold text-[#007BC1] transition-colors hover:text-[#005a8f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#007BC1] focus-visible:ring-offset-2"
                         >
@@ -203,12 +161,38 @@ function HouseholdPanel({ hidden }: { hidden: boolean }) {
                       </td>
                     </tr>
                     {isExpanded && (
-                      <tr className="border-t border-blue-100 bg-blue-50/60">
-                        <td colSpan={7} className="px-5 py-4 text-sm text-gray-700">
-                          <span className="font-semibold text-[#101828]">Latest ledger entry:</span> {member.lastActivity}.{' '}
-                          {member.expiringIn30Days > 0
-                            ? `${numberFormatter.format(member.expiringIn30Days)} points are scheduled to expire within 30 days.`
-                            : 'No points are scheduled to expire within 30 days.'}
+                      <tr className="border-t border-gray-100 bg-gray-50/30">
+                        <td colSpan={7} className="px-5 py-3">
+                          {ledger.isLoading && <p className="text-sm text-gray-500">Loading transaction history...</p>}
+                          {ledger.error && <p className="text-sm text-red-600">Could not load transaction history: {ledger.error.message}</p>}
+                          {ledger.data && (
+                            <div className="flex flex-col gap-1.5 py-1">
+                              {ledger.data.ledger.household_transactions.length ? ledger.data.ledger.household_transactions.map((transaction, index) => {
+                                const isEarn = transaction.points_delta > 0;
+                                const isRedeem = transaction.points_delta < 0;
+                                const Icon = isEarn ? PlusCircle : isRedeem ? MinusCircle : Info;
+                                const iconColor = isEarn ? 'text-emerald-500' : isRedeem ? 'text-rose-500' : 'text-gray-400';
+                                const textColor = isEarn ? 'text-emerald-600' : isRedeem ? 'text-rose-600' : 'text-gray-700';
+
+                                return (
+                                  <div key={`${transaction.created_at}-${transaction.type}-${index}`} className="flex items-center justify-between rounded border border-gray-100 bg-white px-3 py-1.5 shadow-[0_1px_2px_rgba(0,0,0,0.02)] transition-colors hover:border-gray-200">
+                                    <div className="flex items-center gap-2.5">
+                                      <Icon className={`h-3.5 w-3.5 ${iconColor}`} strokeWidth={2.5} />
+                                      <span className="text-[13px] font-medium capitalize text-gray-700">{transaction.type}</span>
+                                    </div>
+                                    <div className="flex items-center gap-6">
+                                      <span className={`text-[13px] font-semibold tabular-nums ${textColor}`}>
+                                        {isEarn ? '+' : ''}{transaction.points_delta} pts
+                                      </span>
+                                      <span className="w-24 text-right text-[12px] text-gray-500">{date(transaction.created_at)}</span>
+                                    </div>
+                                  </div>
+                                );
+                              }) : (
+                                <p className="py-2 text-center text-sm text-gray-500">No transactions recorded.</p>
+                              )}
+                            </div>
+                          )}
                         </td>
                       </tr>
                     )}
@@ -223,14 +207,9 @@ function HouseholdPanel({ hidden }: { hidden: boolean }) {
   );
 }
 
-function CommercialPanel({ hidden }: { hidden: boolean }) {
-  const [expandedAccountId, setExpandedAccountId] = useState<string | null>(null);
-
-  const metrics = useMemo(() => ({
-    activeAccounts: commercialAccounts.length,
-    qualifyingPurchases: commercialAccounts.reduce((total, account) => total + account.qualifyingPurchasesThisMonth, 0),
-    nearReward: commercialAccounts.filter((account) => account.currentCycle >= 25 && account.currentCycle < 30).length,
-  }), []);
+function Commercial({ data, hidden }: { data?: Overview['commercial']; hidden: boolean }) {
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const ledger = useQuery({ queryKey: ['customer-commercial-ledger', expanded], queryFn: () => fetchJson<{ ledger: { commercial_purchases: Array<{ cycle_number: number; counted_at: string }> } }>(`/loyalty/customers/${expanded}`), enabled: !!expanded });
 
   return (
     <section id="commercial-loyalty-panel" role="tabpanel" aria-labelledby="commercial-loyalty-tab" hidden={hidden} className="space-y-6">
@@ -238,18 +217,18 @@ function CommercialPanel({ hidden }: { hidden: boolean }) {
         <PrimaryMetricCard
           eyebrow="30+1 Cycle Overview"
           label="Qualifying Purchases This Month"
-          value={numberFormatter.format(metrics.qualifyingPurchases)}
+          value={numberFormatter.format(data?.qualifyingPurchasesThisMonth ?? 0)}
           icon={<RefreshCw className="h-7 w-7" aria-hidden="true" />}
         />
         <MetricCard
           label="Active Commercial Accounts"
-          value={numberFormatter.format(metrics.activeAccounts)}
-          detail="Shown in this preview"
+          value={numberFormatter.format(data?.activeAccounts ?? 0)}
+          detail="Active branch accounts"
           icon={<Building2 className="h-6 w-6" aria-hidden="true" />}
         />
         <MetricCard
           label="Accounts Within 5 Purchases of Reward"
-          value={numberFormatter.format(metrics.nearReward)}
+          value={numberFormatter.format(data?.nearReward ?? 0)}
           detail="Excludes completed cycles"
           icon={<Gift className="h-6 w-6" aria-hidden="true" />}
           tone="amber"
@@ -262,7 +241,6 @@ function CommercialPanel({ hidden }: { hidden: boolean }) {
             <h2 className="text-lg font-semibold text-[#101828]">Commercial 30+1 Progress</h2>
             <p className="text-xs text-gray-500">Every 30 qualifying purchases unlocks 1 free cylinder.</p>
           </div>
-          <span className="w-fit rounded-full bg-gray-100 px-3 py-1 text-[11px] font-medium text-gray-600">Illustrative data</span>
         </div>
 
         <div className="overflow-x-auto">
@@ -270,22 +248,21 @@ function CommercialPanel({ hidden }: { hidden: boolean }) {
             <colgroup>
               <col className="w-[18%]" />
               <col className="w-[14%]" />
-              <col className="w-[11%]" />
               <col className="w-[20%]" />
               <col className="w-[14%]" />
               <col className="w-[14%]" />
-              <col className="w-[9%]" />
+              <col className="w-[11%]" />
             </colgroup>
             <thead className="bg-gray-50/80">
               <tr>
-                {['BUSINESS', 'PHONE', 'CYLINDER SIZE', 'CURRENT CYCLE', 'PURCHASES REMAINING', 'LAST QUALIFYING PURCHASE', 'ACTION'].map((heading) => (
+                {['BUSINESS', 'PHONE', 'CURRENT CYCLE', 'PURCHASES THIS MONTH', 'LAST QUALIFYING PURCHASE', 'ACTION'].map((heading) => (
                   <th key={heading} scope="col" className="px-5 py-3 text-left text-[11px] font-semibold tracking-wide text-gray-600">{heading}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {commercialAccounts.map((account) => {
-                const isExpanded = expandedAccountId === account.id;
+              {(data?.accounts ?? []).map((account) => {
+                const isExpanded = expanded === account.id;
                 const purchasesRemaining = Math.max(30 - account.currentCycle, 0);
                 const progress = Math.min((account.currentCycle / 30) * 100, 100);
 
@@ -294,7 +271,6 @@ function CommercialPanel({ hidden }: { hidden: boolean }) {
                     <tr className="border-t border-gray-100 transition-colors hover:bg-gray-50/70">
                       <td className="px-5 py-4 text-sm font-semibold text-[#101828]">{account.business}</td>
                       <td className="px-5 py-4 text-sm text-gray-600">{account.phone}</td>
-                      <td className="px-5 py-4 text-sm text-gray-600">{account.cylinderSize}</td>
                       <td className="px-5 py-4">
                         <div className="flex items-center gap-3">
                           <span className="w-14 shrink-0 whitespace-nowrap text-sm font-semibold tabular-nums text-[#101828]">
@@ -315,14 +291,12 @@ function CommercialPanel({ hidden }: { hidden: boolean }) {
                           </div>
                         </div>
                       </td>
-                      <td className={`px-5 py-4 text-sm font-medium ${purchasesRemaining === 0 ? 'text-amber-600' : 'text-gray-700'}`}>
-                        {purchasesRemaining === 0 ? 'Cycle complete' : `${purchasesRemaining} ${purchasesRemaining === 1 ? 'purchase' : 'purchases'}`}
-                      </td>
-                      <td className="px-5 py-4 text-sm text-gray-600">{account.lastQualifyingPurchase}</td>
+                      <td className="px-5 py-4 text-sm">{account.qualifyingPurchasesThisMonth}</td>
+                      <td className="px-5 py-4 text-sm text-gray-600">{date(account.lastQualifyingPurchase)}</td>
                       <td className="px-5 py-4">
                         <button
                           type="button"
-                          onClick={() => setExpandedAccountId(isExpanded ? null : account.id)}
+                          onClick={() => setExpanded(isExpanded ? null : account.id)}
                           aria-expanded={isExpanded}
                           className="text-sm font-semibold text-[#007BC1] transition-colors hover:text-[#005a8f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#007BC1] focus-visible:ring-offset-2"
                         >
@@ -332,11 +306,14 @@ function CommercialPanel({ hidden }: { hidden: boolean }) {
                     </tr>
                     {isExpanded && (
                       <tr className="border-t border-blue-100 bg-blue-50/60">
-                        <td colSpan={7} className="px-5 py-4 text-sm text-gray-700">
-                          <span className="font-semibold text-[#101828]">Current cycle:</span> {account.currentCycle} of 30 qualifying purchases.{' '}
-                          {purchasesRemaining === 0
-                            ? 'The completed cycle can be viewed in the authorized redemption workflow.'
-                            : `${purchasesRemaining} ${purchasesRemaining === 1 ? 'purchase remains' : 'purchases remain'} before a free-cylinder reward is flagged.`}
+                        <td colSpan={6} className="px-5 py-4 text-sm text-gray-700">
+                          {ledger.isLoading && 'Loading purchase history...'}
+                          {ledger.error && `Could not load purchase history: ${ledger.error.message}`}
+                          {ledger.data && (ledger.data.ledger.commercial_purchases.length ? ledger.data.ledger.commercial_purchases.map((purchase) => (
+                            <div key={`${purchase.cycle_number}-${purchase.counted_at}`}>
+                              Cycle {purchase.cycle_number} purchase on {date(purchase.counted_at)}
+                            </div>
+                          )) : 'No purchases recorded.')}
                         </td>
                       </tr>
                     )}
@@ -351,26 +328,27 @@ function CommercialPanel({ hidden }: { hidden: boolean }) {
   );
 }
 
-export function LoyaltyTrackDashboard({ scopeLabel }: LoyaltyTrackDashboardProps) {
-  const [activeTrack, setActiveTrack] = useState<LoyaltyTrack>('household');
+export function LoyaltyTrackDashboard({ branchId }: { branchId?: string | null }) {
+  const [track, setTrack] = useState<'household' | 'commercial'>('household');
+  const query = useQuery({ queryKey: ['loyalty-overview', branchId], queryFn: () => fetchJson<{ overview: Overview }>(`/loyalty/overview?branchId=${encodeURIComponent(branchId!)}`), enabled: !!branchId });
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-3 border-b border-gray-200 sm:flex-row sm:items-end sm:justify-between">
         <div role="tablist" aria-label="Loyalty program tracks" className="flex gap-2">
-          {(['household', 'commercial'] as const).map((track) => {
-            const isActive = activeTrack === track;
-            const label = track === 'household' ? 'Household' : 'Commercial';
+          {(['household', 'commercial'] as const).map((trackType) => {
+            const isActive = track === trackType;
+            const label = trackType === 'household' ? 'Household' : 'Commercial';
 
             return (
               <button
-                key={track}
-                id={`${track}-loyalty-tab`}
+                key={trackType}
+                id={`${trackType}-loyalty-tab`}
                 type="button"
                 role="tab"
                 aria-selected={isActive}
-                aria-controls={`${track}-loyalty-panel`}
-                onClick={() => setActiveTrack(track)}
+                aria-controls={`${trackType}-loyalty-panel`}
+                onClick={() => setTrack(trackType)}
                 className={`relative min-w-32 px-4 pb-3 pt-1 text-left text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#007BC1] focus-visible:ring-offset-2 ${isActive ? 'text-[#007BC1]' : 'text-gray-500 hover:text-gray-800'
                   }`}
               >
@@ -383,11 +361,16 @@ export function LoyaltyTrackDashboard({ scopeLabel }: LoyaltyTrackDashboardProps
             );
           })}
         </div>
-        <p className="pb-3 text-xs text-gray-500">{scopeLabel}</p>
       </div>
 
-      <HouseholdPanel hidden={activeTrack !== 'household'} />
-      <CommercialPanel hidden={activeTrack !== 'commercial'} />
+      {query.isLoading && <p className="text-sm text-gray-500">Loading loyalty data...</p>}
+      {query.error && <p className="text-sm text-red-600">Could not load loyalty data: {query.error.message}</p>}
+      {query.data && (
+        <>
+          <Household data={query.data.overview.household} hidden={track !== 'household'} />
+          <Commercial data={query.data.overview.commercial} hidden={track !== 'commercial'} />
+        </>
+      )}
     </div>
   );
 }

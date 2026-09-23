@@ -283,15 +283,16 @@ export function OperationalExpenses() {
                   value={trendCategory}
                   onChange={(value) => setTrendCategory(value as 'all' | ExpenseCategory)}
                   options={TREND_CATEGORY_OPTIONS}
-                  className="w-48"
+                  className="w-48 !py-1 !text-sm"
                 />
-                <div className="flex rounded-lg border border-gray-200 p-0.5 text-sm">
+                <div className="flex rounded-lg border border-gray-200 p-0.5">
                   {(['day', 'week', 'month'] as const).map((granularity) => (
                     <button
                       key={granularity}
                       type="button"
                       onClick={() => setTrendGranularity(granularity)}
-                      className={`px-3 py-1 rounded-md capitalize transition-colors ${
+                      style={{ fontSize: '14px' }}
+                      className={`px-1.5 py-0.5 rounded-md capitalize transition-colors ${
                         trendGranularity === granularity ? 'bg-[#007BC1] text-white' : 'text-gray-600 hover:text-gray-900'
                       }`}
                     >

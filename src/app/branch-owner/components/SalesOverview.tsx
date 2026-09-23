@@ -165,11 +165,12 @@ export function SalesOverview() {
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-8">
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-semibold text-gray-900">Revenue Trend</h3>
-            <div className="flex rounded-lg border border-gray-200 p-0.5 text-sm">
+            <div className="flex rounded-lg border border-gray-200 p-0.5">
               <button
                 type="button"
                 onClick={() => setChartView('monthly')}
-                className={`px-3 py-1 rounded-md transition-colors ${
+                style={{ fontSize: '14px' }}
+                className={`px-1.5 py-0.5 rounded-md transition-colors ${
                   chartView === 'monthly' ? 'bg-[#007BC1] text-white' : 'text-gray-600 hover:text-gray-900'
                 }`}
               >
@@ -178,7 +179,8 @@ export function SalesOverview() {
               <button
                 type="button"
                 onClick={() => setChartView('quarterly')}
-                className={`px-3 py-1 rounded-md transition-colors ${
+                style={{ fontSize: '14px' }}
+                className={`px-1.5 py-0.5 rounded-md transition-colors ${
                   chartView === 'quarterly' ? 'bg-[#007BC1] text-white' : 'text-gray-600 hover:text-gray-900'
                 }`}
               >
@@ -214,13 +216,14 @@ export function SalesOverview() {
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-semibold text-gray-900">Revenue by LPG Tank Size</h3>
-              <div className="flex rounded-lg border border-gray-200 p-0.5 text-sm">
+              <div className="flex rounded-lg border border-gray-200 p-0.5">
                 {(['day', 'week', 'month'] as const).map((period) => (
                   <button
                     key={period}
                     type="button"
                     onClick={() => setTankPeriod(period)}
-                    className={`px-3 py-1 rounded-md capitalize transition-colors ${
+                    style={{ fontSize: '14px' }}
+                    className={`px-1.5 py-0.5 rounded-md capitalize transition-colors ${
                       tankPeriod === period ? 'bg-[#007BC1] text-white' : 'text-gray-600 hover:text-gray-900'
                     }`}
                   >

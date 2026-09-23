@@ -18,11 +18,12 @@ export function DailyOrderVolumeChart({ dailyData, hourlyData }: DailyOrderVolum
         <h3 className="font-semibold text-gray-900">
           {isDay ? 'Daily Order Volume' : 'Hourly Order Volume (Today)'}
         </h3>
-        <div className="flex rounded-lg border border-gray-200 p-0.5 text-sm">
+        <div className="flex rounded-lg border border-gray-200 p-0.5">
           <button
             type="button"
             onClick={() => setGranularity('day')}
-            className={`px-3 py-1 rounded-md transition-colors ${
+            style={{ fontSize: '14px' }}
+            className={`px-1.5 py-0.5 rounded-md transition-colors ${
               isDay ? 'bg-[#007BC1] text-white' : 'text-gray-600 hover:text-gray-900'
             }`}
           >
@@ -31,7 +32,8 @@ export function DailyOrderVolumeChart({ dailyData, hourlyData }: DailyOrderVolum
           <button
             type="button"
             onClick={() => setGranularity('hour')}
-            className={`px-3 py-1 rounded-md transition-colors ${
+            style={{ fontSize: '14px' }}
+            className={`px-1.5 py-0.5 rounded-md transition-colors ${
               !isDay ? 'bg-[#007BC1] text-white' : 'text-gray-600 hover:text-gray-900'
             }`}
           >
@@ -40,10 +42,16 @@ export function DailyOrderVolumeChart({ dailyData, hourlyData }: DailyOrderVolum
         </div>
       </div>
       <ResponsiveContainer width="100%" height={250}>
-        <BarChart data={isDay ? dailyData : hourlyData}>
+        <BarChart data={isDay ? dailyData : hourlyData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-          <XAxis dataKey={isDay ? 'day' : 'hour'} stroke="#9ca3af" style={{ fontSize: '12px' }} />
-          <YAxis stroke="#9ca3af" style={{ fontSize: '12px' }} />
+          <XAxis
+            dataKey={isDay ? 'day' : 'hour'}
+            stroke="#9ca3af"
+            style={{ fontSize: '11px' }}
+            interval={isDay ? 0 : 1}
+            tick={{ dy: 4 }}
+          />
+          <YAxis stroke="#9ca3af" style={{ fontSize: '11px' }} allowDecimals={false} />
           <Tooltip
             cursor={{ fill: '#f3f4f6' }}
             contentStyle={{ borderRadius: '8px', borderColor: '#e5e7eb', fontSize: '12px' }}
