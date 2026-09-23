@@ -1,23 +1,30 @@
-import React, { createContext, useContext, useState } from "react";
+import React, { createContext, useContext, useRef, useState } from "react";
 
 const FormContext = createContext<any>(null);
 
 export function useForm<T extends Record<string, any>>({ defaultValues, schema }: { defaultValues: T, schema?: any }) {
   const [values, setValues] = useState<T>(defaultValues);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  // Always-current ref so validateField never reads a stale closure.
+  const valuesRef = useRef<T>(values);
+  const setValuesAndSync: typeof setValues = (update) => {
+    const next = typeof update === 'function' ? (update as any)(valuesRef.current) : update;
+    valuesRef.current = next;
+    setValues(next);
+  };
 
-  const validateField = (name: string, value: any = values[name]) => {
+  const validateField = (name: string, explicitValue?: any) => {
     if (!schema) return true;
+    // Use explicit value if provided; otherwise read from the always-current ref.
+    const valueToCheck = explicitValue !== undefined ? explicitValue : valuesRef.current[name];
     try {
-      schema.parse({ ...values, [name]: value });
-      const newErrors = { ...errors };
-      delete newErrors[name];
-      setErrors(newErrors);
+      schema.parse({ ...valuesRef.current, [name]: valueToCheck });
+      setErrors(prev => { const e = { ...prev }; delete e[name]; return e; });
       return true;
     } catch (err: any) {
       const fieldError = err.errors?.find((e: any) => e.path[0] === name);
       if (fieldError) {
-        setErrors({ ...errors, [name]: fieldError.message });
+        setErrors(prev => ({ ...prev, [name]: fieldError.message }));
         return false;
       }
       return true;
@@ -27,11 +34,11 @@ export function useForm<T extends Record<string, any>>({ defaultValues, schema }
   const handleSubmit = (onSubmit: any) => (e: React.FormEvent) => {
     e.preventDefault();
     if (!schema) {
-      onSubmit(values);
+      onSubmit(valuesRef.current);
       return;
     }
     try {
-      const parsed = schema.parse(values);
+      const parsed = schema.parse(valuesRef.current);
       setErrors({});
       onSubmit(parsed);
     } catch (err: any) {
@@ -45,7 +52,7 @@ export function useForm<T extends Record<string, any>>({ defaultValues, schema }
 
   return {
     values,
-    setValues,
+    setValues: setValuesAndSync,
     errors,
     handleSubmit,
     validateField

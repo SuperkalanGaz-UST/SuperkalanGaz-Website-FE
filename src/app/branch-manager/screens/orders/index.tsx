@@ -1,11 +1,14 @@
 'use client';
 
 import React, { useCallback, useEffect, useState } from 'react';
+import ReactDOM from 'react-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
     AlertTriangle,
     CalendarDays,
     CheckCircle2,
+    ChevronDown,
+    ChevronUp,
     ClipboardList,
     Clock3,
     Plus,
@@ -14,16 +17,24 @@ import {
     Smartphone,
     Store,
     Truck,
+    Edit,
+    Clock,
+    X,
+    UserSearch,
+    Loader2
 } from 'lucide-react';
 import { toast } from 'sonner';
 import * as z from 'zod';
 import { Badge } from '../../components/Badge';
 import { Button } from '../../components/Button';
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '../../components/Select';
 import { RowActionsMenu } from '../../components/RowActionsMenu';
+import { Popover, PopoverTrigger, PopoverContent } from '../../../components/ui/popover';
 import { Tabs, TabsList, TabsTrigger } from '../../components/Tabs';
 import { Form, FormItem, FormLabel, FormControl, FormMessage, useForm } from '../../components/Form';
 import { Input } from '../../components/Input';
-import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '../../components/Select';
+
+import { Pagination } from '../../../components/Pagination';
 import { apiFetch, apiErrorMessage, fetchJson } from '../../../lib/api';
 import { DeliveryProofViewer } from '../../../components/DeliveryProofViewer';
 import { fetchLpgPrices, formatPeso, LpgPrice } from '../../../lib/pricing';
@@ -157,6 +168,15 @@ const formatRequestedAt = (iso: string) => {
     }).format(d);
 };
 
+const formatLastOrderDate = (iso: string | null) => {
+    if (!iso) return 'No previous orders';
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return 'No previous orders';
+    return 'Last bought ' + new Intl.DateTimeFormat('en-PH', {
+        month: 'short', day: 'numeric', year: 'numeric'
+    }).format(d);
+};
+
 const getStatusVariant = (status: SRRow['status']) => {
     switch (status) {
         case 'Delivered': return 'success' as const;
@@ -202,11 +222,19 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
     const [activeTab, setActiveTab] = useState('all');
     const [searchQuery, setSearchQuery] = useState(initialSearch ?? '');
     const [requestedDate, setRequestedDate] = useState('');
+    const [currentPage, setCurrentPage] = useState(1);
+    const ITEMS_PER_PAGE = 10;
     // Re-seed if the BM comes back from Customers with a different name — but
     // only follow actual changes, so it doesn't fight the BM's own typing.
     useEffect(() => {
         if (initialSearch) setSearchQuery(initialSearch);
     }, [initialSearch]);
+
+    // Reset pagination when filters change
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [activeTab, searchQuery, requestedDate]);
+
     const [requests, setRequests] = useState<SRRow[]>([]);
     
     const { data: requestsData, error: queryError, isLoading: requestsLoading, refetch: loadRequests } = useQuery({
@@ -241,15 +269,28 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
     const [customerResults, setCustomerResults] = useState<CustomerRow[] | null>(null);
     const [customerSearchLoading, setCustomerSearchLoading] = useState(false);
     const [customerSearchError, setCustomerSearchError] = useState<string | null>(null);
-    // Inline "create new customer" sub-form (not a real <form> — it lives inside the
-    // order <form>, so submit is a button handler, not a nested form submit).
+    const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
+    const customerDropdownRef = React.useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (customerDropdownRef.current && !customerDropdownRef.current.contains(event.target as Node)) {
+                setShowCustomerDropdown(false);
+            }
+        };
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, []);
+
+    // Inline "create new customer" sub-form — now surfaced as a modal overlay.
     const [showCreateCustomer, setShowCreateCustomer] = useState(false);
+    const [showNewCustomerModal, setShowNewCustomerModal] = useState(false);
     const [newCustomer, setNewCustomer] = useState<{
         name: string;
         contactNumber: string;
         deliveryAddress: string;
-        accountType: 'household' | 'commercial';
-    }>({ name: '', contactNumber: '', deliveryAddress: '', accountType: 'household' });
+        accountType: 'household' | 'commercial' | '';
+    }>({ name: '', contactNumber: '', deliveryAddress: '', accountType: '' });
     const [newCustomerErrors, setNewCustomerErrors] = useState<Partial<Record<'name' | 'contactNumber' | 'deliveryAddress' | 'accountType', string>>>({});
     const [creatingCustomer, setCreatingCustomer] = useState(false);
 
@@ -279,6 +320,8 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
     const [cancelReason, setCancelReason] = useState('');
     const [cancelError, setCancelError] = useState<string | null>(null);
     const [cancellingId, setCancellingId] = useState<string | null>(null);
+
+    const [expandedRowId, setExpandedRowId] = useState<string | null>(null);
 
     // Log a lost/undelivered cylinder complaint (BM-US-04, stories BM-019/020/021
     // combined into one action — see the backend). Available on Dispatched/En
@@ -358,27 +401,39 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
             customerContact: formatPHMobile(customer.contact_number),
             deliveryAddress: customer.delivery_address,
         }));
+        // Pass the new value explicitly — form.values is still the stale snapshot
+        // at this point since setValues is async, so validateField(name) would read
+        // the old empty string and keep the error on screen.
+        form.validateField('customerName', customer.name);
         setCustomerSearch('');
         setCustomerResults(null);
         setCustomerSearchError(null);
         setShowCreateCustomer(false);
+        setShowCustomerDropdown(false);
     };
 
-    // Unlink the current customer so the BM can search again. The snapshot fields
-    // are left as-is (the BM may want to keep them) — they stay editable.
+    // Unlink the current customer and clear the fields that were auto-filled from
+    // the customer record. Cylinder size, quantity, and special instructions are
+    // left untouched — those are order-level choices, not customer-level data.
     const clearSelectedCustomer = () => {
         setSelectedCustomer(null);
         setCustomerResults(null);
         setCustomerSearch('');
         setShowCreateCustomer(false);
+        form.setValues(prev => ({
+            ...prev,
+            customerName: '',
+            customerContact: '',
+            deliveryAddress: '',
+        }));
     };
 
-    // Open the inline create form, pre-filling the name with whatever was typed so
-    // the BM doesn't retype it (BM-029/030).
+    // Open the new-customer modal, pre-filling the name with whatever was typed.
     const openCreateCustomer = () => {
-        setNewCustomer({ name: customerSearch.trim(), contactNumber: '', deliveryAddress: '', accountType: 'household' });
+        setNewCustomer({ name: customerSearch.trim(), contactNumber: '', deliveryAddress: '', accountType: '' });
         setNewCustomerErrors({});
-        setShowCreateCustomer(true);
+        setShowCustomerDropdown(false);
+        setShowNewCustomerModal(true);
     };
 
     // Register a new customer (BM-031) then return to the intake pre-populated
@@ -388,6 +443,7 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
         if (!newCustomer.name.trim()) errors.name = 'Name is required';
         if (normalizePhMobile(newCustomer.contactNumber) === null) errors.contactNumber = 'Enter a valid PH mobile number';
         if (!newCustomer.deliveryAddress.trim()) errors.deliveryAddress = 'Delivery address is required';
+        if (!newCustomer.accountType) errors.accountType = 'Please select a loyalty program';
         setNewCustomerErrors(errors);
         if (Object.keys(errors).length > 0) return;
 
@@ -414,10 +470,10 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
             const data = await res.json();
             if (!res.ok) throw new Error(apiErrorMessage(data, 'Failed to register customer'));
             toast.success('Customer registered.');
-            // Close the create form, autopopulate the order, and link the id — the BM
-            // shouldn't have to re-enter anything to finish the order (BM-032).
+            // Close the modal, autopopulate the order, and link the id (BM-032).
             selectCustomer(data.customer as CustomerRow);
-            setNewCustomer({ name: '', contactNumber: '', deliveryAddress: '', accountType: 'household' });
+            setShowNewCustomerModal(false);
+        setNewCustomer({ name: '', contactNumber: '', deliveryAddress: '', accountType: '' });
             setNewCustomerErrors({});
         } catch (err) {
             toast.error(err instanceof Error ? err.message : 'Failed to register customer');
@@ -437,7 +493,8 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
         setCustomerResults(null);
         setCustomerSearchError(null);
         setShowCreateCustomer(false);
-        setNewCustomer({ name: '', contactNumber: '', deliveryAddress: '', accountType: 'household' });
+        setShowNewCustomerModal(false);
+        setNewCustomer({ name: '', contactNumber: '', deliveryAddress: '', accountType: '' });
         setNewCustomerErrors({});
     };
 
@@ -789,6 +846,7 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
         closeLogComplaint();
         closeReassign();
         closeDelayReason();
+        setExpandedRowId(null);
     };
 
     // --- Reassign the rider on a delayed order (BM-US-02, story BM-010) -------
@@ -946,6 +1004,9 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
         return matchesTab && matchesSearch && matchesRequestedDate;
     });
 
+    const totalPages = Math.ceil(filteredRequests.length / ITEMS_PER_PAGE);
+    const paginatedRequests = filteredRequests.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
+
     const summaryMetrics = [
         {
             label: 'All requests',
@@ -1012,127 +1073,86 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                     <div className={styles.cardBody}>
                         <Form {...form}>
                             <form onSubmit={form.handleSubmit(onSubmit)} className={styles.orderForm}>
-                                {/* Customer step (CIM): search + select an existing customer, or
-                                    register a new one inline, before filling the order snapshot below. */}
-                                <div className={styles.customerSection}>
-                                    <span className={styles.customerSectionTitle}>Customer</span>
-                                    {selectedCustomer ? (
-                                        <div className={styles.customerSelected}>
-                                            <div className={styles.customerSelectedInfo}>
-                                                <span className={styles.boldText}>{selectedCustomer.name}</span>
-                                                <span className={styles.customerResultMeta}>
-                                                    {selectedCustomer.contact_number} · {selectedCustomer.delivery_address}
-                                                </span>
-                                            </div>
-                                            <Button type="button" variant="ghost" size="sm" onClick={clearSelectedCustomer}>
-                                                Change
-                                            </Button>
-                                        </div>
-                                    ) : showCreateCustomer ? (
-                                        <div className={styles.createCustomerBox}>
-                                            <span className={styles.customerSectionTitle}>Register new customer</span>
-                                            <div className={styles.createCustomerGrid}>
-                                                <div>
-                                                    <label className={styles.fieldLabel} htmlFor="new-customer-name">Name</label>
-                                                    <Input id="new-customer-name" placeholder="Juan Dela Cruz"
-                                                        value={newCustomer.name}
-                                                        onChange={e => setNewCustomer(p => ({ ...p, name: e.target.value }))}
-                                                        onKeyDown={e => { if (e.key === 'Enter') e.preventDefault(); }} />
-                                                    {newCustomerErrors.name && <p className={styles.fieldError}>{newCustomerErrors.name}</p>}
-                                                </div>
-                                                <div>
-                                                    <label className={styles.fieldLabel} htmlFor="new-customer-contact">Contact Number</label>
-                                                    <Input id="new-customer-contact" placeholder="+63 9XX XXX XXXX"
-                                                        value={newCustomer.contactNumber}
-                                                        onChange={e => setNewCustomer(p => ({ ...p, contactNumber: formatPHMobile(e.target.value) }))}
-                                                        onKeyDown={e => { if (e.key === 'Enter') e.preventDefault(); }} />
-                                                    {newCustomerErrors.contactNumber && <p className={styles.fieldError}>{newCustomerErrors.contactNumber}</p>}
-                                                </div>
-                                                <div>
-                                                    <label className={styles.fieldLabel} htmlFor="new-customer-address">Delivery Address</label>
-                                                    <Input id="new-customer-address" placeholder="123 Mabini St, Makati"
-                                                        value={newCustomer.deliveryAddress}
-                                                        onChange={e => setNewCustomer(p => ({ ...p, deliveryAddress: e.target.value }))}
-                                                        onKeyDown={e => { if (e.key === 'Enter') e.preventDefault(); }} />
-                                                    {newCustomerErrors.deliveryAddress && <p className={styles.fieldError}>{newCustomerErrors.deliveryAddress}</p>}
-                                                </div>
-                                                <div>
-                                                    <label className={styles.fieldLabel} htmlFor="new-customer-account-type">Loyalty Track</label>
-                                                    <select
-                                                        id="new-customer-account-type"
-                                                        value={newCustomer.accountType}
-                                                        onChange={e => setNewCustomer(p => ({ ...p, accountType: e.target.value as 'household' | 'commercial' }))}
-                                                        className={styles.customerTypeSelect}
-                                                    >
-                                                        <option value="household">Household Points</option>
-                                                        <option value="commercial">Commercial 30+1</option>
-                                                    </select>
-                                                </div>
-                                            </div>
-                                            <div className={styles.createCustomerActions}>
-                                                <Button type="button" variant="ghost" size="sm"
-                                                    onClick={() => setShowCreateCustomer(false)} disabled={creatingCustomer}>
-                                                    Cancel
-                                                </Button>
-                                                <Button type="button" variant="primary" size="sm"
-                                                    onClick={handleCreateCustomer} disabled={creatingCustomer}>
-                                                    {creatingCustomer ? 'Registering…' : 'Register & Continue'}
-                                                </Button>
-                                            </div>
-                                        </div>
-                                    ) : (
-                                        <>
-                                            <Input
-                                                placeholder="Search customer by name or phone…"
-                                                aria-label="Search customer by name or phone"
-                                                value={customerSearch}
-                                                onChange={e => setCustomerSearch(e.target.value)}
-                                                onKeyDown={e => { if (e.key === 'Enter') e.preventDefault(); }}
-                                            />
-                                            {customerSearch.trim().length > 0 && customerSearch.trim().length < 2 ? (
-                                                <span className={styles.customerHint}>Type at least 2 characters to search.</span>
-                                            ) : customerSearchLoading ? (
-                                                <span className={styles.customerHint}>Searching…</span>
-                                            ) : customerSearchError ? (
-                                                <span className={styles.customerHint}>{customerSearchError}</span>
-                                            ) : customerResults === null ? (
-                                                <span className={styles.customerHint}>Search for an existing customer, or register a new one.</span>
-                                            ) : customerResults.length === 0 ? (
-                                                <div className={styles.customerEmpty}>
-                                                    <span className={styles.customerHint}>No customer found for “{customerSearch.trim()}”.</span>
-                                                    <Button type="button" variant="outline" size="sm" onClick={openCreateCustomer}>
-                                                        + Create new customer
-                                                    </Button>
-                                                </div>
-                                            ) : (
-                                                <div className={styles.customerResults}>
-                                                    {customerResults.map(c => (
-                                                        <button key={c.id} type="button" className={styles.customerResultItem}
-                                                            onClick={() => selectCustomer(c)}>
-                                                            <span className={styles.customerResultName}>{c.name}</span>
-                                                            <span className={styles.customerResultMeta}>
-                                                                {c.contact_number}
-                                                                {c.last_order_date ? ` · Last order ${formatRequestedAt(c.last_order_date)}` : ''}
-                                                            </span>
-                                                        </button>
-                                                    ))}
-                                                    <Button type="button" variant="ghost" size="sm" onClick={openCreateCustomer}>
-                                                        + Create new customer
-                                                    </Button>
-                                                </div>
-                                            )}
-                                        </>
-                                    )}
-                                </div>
+                                {/* New customer creation is now a modal — see portal below */}
                                 <div className={styles.formGrid}>
                                     <FormItem name="customerName">
-                                        <FormLabel>Customer Name</FormLabel>
+                                        <FormLabel>Customer</FormLabel>
                                         <FormControl>
-                                            <Input placeholder="Juan Dela Cruz" value={form.values.customerName}
-                                                onChange={e => form.setValues(p => ({ ...p, customerName: e.target.value }))}
-                                                onBlur={() => form.validateField('customerName')} />
+                                            <div style={{ position: 'relative' }} ref={customerDropdownRef}>
+                                                {selectedCustomer ? (
+                                                    <div className={styles.customerChip}>
+                                                        <span style={{ fontWeight: 500, fontSize: '0.875rem' }}>{selectedCustomer.name}</span>
+                                                        <button type="button" className={styles.customerChipClose} onClick={clearSelectedCustomer}>
+                                                            <X size={14} />
+                                                        </button>
+                                                    </div>
+                                                ) : (
+                                                    <Input placeholder="Search existing customer or type new name..." value={customerSearch}
+                                                        onChange={e => {
+                                                            setCustomerSearch(e.target.value);
+                                                            form.setValues(p => ({ ...p, customerName: e.target.value }));
+                                                            setShowCustomerDropdown(true);
+                                                        }}
+                                                        onFocus={() => { if (customerSearch.length >= 2) setShowCustomerDropdown(true); }}
+                                                        onBlur={() => form.validateField('customerName')}
+                                                        onKeyDown={e => { if (e.key === 'Enter') e.preventDefault(); }} />
+                                                )}
+                                                {showCustomerDropdown && !selectedCustomer && (
+                                                    <div className={styles.customerDropdown}>
+                                                        {customerSearch.trim().length > 0 && customerSearch.trim().length < 2 ? (
+                                                            <div style={{ padding: '0.5rem', fontSize: '0.8125rem', color: 'var(--muted-foreground)' }}>Type at least 2 characters to search.</div>
+                                                        ) : customerSearchLoading ? (
+                                                            <div style={{ padding: '0.75rem', fontSize: '0.8125rem', color: 'var(--muted-foreground)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.35rem' }}>
+                                                                <Loader2 size={16} className={styles.spin} /> Searching…
+                                                            </div>
+                                                        ) : customerSearchError ? (
+                                                            <div style={{ padding: '0.5rem', fontSize: '0.8125rem', color: '#dc2626' }}>{customerSearchError}</div>
+                                                        ) : customerResults && customerResults.length > 0 ? (
+                                                            <>
+                                                                {customerResults.map(c => (
+                                                                    <div key={c.id} className={styles.customerDropdownItem} onMouseDown={() => selectCustomer(c)}>
+                                                                        <div className={styles.customerChipInfo}>
+                                                                            <span className={styles.boldText}>{c.name}</span>
+                                                                            <span style={{ fontSize: '0.7rem', color: 'var(--muted-foreground)' }}>
+                                                                                {c.contact_number} &middot; {formatLastOrderDate(c.last_order_date)}
+                                                                            </span>
+                                                                        </div>
+                                                                    </div>
+                                                                ))}
+                                                            </>
+                                                        ) : customerResults !== null ? (
+                                                            <div style={{
+                                                                display: 'flex', flexDirection: 'column', alignItems: 'center',
+                                                                padding: '1.25rem 1rem', gap: '0.5rem',
+                                                                border: '1px solid var(--border)', borderRadius: '0.5rem',
+                                                                margin: '0.25rem',
+                                                            }}>
+                                                                <UserSearch size={28} style={{ color: 'var(--muted-foreground)', opacity: 0.45 }} />
+                                                                <p style={{ fontSize: '0.8125rem', color: 'var(--muted-foreground)', textAlign: 'center', margin: 0 }}>
+                                                                    No customer found for <strong>&ldquo;{customerSearch.trim()}&rdquo;</strong>.
+                                                                </p>
+                                                                <Button
+                                                                    type="button"
+                                                                    variant="primary"
+                                                                    size="sm"
+                                                                    style={{ marginTop: '0.25rem', gap: '0.35rem' }}
+                                                                    onMouseDown={(e: React.MouseEvent) => { e.preventDefault(); setShowCustomerDropdown(false); openCreateCustomer(); }}
+                                                                >
+                                                                    <Plus size={14} />
+                                                                    Create new customer
+                                                                </Button>
+                                                            </div>
+                                                        ) : null}
+                                                    </div>
+                                                )}
+                                            </div>
                                         </FormControl>
                                         <FormMessage />
+                                        {!selectedCustomer && (
+                                            <p style={{ fontSize: '0.75rem', color: 'var(--muted-foreground)', marginTop: '0.2rem' }}>
+                                                Search for an existing customer, or register a new one.
+                                            </p>
+                                        )}
                                     </FormItem>
                                     <FormItem name="customerContact">
                                         <FormLabel>Contact Number</FormLabel>
@@ -1152,14 +1172,18 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                                         </FormControl>
                                         <FormMessage />
                                     </FormItem>
+                                </div>
+                                <div className={styles.formGrid}>
                                     <FormItem name="cylinderSize">
                                         <FormLabel>Cylinder Size</FormLabel>
-                                        <Select value={form.values.cylinderSize} onValueChange={(val: string) => { form.setValues(prev => ({ ...prev, cylinderSize: val })); form.validateField('cylinderSize'); }}>
+                                        <Select value={form.values.cylinderSize} onValueChange={(val: string) => { form.setValues(prev => ({ ...prev, cylinderSize: val })); form.validateField('cylinderSize', val); }}>
                                             <FormControl>
                                                 <SelectTrigger><SelectValue placeholder="Select size..." /></SelectTrigger>
                                             </FormControl>
                                             <SelectContent>
-                                                {catalogPrices.map(price => (
+                                                {[...catalogPrices]
+                                                    .sort((a, b) => parseFloat(a.cylinder_size) - parseFloat(b.cylinder_size))
+                                                    .map(price => (
                                                     <SelectItem key={price.id} value={price.cylinder_size}>
                                                         {price.cylinder_size} — {formatPeso(price.unit_price)}
                                                     </SelectItem>
@@ -1175,7 +1199,10 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                                         <FormLabel>Quantity</FormLabel>
                                         <FormControl>
                                             <Input type="number" min="1" value={form.values.quantity}
-                                                onChange={e => form.setValues(p => ({ ...p, quantity: Number(e.target.value) }))}
+                                                onChange={e => {
+                                                    const n = e.target.value === '' ? 1 : parseInt(e.target.value, 10);
+                                                    form.setValues(p => ({ ...p, quantity: n }));
+                                                }}
                                                 onBlur={() => form.validateField('quantity')} />
                                         </FormControl>
                                         <FormMessage />
@@ -1190,7 +1217,7 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                                     </FormItem>
                                 </div>
                                 <div className={styles.formFooter}>
-                                    <Button type="submit" size="lg" variant="primary" disabled={submitting || pricesLoading || catalogPrices.length === 0}>
+                                    <Button type="submit" size="default" variant="primary" disabled={submitting || pricesLoading || catalogPrices.length === 0}>
                                         {submitting ? 'Creating…' : 'Create Request'}
                                     </Button>
                                 </div>
@@ -1255,23 +1282,32 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                     </div>
                 </div>
                 <div className={styles.tableWrapper}>
+                    {assigningId !== null && (
+                        <div 
+                            style={{ position: 'fixed', inset: 0, zIndex: 40, backgroundColor: 'rgba(0,0,0,0.4)' }} 
+                            onClick={closeAssign}
+                            aria-hidden="true"
+                        />
+                    )}
                     <table className={styles.table}>
                         <colgroup>
-                            <col style={{ width: '9%' }} />
+                            <col style={{ width: '10%' }} />
+                            <col style={{ width: '10%' }} />
                             <col style={{ width: '8%' }} />
-                            <col style={{ width: '12%' }} />
-                            <col style={{ width: '10%' }} />
-                            <col style={{ width: '9%' }} />
-                            <col style={{ width: '10%' }} />
-                            <col style={{ width: '13%' }} />
                             <col style={{ width: '11%' }} />
                             <col style={{ width: '10%' }} />
-                            <col style={{ width: '16%' }} />
+                            <col style={{ width: '9%' }} />
+                            <col style={{ width: '9%' }} />
+                            <col style={{ width: '9%' }} />
+                            <col style={{ width: '10%' }} />
+                            <col style={{ width: '14%' }} />
                         </colgroup>
                         <thead>
                             <tr>
-                                <th>Source</th><th>Request ID</th><th>Customer</th><th>Contact</th>
-                                <th>Cylinder</th><th>Requested</th><th>SLA</th><th>Status</th>
+                                <th>Status</th><th>Source</th><th>Request ID</th><th>Customer</th><th>Contact</th>
+                                <th className={styles.cylinderCell}>Cylinder</th>
+                                <th className={styles.spacedColumn}>Requested</th>
+                                <th className={styles.spacedColumn}>SLA</th>
                                 <th>Delivery Rider</th><th>Actions</th>
                             </tr>
                         </thead>
@@ -1285,10 +1321,10 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                                         <Button variant="outline" size="sm" onClick={() => void loadRequests()}>Try again</Button>
                                     </td>
                                 </tr>
-                            ) : filteredRequests.length === 0 ? (
+                            ) : paginatedRequests.length === 0 ? (
                                 <tr><td colSpan={10} className={styles.emptyState}>No service requests found for this view.</td></tr>
                             ) : (
-                                filteredRequests.map(req => {
+                                paginatedRequests.map(req => {
                                     const slaState = getSlaState(req);
                                     const SlaIcon = slaState.label === 'Breached' || slaState.label === 'At risk'
                                         ? AlertTriangle
@@ -1300,16 +1336,36 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
 
                                     return (
                                     <React.Fragment key={req.id}>
-                                    <tr>
-                                        {/* order_source is a mandatory tag on every row (SRD channel-level SLA reporting) */}
+                                    <tr 
+                                        className={styles.clickableRow} 
+                                        onClick={() => {
+                                            if (expandedRowId === req.id) {
+                                                setExpandedRowId(null);
+                                            } else {
+                                                closeAllPanels();
+                                                setExpandedRowId(req.id);
+                                            }
+                                        }}
+                                    >
                                         <td>
+                                            <div className={styles.statusCellFlex}>
+                                                {expandedRowId === req.id ? (
+                                                    <ChevronUp size={10} style={{ color: '#64748b', flexShrink: 0, minWidth: '10px', display: 'block' }} />
+                                                ) : (
+                                                    <ChevronDown size={10} style={{ color: '#64748b', flexShrink: 0, minWidth: '10px', display: 'block' }} />
+                                                )}
+                                                <Badge variant={getStatusVariant(req.status)} className={styles.statusBadge}>{req.status}</Badge>
+                                            </div>
+                                        </td>
+                                        {/* order_source is a mandatory tag on every row (SRD channel-level SLA reporting) */}
+                                        <td className={styles.sourceCell}>
                                             {req.order_source === 'Mobile App' ? (
-                                                <Badge variant="info" style={{ gap: '0.35rem' }}>
-                                                    <Smartphone size={20} /> Mobile App
+                                                <Badge variant="info" className={styles.sourceBadge}>
+                                                    <Smartphone size={16} /> Mobile App
                                                 </Badge>
                                             ) : (
-                                                <Badge variant="secondary" style={{ gap: '0.35rem' }}>
-                                                    <Store size={20} /> Walk-in/Phone
+                                                <Badge variant="secondary" className={styles.sourceBadge}>
+                                                    <Store size={16} /> Walk-in/Phone
                                                 </Badge>
                                             )}
                                         </td>
@@ -1317,117 +1373,117 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                                             <span className={styles.monoText}>{req.sr_code}</span>
                                         </td>
                                         <td className={styles.customerCell}>
-                                            <span className={styles.boldText}>{req.customer_name}</span>
+                                            <span className={`${styles.primaryText} ${styles.boldText}`}>{req.customer_name}</span>
                                             <span className={`${styles.monoText} ${styles.mutedText}`}>
                                                 {req.customer_code ?? 'Legacy record'}
                                             </span>
                                         </td>
                                         <td className={styles.contactCell}>{req.customer_contact}</td>
-                                        <td>
-                                            <div>{req.quantity}× {req.cylinder_size}</div>
+                                        <td className={styles.cylinderCell}>
+                                            <div className={styles.primaryText}>{req.quantity}× {req.cylinder_size}</div>
                                             {req.total_amount !== null && (
-                                                <div className={styles.mutedText} style={{ marginTop: '0.25rem', fontSize: '0.75rem' }}>
+                                                <div className={styles.mutedText} style={{ marginTop: '0.25rem', fontSize: '0.75rem', whiteSpace: 'nowrap' }}>
                                                     {formatPeso(Number(req.total_amount))}
                                                 </div>
                                             )}
                                         </td>
-                                        <td>
-                                            <span className={styles.requestedDate}>{formatRequestedAt(req.requested_at)}</span>
+                                        <td className={styles.spacedColumn}>
+                                            <span className={styles.requestedDate}>
+                                                {(() => {
+                                                    const d = formatRequestedAt(req.requested_at);
+                                                    const idx = d.lastIndexOf(', ');
+                                                    if (idx === -1) return <span className={styles.primaryText}>{d}</span>;
+                                                    return (
+                                                        <>
+                                                            <span className={styles.primaryText}>{d.slice(0, idx)}</span>
+                                                            <span className={styles.subText}>{d.slice(idx + 2)}</span>
+                                                        </>
+                                                    );
+                                                })()}
+                                            </span>
                                         </td>
-                                        <td className={styles.slaCell}>
+                                        <td className={`${styles.slaCell} ${styles.spacedColumn}`}>
                                             <span className={`${styles.slaState} ${styles[slaState.className]}`}>
                                                 <SlaIcon size={14} strokeWidth={2} />
                                                 {slaState.label}
                                             </span>
-                                            {req.sla_breach_segment && (
-                                                <span className={styles.slaMeta}>
-                                                    {req.sla_breach_segment.replace(/_/g, ' ')}
-                                                </span>
-                                            )}
-                                        </td>
-                                        <td>
-                                            <Badge variant={getStatusVariant(req.status)}>{req.status}</Badge>
-                                            {/* dispatched_at is the 2nd SLA timestamp; show it once the request leaves Pending */}
-                                            {req.dispatched_at && (
-                                                <div className={styles.mutedText} style={{ marginTop: '0.35rem', fontSize: '0.75rem' }}>
-                                                    Dispatched {formatRequestedAt(req.dispatched_at)}
-                                                </div>
-                                            )}
-                                            {/* delivered_at is the final SLA timestamp; show it once the request is Delivered */}
-                                            {req.delivered_at && (
-                                                <div className={styles.mutedText} style={{ marginTop: '0.35rem', fontSize: '0.75rem' }}>
-                                                    Delivered {formatRequestedAt(req.delivered_at)}
-                                                </div>
-                                            )}
-                                            {/* Delay reason (BM-011) — visible once logged, any in-flight status. */}
-                                            {req.delay_reason && (
-                                                <div className={styles.mutedText} style={{ marginTop: '0.35rem', fontSize: '0.75rem' }} title={req.delay_reason}>
-                                                    Delay: {req.delay_reason}
-                                                </div>
-                                            )}
                                         </td>
                                         <td className={styles.riderCell}>
-                                            {assigningId === req.id ? (
-                                                ridersLoading || availableRiders === null ? (
-                                                    <span className={styles.mutedText}>Loading riders…</span>
-                                                ) : availableRiders.length === 0 ? (
-                                                    <span className={styles.mutedText}>No available riders</span>
-                                                ) : (
-                                                    // Native select: the browser renders its option list in a
-                                                    // top-level layer that ancestor overflow (the card / table
-                                                    // wrapper) can't clip, so all riders show without scrolling.
-                                                    <select
-                                                        className={styles.riderSelect}
-                                                        value={selectedRiderId}
-                                                        onChange={(e) => setSelectedRiderId(e.target.value)}
-                                                        aria-label="Select rider"
-                                                    >
-                                                        <option value="" disabled>Select rider…</option>
-                                                        {availableRiders.map(r => (
-                                                            <option key={r.id} value={r.id}>{r.name} ({r.plate}) · {operationalLocationLabel(r)}</option>
-                                                        ))}
-                                                    </select>
-                                                )
-                                            ) : req.rider_id ? (
-                                                rosterMap[req.rider_id] ?? req.rider_id
+                                            {req.rider_id ? (
+                                                (() => {
+                                                    const display = rosterMap[req.rider_id] ?? req.rider_id;
+                                                    const match = display.match(/^(.*?) \((.*?)\)$/);
+                                                    if (match) {
+                                                        return (
+                                                            <>
+                                                                <span className={styles.primaryText}>{match[1]}</span>
+                                                                <span className={styles.subText}>({match[2]})</span>
+                                                            </>
+                                                        );
+                                                    }
+                                                    return <span className={styles.primaryText}>{display}</span>;
+                                                })()
                                             ) : (
                                                 <span className={styles.mutedText}>—</span>
                                             )}
                                         </td>
-                                        <td className={styles.actionsCell}>
+                                        <td className={styles.actionsCell} onClick={e => e.stopPropagation()}>
                                             {req.status === 'Pending' ? (
-                                                assigningId === req.id ? (
-                                                    <div className={styles.assignActions}>
-                                                        {availableRiders !== null && availableRiders.length > 0 && (
-                                                            <Button
-                                                                size="sm"
-                                                                variant="primary"
-                                                                disabled={!selectedRiderId || dispatchingId === req.id}
-                                                                onClick={() => handleDispatch(req.id)}
-                                                            >
-                                                                {dispatchingId === req.id ? 'Dispatching…' : 'Dispatch'}
-                                                            </Button>
-                                                        )}
-                                                        <Button size="sm" variant="ghost" onClick={closeAssign}>Cancel</Button>
-                                                    </div>
-                                                ) : (
-                                                    // Pre-dispatch controls (BM-US-07). Only rendered inside this
-                                                    // Pending branch, so Edit/Cancel vanish once the request is
-                                                    // Dispatched/Delivered/Cancelled (BM-037). Editor + cancel-confirm
-                                                    // panels open as an expanded row beneath this one. The primary
-                                                    // action (Assign & Dispatch) stays a visible Button; the rest
-                                                    // collapse into the kebab menu.
-                                                    <div className={styles.actionButtons}>
-                                                        <Button size="sm" variant="outline" onClick={() => openAssign(req.id)}>Assign &amp; Dispatch</Button>
+                                                <div className={styles.actionButtons}>
+                                                    <Popover open={assigningId === req.id} onOpenChange={(open) => { if (!open) closeAssign(); }}>
+                                                        <PopoverTrigger asChild>
+                                                            <Button size="sm" variant="primary" onClick={() => openAssign(req.id)}>Assign &amp; Dispatch</Button>
+                                                        </PopoverTrigger>
+                                                        <PopoverContent align="end" side="top" sideOffset={8} className={styles.assignPopover}>
+                                                            <div className={styles.popoverHeader}>Assign/Dispatch Rider</div>
+                                                            <div className={styles.popoverBody}>
+                                                                {ridersLoading || availableRiders === null ? (
+                                                                    <span className={styles.mutedText}>Loading riders…</span>
+                                                                ) : availableRiders.length === 0 ? (
+                                                                    <span className={styles.mutedText}>No available riders</span>
+                                                                ) : (
+                                                                    <Select 
+                                                                        value={availableRiders.find(r => r.id === selectedRiderId)?.name || ''} 
+                                                                        onValueChange={setSelectedRiderId}
+                                                                    >
+                                                                        <SelectTrigger style={{ height: '2.25rem', borderRadius: '0.375rem', borderColor: 'rgba(0,0,0,0.15)', color: selectedRiderId ? 'inherit' : '#64748b' }}>
+                                                                            <SelectValue placeholder="Select rider…" />
+                                                                        </SelectTrigger>
+                                                                        <SelectContent>
+                                                                            {availableRiders.map(r => (
+                                                                                <SelectItem key={r.id} value={r.id} style={{ padding: '0.35rem 0.6rem' }}>
+                                                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.1rem' }}>
+                                                                                        <span style={{ fontWeight: 500, color: 'var(--foreground)' }}>{r.name}</span>
+                                                                                        <span style={{ fontSize: '0.7rem', color: 'var(--muted-foreground)' }}>
+                                                                                            {r.plate} &middot; {operationalLocationLabel(r)}
+                                                                                        </span>
+                                                                                    </div>
+                                                                                </SelectItem>
+                                                                            ))}
+                                                                        </SelectContent>
+                                                                    </Select>
+                                                                )}
+                                                            </div>
+                                                            <div className={styles.popoverFooter}>
+                                                                <Button size="sm" variant="outline" onClick={closeAssign}>Cancel</Button>
+                                                                <Button 
+                                                                    size="sm" 
+                                                                    variant="primary" 
+                                                                    disabled={!selectedRiderId || dispatchingId === req.id} 
+                                                                    onClick={() => handleDispatch(req.id)}
+                                                                    style={{ backgroundColor: '#0074bc', color: 'white', opacity: (!selectedRiderId || dispatchingId === req.id) ? 0.6 : 1 }}
+                                                                >
+                                                                    {dispatchingId === req.id ? 'Dispatching…' : 'Dispatch'}
+                                                                </Button>
+                                                            </div>
+                                                        </PopoverContent>
+                                                    </Popover>
                                                         <RowActionsMenu items={[
-                                                            { label: 'Edit', onClick: () => openEdit(req) },
-                                                            { label: 'Cancel', onClick: () => openCancel(req.id) },
-                                                            // BM-011: a Pending request can already be running late
-                                                            // (see the SLA at-risk flag above) before it's even dispatched.
-                                                            { label: 'Delay Reason', onClick: () => openDelayReason(req.id) },
+                                                            { label: 'Edit', onClick: () => openEdit(req), icon: <Edit size={16} /> },
+                                                            { label: 'Delay Reason', onClick: () => openDelayReason(req.id), icon: <Clock size={16} /> },
+                                                            { label: 'Cancel', onClick: () => openCancel(req.id), danger: true, icon: <X size={16} /> },
                                                         ]} />
                                                     </div>
-                                                )
                                             ) : req.status === 'Dispatched' || req.status === 'En Route' ? (
                                                 // Out for delivery → let the BM close it out (BM-007), reassign to a
                                                 // closer available rider if it's running late (BM-010), log why
@@ -1445,9 +1501,9 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                                                         {deliveringId === req.id ? 'Delivering…' : 'Mark Delivered'}
                                                     </Button>
                                                     <RowActionsMenu items={[
-                                                        { label: 'Reassign', onClick: () => openReassign(req.id) },
-                                                        { label: 'Delay Reason', onClick: () => openDelayReason(req.id) },
-                                                        { label: 'Log Complaint', onClick: () => openLogComplaint(req.id) },
+                                                        { label: 'Reassign', onClick: () => openReassign(req.id), icon: <RefreshCw size={16} /> },
+                                                        { label: 'Delay Reason', onClick: () => openDelayReason(req.id), icon: <Clock size={16} /> },
+                                                        { label: 'Log Complaint', onClick: () => openLogComplaint(req.id), danger: true, icon: <AlertTriangle size={16} /> },
                                                     ]} />
                                                 </div>
                                             ) : req.status === 'Delivered' ? (
@@ -1477,6 +1533,45 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                                             )}
                                         </td>
                                     </tr>
+                                    {expandedRowId === req.id && (
+                                        <tr className={styles.editorRow}>
+                                            <td colSpan={10} className={styles.expandedPanelCell}>
+                                                <div className={styles.expandedPanel}>
+                                                    <div className={styles.timelineGrid}>
+                                                        {req.dispatched_at && (
+                                                            <div className={styles.timelineItem}>
+                                                                <span className={styles.timelineLabel}>Dispatched</span>
+                                                                <span className={styles.timelineTime}>{formatRequestedAt(req.dispatched_at)}</span>
+                                                            </div>
+                                                        )}
+                                                        {req.delivered_at && (
+                                                            <div className={styles.timelineItem}>
+                                                                <span className={styles.timelineLabel}>Delivered</span>
+                                                                <span className={styles.timelineTime}>{formatRequestedAt(req.delivered_at)}</span>
+                                                            </div>
+                                                        )}
+                                                        {req.delay_reason && (
+                                                            <div className={styles.timelineItem}>
+                                                                <span className={styles.timelineLabel}>Delay Note</span>
+                                                                <span className={styles.timelineText}>{req.delay_reason}</span>
+                                                            </div>
+                                                        )}
+                                                        {req.sla_breach_segment && (
+                                                            <div className={styles.timelineItem}>
+                                                                <span className={styles.timelineLabel}>SLA Issue</span>
+                                                                <span className={`${styles.timelineText} ${styles.slaDanger}`}>{req.sla_breach_segment.replace(/_/g, ' ')}</span>
+                                                            </div>
+                                                        )}
+                                                        {!req.dispatched_at && !req.delay_reason && !req.sla_breach_segment && (
+                                                            <div className={styles.timelineItem}>
+                                                                <span className={styles.mutedText}>No additional status details.</span>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    )}
                                     {/* Inline Edit editor (BM-035). Full-width expanded row so the
                                         order-detail fields aren't cramped in the Actions cell. Customer
                                         identity/contact are intentionally NOT editable here. */}
@@ -1698,7 +1793,99 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                         </tbody>
                     </table>
                 </div>
+                {filteredRequests.length > 0 && (
+                    <div className={styles.paginationRow}>
+                        <div className={styles.resultCountTotal}>
+                            Showing {(currentPage - 1) * ITEMS_PER_PAGE + 1}–{Math.min(currentPage * ITEMS_PER_PAGE, filteredRequests.length)} of {filteredRequests.length} orders
+                        </div>
+                        <Pagination 
+                            currentPage={currentPage}
+                            totalPages={totalPages}
+                            onPageChange={setCurrentPage}
+                        />
+                    </div>
+                )}
             </div>
+            {/* ── New Customer Modal ── portal so it escapes overflow:hidden on .card */}
+            {mounted && showNewCustomerModal && ReactDOM.createPortal(
+                <div
+                    style={{
+                        position: 'fixed', inset: 0, zIndex: 9999,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        backgroundColor: 'rgba(0,0,0,0.45)',
+                    }}
+                    onMouseDown={(e) => { if (e.target === e.currentTarget) setShowNewCustomerModal(false); }}
+                >
+                    <div style={{
+                        background: 'var(--card)', borderRadius: '0.5rem',
+                        border: '1px solid var(--border)',
+                        boxShadow: '0 8px 30px rgba(0,0,0,0.15)',
+                        padding: '1.25rem', width: '100%', maxWidth: '420px', margin: '1rem',
+                        display: 'flex', flexDirection: 'column', gap: '0',
+                    }}>
+                        <div className={styles.popoverHeader} style={{ marginBottom: '0.75rem' }}>Register New Customer</div>
+                        <div className={styles.popoverBody} style={{ gap: '0.75rem' }}>
+                            <div>
+                                <label className={styles.fieldLabel} htmlFor="modal-customer-name">Full Name</label>
+                                <Input id="modal-customer-name" placeholder="Juan Dela Cruz"
+                                    value={newCustomer.name}
+                                    onChange={e => setNewCustomer(p => ({ ...p, name: e.target.value }))}
+                                    onKeyDown={e => { if (e.key === 'Enter') e.preventDefault(); }} />
+                                {newCustomerErrors.name && <p className={styles.fieldError} style={{ marginTop: '0.2rem' }}>{newCustomerErrors.name}</p>}
+                            </div>
+                            <div>
+                                <label className={styles.fieldLabel} htmlFor="modal-customer-contact">Contact Number</label>
+                                <Input id="modal-customer-contact" placeholder="+63 9XX XXX XXXX"
+                                    value={newCustomer.contactNumber}
+                                    onChange={e => setNewCustomer(p => ({ ...p, contactNumber: formatPHMobile(e.target.value) }))}
+                                    onKeyDown={e => { if (e.key === 'Enter') e.preventDefault(); }} />
+                                {newCustomerErrors.contactNumber && <p className={styles.fieldError} style={{ marginTop: '0.2rem' }}>{newCustomerErrors.contactNumber}</p>}
+                            </div>
+                            <div>
+                                <label className={styles.fieldLabel} htmlFor="modal-customer-address">Delivery Address</label>
+                                <Input id="modal-customer-address" placeholder="123 Mabini St, Makati"
+                                    value={newCustomer.deliveryAddress}
+                                    onChange={e => setNewCustomer(p => ({ ...p, deliveryAddress: e.target.value }))}
+                                    onKeyDown={e => { if (e.key === 'Enter') e.preventDefault(); }} />
+                                {newCustomerErrors.deliveryAddress && <p className={styles.fieldError} style={{ marginTop: '0.2rem' }}>{newCustomerErrors.deliveryAddress}</p>}
+                            </div>
+                            <div>
+                                <label className={styles.fieldLabel} htmlFor="modal-customer-account-type">Loyalty Program</label>
+                                <Select 
+                                    value={newCustomer.accountType === 'household' ? 'Household Points' : newCustomer.accountType === 'commercial' ? 'Commercial 30+1' : ''} 
+                                    onValueChange={(val: string) => {
+                                        if (val === 'Household Points') setNewCustomer(p => ({ ...p, accountType: 'household' }));
+                                        else if (val === 'Commercial 30+1') setNewCustomer(p => ({ ...p, accountType: 'commercial' }));
+                                    }}
+                                >
+                                    <SelectTrigger id="modal-customer-account-type" style={{ height: '2.25rem', borderRadius: '0.375rem', borderColor: 'rgba(0,0,0,0.15)' }}>
+                                        <SelectValue placeholder="Select loyalty program..." />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="Household Points">Household Points</SelectItem>
+                                        <SelectItem value="Commercial 30+1">Commercial 30+1</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                                {newCustomerErrors.accountType && <p className={styles.fieldError} style={{ marginTop: '0.2rem' }}>{newCustomerErrors.accountType}</p>}
+                            </div>
+                        </div>
+                        <div className={styles.popoverFooter}>
+                            <Button size="sm" variant="outline" onClick={() => setShowNewCustomerModal(false)} disabled={creatingCustomer}>
+                                Cancel
+                            </Button>
+                            <Button
+                                size="sm" variant="primary"
+                                style={{ backgroundColor: '#0074bc', color: 'white', opacity: creatingCustomer ? 0.6 : 1 }}
+                                onClick={handleCreateCustomer}
+                                disabled={creatingCustomer}
+                            >
+                                {creatingCustomer ? 'Registering…' : 'Register'}
+                            </Button>
+                        </div>
+                    </div>
+                </div>,
+                document.body
+            )}
         </>
     );
 }

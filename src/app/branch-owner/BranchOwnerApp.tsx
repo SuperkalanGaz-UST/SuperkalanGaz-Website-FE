@@ -23,6 +23,7 @@ import { ReorderLogFull } from './components/ReorderLogFull';
 import { CustomerRatingsFull } from './components/CustomerRatingsFull';
 import { SalesFull } from './components/SalesFull';
 import { ExpensesLogFull } from './components/ExpensesLogFull';
+import CustomerDirectory from './components/CustomerDirectory';
 import { BranchProvider, useBranch } from './contexts/BranchContext';
 
 export type Branch = string;
@@ -77,6 +78,7 @@ export function BranchOwnerApp({ branchIds, branches }: BranchOwnerAppProps) {
           {activeScreen === 'order-analytics' && <OrderAnalytics />}
           {activeScreen === 'sales-overview' && <SalesOverview />}
           {activeScreen === 'operational-expenses' && <OperationalExpenses />}
+          {activeScreen === 'customers' && <CustomerDirectory />}
           {activeScreen === 'csat' && <CSATSatisfaction />}
           {activeScreen === 'loyalty' && <LoyaltyProgram />}
           {activeScreen === 'inventory' && <Inventory />}

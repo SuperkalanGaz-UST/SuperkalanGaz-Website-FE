@@ -24,6 +24,7 @@ interface AppSidebarProps {
   entries: SidebarNavEntry[];
   activeScreen: string;
   onNavigate: (screen: string) => void;
+  compactSpacing?: boolean;
 }
 
 function entryIsActive(entry: SidebarNavEntry, activeScreen: string): boolean {
@@ -35,7 +36,7 @@ function entryIsActive(entry: SidebarNavEntry, activeScreen: string): boolean {
  * destinations their persona may access; the shell owns the consistent
  * expanded/minimized presentation.
  */
-export function AppSidebar({ entries, activeScreen, onNavigate }: AppSidebarProps) {
+export function AppSidebar({ entries, activeScreen, onNavigate, compactSpacing }: AppSidebarProps) {
   const [isExpanded, setIsExpanded] = useState(true);
   const account = useAccount();
   const navigationLabel = `${ROLE_LABELS[account.role]} navigation`;
@@ -110,7 +111,7 @@ export function AppSidebar({ entries, activeScreen, onNavigate }: AppSidebarProp
                     type="button"
                     onClick={() => onNavigate(entry.id!)}
                     aria-current={isActive ? 'page' : undefined}
-                    className={`mb-1 flex h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-[13px] font-medium text-white transition-colors ${
+                    className={`mb-1 flex ${compactSpacing ? 'h-[42px]' : 'h-11'} w-full items-center gap-3 rounded-lg px-3 text-left text-[13px] font-medium text-white transition-colors ${
                       isActive ? 'bg-white/15' : 'hover:bg-white/10'
                     }`}
                   >
@@ -121,8 +122,8 @@ export function AppSidebar({ entries, activeScreen, onNavigate }: AppSidebarProp
               }
 
               return (
-                <section key={entry.label} className="mt-4" aria-label={entry.label}>
-                  <h2 className="px-3 pb-1.5 text-[11px] font-medium uppercase tracking-wide text-white/60">
+                <section key={entry.label} className={compactSpacing ? 'mt-[14px]' : 'mt-4'} aria-label={entry.label}>
+                  <h2 className={`px-3 ${compactSpacing ? 'pb-1' : 'pb-1.5'} text-[11px] font-medium uppercase tracking-wide text-white/60`}>
                     {entry.label}
                   </h2>
                   {entry.children?.map((child) => {
@@ -133,7 +134,7 @@ export function AppSidebar({ entries, activeScreen, onNavigate }: AppSidebarProp
                         type="button"
                         onClick={() => onNavigate(child.id)}
                         aria-current={isActive ? 'page' : undefined}
-                        className={`mb-0.5 flex h-10 w-full items-center gap-3 rounded-lg px-3 text-left text-[13px] font-medium text-white transition-colors ${
+                        className={`mb-0.5 flex ${compactSpacing ? 'h-[38px]' : 'h-10'} w-full items-center gap-3 rounded-lg px-3 text-left text-[13px] font-medium text-white transition-colors ${
                           isActive ? 'bg-white/15' : 'hover:bg-white/10'
                         }`}
                       >

@@ -5,6 +5,7 @@ import {
     DropdownMenuTrigger,
     DropdownMenuContent,
     DropdownMenuItem,
+    DropdownMenuSeparator,
 } from '../../components/ui/dropdown-menu';
 
 /** Ghost icon-sm Button's computed style, inlined here because the Radix
@@ -21,16 +22,38 @@ const menuTriggerStyle: React.CSSProperties = {
  * row of buttons — the single most important action stays a visible Button
  * beside it. Radix portals the menu content to the document body, so it
  * isn't clipped by a table's own `overflow-x: auto` wrapper. */
-export function RowActionsMenu({ items }: { items: { label: string; onClick: () => void }[] }) {
+export function RowActionsMenu({ items }: { items: { label: string; onClick: () => void; danger?: boolean; icon?: React.ReactNode }[] }) {
+    const normalItems = items.filter(i => !i.danger);
+    const dangerItems = items.filter(i => i.danger);
+
     return (
         <DropdownMenu>
             <DropdownMenuTrigger style={menuTriggerStyle} aria-label="More actions">
                 <MoreHorizontal size={16} />
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-                {items.map((item) => (
-                    <DropdownMenuItem key={item.label} onSelect={() => item.onClick()}>
-                        {item.label}
+            <DropdownMenuContent align="end" style={{ minWidth: '160px' }}>
+                {normalItems.map((item) => (
+                    <DropdownMenuItem 
+                        key={item.label} 
+                        onSelect={() => item.onClick()}
+                        style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.625rem 0.75rem', cursor: 'pointer' }}
+                    >
+                        {item.icon && <span style={{ opacity: 0.7, display: 'flex', alignItems: 'center' }}>{item.icon}</span>}
+                        <span>{item.label}</span>
+                    </DropdownMenuItem>
+                ))}
+                
+                {normalItems.length > 0 && dangerItems.length > 0 && <DropdownMenuSeparator />}
+                
+                {dangerItems.map((item) => (
+                    <DropdownMenuItem 
+                        key={item.label} 
+                        variant="destructive"
+                        onSelect={() => item.onClick()}
+                        style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.625rem 0.75rem', cursor: 'pointer' }}
+                    >
+                        {item.icon && <span style={{ display: 'flex', alignItems: 'center' }}>{item.icon}</span>}
+                        <span>{item.label}</span>
                     </DropdownMenuItem>
                 ))}
             </DropdownMenuContent>

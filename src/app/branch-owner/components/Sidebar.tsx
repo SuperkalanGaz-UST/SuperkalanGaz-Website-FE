@@ -12,6 +12,7 @@ import {
   Boxes,
   Bike,
   FileText,
+  UserRound,
   Users,
   Settings,
 } from 'lucide-react';
@@ -37,6 +38,7 @@ const NAV_ENTRIES: SidebarNavEntry[] = [
     icon: HeartHandshake,
     label: 'Customer',
     children: [
+      { icon: UserRound, label: 'Customer Directory', id: 'customers' },
       { icon: Star, label: 'Ratings & Reviews', id: 'csat' },
       { icon: Gift, label: 'Rewards', id: 'loyalty' },
     ],
@@ -60,5 +62,5 @@ interface SidebarProps {
 }
 
 export function Sidebar({ activeScreen, onNavigate }: SidebarProps) {
-  return <AppSidebar entries={NAV_ENTRIES} activeScreen={activeScreen} onNavigate={onNavigate} />;
+  return <AppSidebar entries={NAV_ENTRIES} activeScreen={activeScreen} onNavigate={onNavigate} compactSpacing />;
 }

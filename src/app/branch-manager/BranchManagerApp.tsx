@@ -46,9 +46,16 @@ export function BranchManagerApp() {
   const account = useAccount();
   const branch = account.branches[0];
 
+  const handleNavigate = (screen: string) => {
+    if (screen !== 'orders') {
+      setOrdersCustomerSearch(null);
+    }
+    setActiveScreen(screen);
+  };
+
   return (
     <div className="bm-root" style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
-      <BMSidebar activeScreen={activeScreen} onNavigate={setActiveScreen} />
+      <BMSidebar activeScreen={activeScreen} onNavigate={handleNavigate} />
 
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         <AppHeader

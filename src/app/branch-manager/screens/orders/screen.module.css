@@ -25,7 +25,7 @@
 
 .orderForm { display: flex; flex-direction: column; gap: 1rem; }
 .formGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; }
-.formFooter { display: flex; justify-content: flex-end; padding-top: 0.5rem; }
+.formFooter { display: flex; justify-content: flex-end; padding-top: 0; }
 
 .tabsWrapper { display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; padding: 1rem 1.25rem; border-bottom: 1px solid #f3f4f6; }
 .toolbarTabs { flex: 0 0 auto; }
@@ -40,24 +40,31 @@
    the multi-button Actions column) a bounded share of the card's width, so the
    9-column queue fits without a horizontal scrollbar on a normal viewport —
    cell content wraps within its column instead of forcing the table wider. */
-.tableWrapper { overflow-x: auto; }
-.table { width: 100%; min-width: 1120px; table-layout: fixed; border-collapse: collapse; font-size: 0.8125rem; }
-.table th { padding: 0.8rem 0.85rem; text-align: left; font-size: 0.7rem; font-weight: 650; color: #526078; border-bottom: 1px solid #e8edf3; white-space: nowrap; background-color: #f8fafc; }
-.table td { padding: 0.95rem 0.85rem; border-bottom: 1px solid #edf1f5; color: var(--foreground); vertical-align: middle; overflow-wrap: break-word; }
+
+.table { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 0.78rem; }
+.table th { padding: 0.75rem 0.6rem; text-align: left; font-size: 0.68rem; font-weight: 650; color: #526078; border-bottom: 2px solid #cbd5e1; background-color: #f8fafc; white-space: nowrap; }
+.table td { padding: 0.75rem 0.6rem; border-bottom: 1px solid #edf1f5; color: var(--foreground); vertical-align: top; overflow-wrap: break-word; }
 .table tbody tr:last-child td { border-bottom: none; }
 .table tbody tr:hover { background-color: rgba(0, 116, 188, 0.035); }
+.spacedColumn { padding-left: 0.75rem !important; padding-right: 0.75rem !important; }
+.cylinderCell { padding-left: 0.75rem !important; padding-right: 0.75rem !important; text-align: center; }
+.sourceCell { padding-left: 0.25rem !important; }
+.sourceBadge { gap: 0.35rem; font-size: 0.65rem !important; white-space: nowrap; }
+.statusBadge { font-size: 0.72rem !important; padding: 3px 10px !important; white-space: nowrap; }
 
 .requestIdCell, .customerCell { display: table-cell; }
-.requestIdCell { color: #153b6d; font-weight: 600; }
+.requestIdCell { color: #153b6d; font-weight: 600; white-space: nowrap; }
 .customerCell span, .riderCell span { display: block; }
 .customerCell .monoText { margin-top: 0.25rem; font-size: 0.7rem; }
-.contactCell { color: #344054; font-size: 0.78rem; }
+.contactCell { color: #344054; font-size: 0.65rem; white-space: nowrap; }
 .requestedDate { display: block; color: #475467; line-height: 1.45; }
 .slaCell { min-width: 0; }
-.slaState { display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.75rem; font-weight: 600; white-space: nowrap; }
+.slaState { display: flex; align-items: flex-start; gap: 0.3rem; font-size: 0.75rem; font-weight: 600; }
+.slaState > svg { flex-shrink: 0; margin-top: 0.1rem; }
 .slaMeta { display: block; margin-top: 0.3rem; color: var(--muted-foreground); font-size: 0.68rem; line-height: 1.35; text-transform: capitalize; }
 .slaSuccess { color: #14804a; }
-.slaWarning, .slaDanger { color: #b66a00; }
+.slaWarning { color: #b66a00; }
+.slaDanger { color: #dc2626; }
 .slaInfo { color: #075bb7; }
 .slaNeutral { color: #667085; }
 
@@ -69,14 +76,24 @@
 
 .monoText { font-family: var(--font-family-monospace); font-size: 0.8125rem; }
 .boldText { font-weight: 600; }
+.primaryText { font-size: 0.8125rem; color: var(--foreground); }
+.subText { font-size: 0.7rem; display: block; margin-top: 0.25rem; color: var(--muted-foreground); }
 .mutedText { color: var(--muted-foreground); }
+.truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; display: block; }
 .emptyState { text-align: center; padding: 2rem; color: var(--muted-foreground); }
-/* Primary action Button + kebab RowActionsMenu, side by side — never wrap the
-   menu below the button. */
-.actionButtons { display: flex; gap: 0.4rem; align-items: center; flex-wrap: nowrap; white-space: nowrap; }
+.paginationRow { display: flex; align-items: center; justify-content: space-between; padding: 1rem 1.25rem; border-top: 1px solid #edf1f5; flex-wrap: wrap; gap: 1rem; }
+.resultCountTotal { font-size: 0.75rem; color: var(--muted-foreground); font-weight: 500; }
+/* Primary action Button + kebab RowActionsMenu, side by side — allow wrap if needed. */
+.actionButtons { display: flex; gap: 0.4rem; justify-content: flex-end; flex-wrap: wrap; }
+.actionButtons button, .actionButtons a, .assignActions button { white-space: nowrap; }
 
-.riderCell, .actionsCell { vertical-align: top; }
+.riderCell { vertical-align: top; }
+.actionsCell { vertical-align: top; padding-left: 1.5rem !important; }
 .assignActions { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+.assignPopover { z-index: 50; padding: 1.25rem; min-width: 280px; background-color: var(--card); border: 1px solid var(--border); border-radius: 0.5rem; display: flex; flex-direction: column; gap: 0.5rem; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+.popoverHeader { font-size: 0.8125rem; font-weight: 600; color: var(--foreground); border-bottom: 1px solid #edf1f5; padding-bottom: 0.75rem; margin-bottom: 0.75rem; }
+.popoverBody { display: flex; flex-direction: column; gap: 0.4rem; }
+.popoverFooter { display: flex; justify-content: flex-end; gap: 0.4rem; margin-top: 0.4rem; }
 .riderSelect { width: 100%; height: 2.5rem; padding: 0.4rem 0.6rem; border: 1px solid var(--border); border-radius: 0.375rem; background-color: var(--card); color: var(--foreground); font-size: 0.875rem; cursor: pointer; }
 
 /* Customer search + inline registration block (CIM) that sits above the order
@@ -110,6 +127,19 @@
 .editorActions { display: flex; gap: 0.5rem; justify-content: flex-end; align-items: center; }
 .cancelPanel { display: flex; flex-direction: column; gap: 0.5rem; padding: 0.75rem 0.25rem; max-width: 480px; }
 
+/* Clickable row & Expanded Panel */
+.clickableRow { cursor: pointer; transition: background-color 0.15s ease; }
+.clickableRow:hover { background-color: rgba(0, 116, 188, 0.035) !important; }
+.statusCellFlex { display: flex; align-items: center; justify-content: flex-start; gap: 0.5rem; flex-wrap: nowrap; }
+.statusCellFlex > svg { flex-shrink: 0; }
+
+.expandedPanelCell { background-color: var(--muted); padding: 0 !important; border-bottom: 1px solid #edf1f5; }
+.expandedPanel { padding: 1rem 1.25rem; display: flex; flex-direction: column; gap: 0.75rem; }
+.timelineGrid { display: flex; flex-wrap: wrap; gap: 2rem; align-items: flex-start; }
+.timelineItem { display: flex; flex-direction: column; gap: 0.25rem; min-width: 120px; }
+.timelineLabel { font-size: 0.7rem; font-weight: 600; color: #526078; text-transform: uppercase; letter-spacing: 0.02em; }
+.timelineTime, .timelineText { font-size: 0.8125rem; color: #101828; }
+
 @media (max-width: 1180px) {
     .metricsGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .metricItem:nth-child(2) { border-right: none; }
@@ -131,3 +161,13 @@
     .searchField, .dateField { width: 100%; flex: none; }
     .toolbarControls > button { align-self: flex-start; }
 }
+
+.customerDropdown { position: absolute; top: 100%; left: 0; right: 0; margin-top: 0.25rem; background-color: var(--card); border: 1px solid rgba(0,0,0,0.1); border-radius: 0.375rem; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); z-index: 50; max-height: 250px; overflow-y: auto; padding: 0.25rem; }
+.customerDropdownItem { display: flex; align-items: center; justify-content: space-between; padding: 0.5rem 0.75rem; border-radius: 0.25rem; cursor: pointer; transition: background-color 0.2s; }
+.customerDropdownItem:hover { background-color: rgba(0,0,0,0.05); }
+.customerChip { display: flex; align-items: center; justify-content: space-between; height: 2.5rem; padding: 0 0.6rem; background-color: rgba(0, 116, 188, 0.05); border: 1px solid rgba(0, 116, 188, 0.2); border-radius: 0.375rem; box-sizing: border-box; width: 100%; }
+
+.customerChipClose { padding: 0.125rem; border-radius: 50%; color: var(--muted-foreground); cursor: pointer; transition: all 0.2s; background: none; border: none; display: flex; align-items: center; justify-content: center; }
+.customerChipClose:hover { background-color: rgba(0,0,0,0.1); color: var(--foreground); }
+@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+.spin { animation: spin 1s linear infinite; }
