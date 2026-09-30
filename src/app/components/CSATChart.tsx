@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import {
   BarChart,
   Bar,
@@ -11,7 +11,6 @@ import {
   Legend,
   ResponsiveContainer,
 } from 'recharts';
-import { ChevronDown } from 'lucide-react';
 import type { BranchRow } from './OrderVolumeChart';
 
 /** Shape of one raw data point from GET /csat/franchise-analytics */
@@ -28,6 +27,8 @@ interface Props {
   branches: BranchRow[];
   series: CsatAnalyticsSeries[];
   isLoading: boolean;
+  /** Branches to render a bar for — resolved by the dashboard's shared province/branch filter. */
+  activeBranches: BranchRow[];
 }
 
 /**
@@ -46,120 +47,9 @@ const CHART_COLORS = [
   '#6366F1', // indigo
 ];
 
-// ─── Shared dropdown ────────────────────────────────────────────────────────
-
-function DropdownMenu({
-  label,
-  options,
-  value,
-  onChange,
-  disabled,
-}: {
-  label: string;
-  options: { value: string; label: string }[];
-  value: string;
-  onChange: (v: string) => void;
-  disabled?: boolean;
-}) {
-  const [open, setOpen] = useState(false);
-  const selected = options.find((o) => o.value === value);
-
-  return (
-    <div className="relative">
-      <button
-        disabled={disabled}
-        onClick={() => setOpen((p) => !p)}
-        className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-gray-300 rounded-lg bg-white hover:bg-gray-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-      >
-        {selected?.label ?? label}
-        <ChevronDown className="w-3.5 h-3.5 text-gray-400" />
-      </button>
-      {open && !disabled && (
-        <>
-          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 mt-1 min-w-[180px] bg-white border border-gray-200 rounded-lg shadow-lg z-20 max-h-60 overflow-y-auto">
-            {options.map((o) => (
-              <button
-                key={o.value}
-                onClick={() => { onChange(o.value); setOpen(false); }}
-                className={`block w-full text-left px-3 py-2 text-xs hover:bg-gray-50 first:rounded-t-lg last:rounded-b-lg ${
-                  value === o.value ? 'font-semibold text-[#007BC1]' : 'text-gray-700'
-                }`}
-              >
-                {o.label}
-              </button>
-            ))}
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
-
 // ─── Component ───────────────────────────────────────────────────────────────
 
-export function CSATChart({ branches, series, isLoading }: Props) {
-  const [selectedProvince, setSelectedProvince] = useState('');
-  const [selectedBranch, setSelectedBranch] = useState('');
-
-  // ── Warn about any branches with no province in the DB ───────────────────
-  useEffect(() => {
-    if (branches.length === 0) return;
-    const unassigned = branches.filter((b) => !b.province);
-    if (unassigned.length > 0) {
-      console.warn(
-        '[CSATChart] The following active branches have no province set in the database ' +
-          '(they will appear under "Unassigned" in the Province dropdown):\n' +
-          unassigned.map((b) => `  • ${b.name} (id: ${b.id})`).join('\n'),
-      );
-    }
-  }, [branches]);
-
-  // ── Province dropdown — from real branch.province values ─────────────────
-  const provinceOptions = useMemo(() => {
-    const provinces = new Set<string>();
-    for (const b of branches) {
-      provinces.add(b.province ?? 'Unassigned');
-    }
-    const sorted = Array.from(provinces).sort((a, b) =>
-      a === 'Unassigned' ? 1 : b === 'Unassigned' ? -1 : a.localeCompare(b),
-    );
-    return [
-      { value: '', label: 'All Provinces' },
-      ...sorted.map((p) => ({ value: p, label: p })),
-    ];
-  }, [branches]);
-
-  // ── Branch dropdown — filtered by province, display as "City — Name" ─────
-  const branchOptions = useMemo(() => {
-    if (!selectedProvince) return [];
-    const filtered = branches.filter(
-      (b) => (b.province ?? 'Unassigned') === selectedProvince,
-    );
-    return [
-      { value: '', label: `All in ${selectedProvince}` },
-      ...filtered.map((b) => ({
-        value: b.id,
-        label: b.city ? `${b.city} — ${b.name}` : b.name,
-      })),
-    ];
-  }, [branches, selectedProvince]);
-
-  const handleProvinceChange = (province: string) => {
-    setSelectedProvince(province);
-    setSelectedBranch('');
-  };
-
-  const activeBranches = useMemo(() => {
-    if (selectedBranch) {
-      return branches.filter((b) => b.id === selectedBranch);
-    }
-    if (selectedProvince) {
-      return branches.filter((b) => (b.province ?? 'Unassigned') === selectedProvince);
-    }
-    return branches; // Default to all branches, no aggregation
-  }, [branches, selectedProvince, selectedBranch]);
-
+export function CSATChart({ branches, series, isLoading, activeBranches }: Props) {
   const getBranchColor = (branchId: string) => {
     const idx = branches.findIndex((b) => b.id === branchId);
     return CHART_COLORS[Math.max(0, idx) % CHART_COLORS.length];
@@ -196,22 +86,6 @@ export function CSATChart({ branches, series, isLoading }: Props) {
         <h3 className="font-semibold text-gray-900 shrink-0">
           CSAT Score Trend
         </h3>
-
-        <div className="flex items-center justify-end gap-3 shrink-0">
-          <DropdownMenu
-            label="All Provinces"
-            options={provinceOptions}
-            value={selectedProvince}
-            onChange={handleProvinceChange}
-          />
-          <DropdownMenu
-            label="All Branches"
-            options={branchOptions}
-            value={selectedBranch}
-            onChange={setSelectedBranch}
-            disabled={!selectedProvince}
-          />
-        </div>
       </div>
 
       {/* Chart */}
