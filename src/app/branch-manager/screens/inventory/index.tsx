@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import * as z from 'zod';
 import { Badge } from '../../components/Badge';
@@ -68,6 +68,7 @@ const formatDate = (iso: string) => {
 const isOpenRequest = (status: ReorderStatus) => status === 'Pending' || status === 'Approved';
 
 export default function Inventory() {
+    const queryClient = useQueryClient();
     const { data: stockData, error: stockQueryError, isLoading: stockLoading, refetch: loadStockLevels } = useQuery({
         queryKey: ['stock-levels'],
         queryFn: () => fetchJson<{ stockLevels: StockLevelRow[] }>('/inventory/stock-levels'),
@@ -169,8 +170,49 @@ export default function Inventory() {
         }
     };
 
+    const [confirmedTime, setConfirmedTime] = useState<string | null>(null);
+    const [confirmStockLoading, setConfirmStockLoading] = useState(false);
+    
+    React.useEffect(() => {
+        const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(new Date());
+        const saved = localStorage.getItem('stock_confirmed_' + today);
+        if (saved) setConfirmedTime(saved);
+    }, []);
+
+    const onConfirmStock = async () => {
+        setConfirmStockLoading(true);
+        try {
+            const res = await apiFetch('/inventory/stock-checks', { method: 'POST' });
+            const body = await res.json();
+            if (!res.ok) throw new Error(apiErrorMessage(body, 'Failed to confirm stock'));
+            
+            const now = new Date();
+            const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(now);
+            const time = new Intl.DateTimeFormat('en-PH', { timeZone: 'Asia/Manila', hour: '2-digit', minute: '2-digit' }).format(now);
+            
+            localStorage.setItem('stock_confirmed_' + today, time);
+            setConfirmedTime(time);
+            queryClient.invalidateQueries({ queryKey: ['sla-report'] });
+            toast.success("Stock count confirmed for today.");
+        } catch (err) {
+            toast.error(err instanceof Error ? err.message : 'Failed to confirm stock');
+        } finally {
+            setConfirmStockLoading(false);
+        }
+    };
+
     return (
         <>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '1.5rem' }}>
+                <Button 
+                    onClick={onConfirmStock} 
+                    disabled={confirmStockLoading || !!confirmedTime} 
+                    variant={confirmedTime ? "secondary" : "primary"}
+                    className={`${styles.stockCheckBtnSize} ${!confirmedTime ? styles.confirmStockBtn : ''}`}
+                >
+                    {confirmStockLoading ? 'Confirming...' : confirmedTime ? `Confirmed today at ${confirmedTime}` : "Confirm today's stock count"}
+                </Button>
+            </div>
             <div className={styles.stockCardsGrid}>
                 {stockLoading && <div className={styles.emptyState}>Loading stock levels…</div>}
                 {!stockLoading && stockError && <div className={styles.emptyState}>{stockError}</div>}

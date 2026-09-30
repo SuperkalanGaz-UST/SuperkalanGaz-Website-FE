@@ -130,6 +130,14 @@ export function DrawableMap({ points, isDrawing, onAddPoint, focus }: DrawableMa
       zoom: initialZoom,
       attributionControl: false,
     });
+
+    const onMissingImage = (e: { id: string }) => {
+      if (!map.hasImage(e.id)) {
+        map.addImage(e.id, new ImageData(1, 1));
+      }
+    };
+    map.on('styleimagemissing', onMissingImage);
+
     mapRef.current = map;
     map.addControl(new NavigationControl({ showCompass: false }), 'top-right');
     map.addControl(
@@ -148,6 +156,7 @@ export function DrawableMap({ points, isDrawing, onAddPoint, focus }: DrawableMa
     });
 
     return () => {
+      map.off('styleimagemissing', onMissingImage);
       mapRef.current = null;
       map.remove();
     };

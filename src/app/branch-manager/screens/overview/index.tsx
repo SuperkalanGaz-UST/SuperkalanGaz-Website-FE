@@ -69,13 +69,13 @@ const getStatusVariant = (status: SRRow['status']) => {
 const formatTime = (iso: string) => {
     const d = new Date(iso);
     if (Number.isNaN(d.getTime())) return '—';
-    return new Intl.DateTimeFormat('en-US', { 
-        timeZone: 'Asia/Manila', 
-        month: '2-digit', 
-        day: '2-digit', 
+    return new Intl.DateTimeFormat('en-US', {
+        timeZone: 'Asia/Manila',
+        month: '2-digit',
+        day: '2-digit',
         year: 'numeric',
-        hour: 'numeric', 
-        minute: '2-digit' 
+        hour: 'numeric',
+        minute: '2-digit'
     }).format(d);
 };
 
@@ -107,9 +107,9 @@ export default function Dashboard({ onViewOrders }: DashboardProps = {}) {
 
     React.useEffect(() => {
         if (!carouselApi) return;
-        
+
         setCurrentSlide(carouselApi.selectedScrollSnap());
-        
+
         carouselApi.on('select', () => {
             setCurrentSlide(carouselApi.selectedScrollSnap());
         });
@@ -242,25 +242,87 @@ export default function Dashboard({ onViewOrders }: DashboardProps = {}) {
                 />
                 <KPICard
                     title="Average CSAT"
-                    value={csatLoading ? '…' : String(csat?.average_stars ?? '—')}
-                    icon={<Star className="w-4 h-4 text-[#f59e0b]" />}
-                    accentColor="#f59e0b"
-                    tooltip={csatLoading ? undefined : (
-                        <div className="flex flex-col gap-1">
-                            <span className="font-semibold">{csat?.total_ratings ?? 0} total ratings</span>
-                            {[5, 4, 3, 2, 1].map((star) => (
-                                <span key={star}>{star}★: {starCounts?.[star] ?? 0}</span>
-                            ))}
+                        value={(
+                        <div className="flex items-center gap-2 whitespace-nowrap overflow-hidden">
+                            <span>{csatLoading ? '\u2026' : String(csat?.average_stars ?? '\u2014')}</span>
+                            {!csatLoading && csat?.average_stars != null && (
+                                <span className="text-xs font-normal text-gray-400">out of 5</span>
+                            )}
                         </div>
                     )}
+                    icon={<Star className="w-4 h-4 text-[#f59e0b]" />}
+                    accentColor="#f59e0b"
+                    tooltipClassName="p-0 overflow-hidden"
+                    tooltip={csatLoading ? undefined : (() => {
+                        const total = csat?.total_ratings ?? 0;
+                        const avg = csat?.average_stars;
+                        return (
+                            <div style={{
+                                width: 228,
+                                padding: '14px 16px',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: 10,
+                            }}>
+                                <div>
+                                    <div style={{ fontWeight: 600, fontSize: 13, color: 'inherit' }}>
+                                        {total} {total === 1 ? 'rating' : 'ratings'}
+                                    </div>
+                                    {avg != null && (
+                                        <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 2 }}>
+                                            Average {Number(avg).toFixed(2)} out of 5
+                                        </div>
+                                    )}
+                                </div>
+                                {total === 0 ? (
+                                    <div style={{ fontSize: 12, color: '#9ca3af' }}>No ratings yet</div>
+                                ) : (
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                                        {[5, 4, 3, 2, 1].map((star) => {
+                                            const count = starCounts?.[star] ?? 0;
+                                            const pct = total > 0 ? (count / total) * 100 : 0;
+                                            return (
+                                                <div key={star} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
+                                                    {/* Star label */}
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: 3, width: 28, flexShrink: 0 }}>
+                                                        <Star size={11} fill="#f59e0b" color="#f59e0b" />
+                                                        <span style={{ color: '#6b7280' }}>{star}</span>
+                                                    </div>
+                                                    {/* Track + fill bar */}
+                                                    <div style={{
+                                                        flex: 1,
+                                                        height: 6,
+                                                        borderRadius: 3,
+                                                        backgroundColor: '#f1f5f9',
+                                                        overflow: 'hidden',
+                                                    }}>
+                                                        <div style={{
+                                                            width: `${pct}%`,
+                                                            height: '100%',
+                                                            borderRadius: 3,
+                                                            backgroundColor: '#007BC1',
+                                                            transition: 'width 0.3s ease',
+                                                        }} />
+                                                    </div>
+                                                    {/* Count right-aligned */}
+                                                    <div style={{ width: 20, textAlign: 'right', color: '#374151', flexShrink: 0 }}>{count}</div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                )}
+                            </div>
+                        );
+                    })()}
                 />
             </div>
 
             <div className={styles.contentGrid}>
                 <div className={styles.mainColumn}>
                     <div className={styles.card}>
-                        <div className={styles.cardHeader}>
+                        <div className={`${styles.cardHeader} flex items-center justify-between`}>
                             <h2 className={styles.cardTitle}>Recent Orders</h2>
+                            <button onClick={() => onViewOrders?.('')} className="text-[11px] text-gray-500 hover:text-gray-700 font-medium cursor-pointer">See all</button>
                         </div>
                         <div className={styles.tableWrapper}>
                             <table className={styles.table}>
@@ -285,8 +347,8 @@ export default function Dashboard({ onViewOrders }: DashboardProps = {}) {
                                         <tr><td colSpan={6} className={styles.emptyState}>No orders yet.</td></tr>
                                     )}
                                     {!requestsLoading && !requestsError && recentOrders.map(order => (
-                                        <tr 
-                                            key={order.id} 
+                                        <tr
+                                            key={order.id}
                                             className="cursor-pointer"
                                             onClick={() => onViewOrders?.(order.sr_code)}
                                         >
@@ -308,7 +370,7 @@ export default function Dashboard({ onViewOrders }: DashboardProps = {}) {
 
                 <div className={styles.sideColumn}>
                     <Carousel setApi={setCarouselApi} className="w-full">
-                        <CarouselContent>
+                        <CarouselContent className="items-start">
                             <CarouselItem>
                                 <div className="bg-white rounded-2xl shadow-sm border border-gray-100 flex flex-col">
                                     <Dialog>
@@ -340,7 +402,7 @@ export default function Dashboard({ onViewOrders }: DashboardProps = {}) {
                                                 </div>
                                             ))}
                                         </div>
-                                        
+
                                         <DialogContent className="max-w-md" aria-describedby={undefined}>
                                             <DialogHeader className="border-b border-gray-100 pb-3">
                                                 <DialogTitle className={styles.cardTitle}>All Critical Alerts</DialogTitle>
@@ -365,6 +427,16 @@ export default function Dashboard({ onViewOrders }: DashboardProps = {}) {
                                             </div>
                                         </DialogContent>
                                     </Dialog>
+                                    <div className="flex justify-center items-center gap-2 p-3 border-t border-gray-100">
+                                        {[0, 1].map((index) => (
+                                            <button
+                                                key={index}
+                                                onClick={() => carouselApi?.scrollTo(index)}
+                                                className={`h-2 rounded-full transition-all duration-300 ${currentSlide === index ? 'bg-gray-800 w-4' : 'bg-gray-300 w-2 hover:bg-gray-400'}`}
+                                                aria-label={`Go to slide ${index + 1}`}
+                                            />
+                                        ))}
+                                    </div>
                                 </div>
                             </CarouselItem>
 
@@ -432,21 +504,20 @@ export default function Dashboard({ onViewOrders }: DashboardProps = {}) {
                                             </div>
                                         )}
                                     </div>
+                                    <div className="flex justify-center items-center gap-2 p-3 border-t border-gray-100">
+                                        {[0, 1].map((index) => (
+                                            <button
+                                                key={index}
+                                                onClick={() => carouselApi?.scrollTo(index)}
+                                                className={`h-2 rounded-full transition-all duration-300 ${currentSlide === index ? 'bg-gray-800 w-4' : 'bg-gray-300 w-2 hover:bg-gray-400'}`}
+                                                aria-label={`Go to slide ${index + 1}`}
+                                            />
+                                        ))}
+                                    </div>
                                 </div>
                             </CarouselItem>
                         </CarouselContent>
                     </Carousel>
-
-                    <div className="flex justify-center items-center gap-2 -mt-1">
-                        {[0, 1].map((index) => (
-                            <button
-                                key={index}
-                                onClick={() => carouselApi?.scrollTo(index)}
-                                className={`h-2 rounded-full transition-all duration-300 ${currentSlide === index ? 'bg-gray-800 w-4' : 'bg-gray-300 w-2 hover:bg-gray-400'}`}
-                                aria-label={`Go to slide ${index + 1}`}
-                            />
-                        ))}
-                    </div>
                 </div>
             </div>
         </>

@@ -139,6 +139,14 @@ export function BranchOwnerFleetMap({
       zoom: 13,
       attributionControl: false,
     });
+
+    const onMissingImage = (e: { id: string }) => {
+      if (!map.hasImage(e.id)) {
+        map.addImage(e.id, new ImageData(1, 1));
+      }
+    };
+    map.on('styleimagemissing', onMissingImage);
+
     const markers = markersRef.current;
     mapRef.current = map;
     map.addControl(new NavigationControl({ showCompass: false }), 'top-right');
@@ -178,6 +186,7 @@ export function BranchOwnerFleetMap({
     return () => {
       markers.forEach((marker) => marker.remove());
       markers.clear();
+      map.off('styleimagemissing', onMissingImage);
       mapRef.current = null;
       map.remove();
     };

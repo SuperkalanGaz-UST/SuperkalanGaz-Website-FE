@@ -107,17 +107,21 @@
     color: var(--muted-foreground);
     text-transform: uppercase;
     letter-spacing: 0.04em;
-    border-bottom: 1px solid var(--border);
     white-space: nowrap;
+    vertical-align: middle;
 }
 
 .table td {
     padding: 0.75rem 1rem;
-    border-bottom: 1px solid var(--border);
     color: var(--foreground);
+    vertical-align: middle;
 }
 
-.table tbody tr:last-child td {
+.table tr {
+    border-bottom: 1px solid var(--border);
+}
+
+.table tbody tr:last-child {
     border-bottom: none;
 }
 
@@ -133,6 +137,14 @@
 
 .cellStrong {
     font-weight: 600;
+}
+
+/* Actual (avg) cell: vertically centers single-line values (like "No data for
+   this period") the same way the td's vertical-align:middle centers multi-line
+   two-div stacks. With a single <span> child there's no block stacking pushing
+   content to the top, so no extra rules are needed beyond the td baseline. */
+.cellActual {
+    vertical-align: middle;
 }
 
 .settingsForm {

@@ -1,11 +1,11 @@
 import React, { ReactNode } from 'react';
-import { ArrowUpRight, ArrowDownRight } from 'lucide-react';
+import { ArrowUpRight, ArrowDownRight, Minus } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipTrigger } from './ui/tooltip';
 
 export interface KPITrend {
   /** e.g. "+10.2% from yesterday" */
   text: string;
-  direction: 'up' | 'down';
+  direction: 'up' | 'down' | 'neutral';
   /**
    * Whether the movement is good news (green) or bad (red). Kept separate
    * from direction because e.g. expenses going down is positive.
@@ -13,11 +13,13 @@ export interface KPITrend {
    * so `positive` is retained only for semantic tagging and future use.
    */
   positive: boolean;
+  /** When true, renders a flat gray badge (no color) with a dash icon. */
+  neutral?: boolean;
 }
 
 interface KPICardProps {
   title: string;
-  value: string;
+  value: ReactNode;
   subtitle?: string;
   /** Rendered inside the circular chip in the top-right corner. */
   icon?: ReactNode;
@@ -28,9 +30,11 @@ interface KPICardProps {
   titleClassName?: string;
   /** Extra detail shown in a popup on hover — a breakdown, context, etc. */
   tooltip?: ReactNode;
+  /** Additional className applied to the TooltipContent container. */
+  tooltipClassName?: string;
 }
 
-export function KPICard({ title, value, subtitle, icon, alert, accentColor = '#007BC1', trend, titleClassName = '', tooltip }: KPICardProps) {
+export function KPICard({ title, value, subtitle, icon, alert, accentColor = '#007BC1', trend, titleClassName = '', tooltip, tooltipClassName = '' }: KPICardProps) {
   const card = (
     <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-3.5 relative flex flex-col h-full">
       <div className="flex items-start justify-between mb-1">
@@ -57,9 +61,22 @@ export function KPICard({ title, value, subtitle, icon, alert, accentColor = '#0
             const isUp = trend.direction === 'up';
             const isPositive = trend.positive;
             
-            const pillBg = isPositive ? 'bg-[#e8faef]' : 'bg-[#fee2e2]';
-            const pillText = isPositive ? 'text-[#16a34a]' : 'text-[#ef4444]';
-            const IconComponent = isUp ? ArrowUpRight : ArrowDownRight;
+          const isNeutral = trend.neutral || trend.direction === 'neutral';
+
+            const pillBg = isNeutral ? 'bg-gray-100' : isPositive ? 'bg-[#e8faef]' : 'bg-[#fee2e2]';
+            const pillText = isNeutral ? 'text-gray-500' : isPositive ? 'text-[#16a34a]' : 'text-[#ef4444]';
+            const IconComponent = isNeutral ? Minus : isUp ? ArrowUpRight : ArrowDownRight;
+
+            if (isNeutral) {
+              return (
+                <>
+                  <span className="text-xs text-gray-400 font-medium">{trend.text}</span>
+                  <div className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded-md text-[11px] font-semibold ${pillBg} ${pillText}`}>
+                    <IconComponent className="w-3 h-3" />
+                  </div>
+                </>
+              );
+            }
 
             if (match) {
               const [, percent, textPart] = match;
@@ -88,7 +105,7 @@ export function KPICard({ title, value, subtitle, icon, alert, accentColor = '#0
   return (
     <Tooltip>
       <TooltipTrigger asChild>{card}</TooltipTrigger>
-      <TooltipContent side="top" className="max-w-[240px] text-left leading-relaxed">
+      <TooltipContent side="top" className={`max-w-[260px] text-left leading-relaxed ${tooltipClassName}`}>
         {tooltip}
       </TooltipContent>
     </Tooltip>

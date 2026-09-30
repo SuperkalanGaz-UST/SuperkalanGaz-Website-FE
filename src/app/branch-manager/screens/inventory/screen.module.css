@@ -11,7 +11,7 @@
 .gaugeContainer { margin-bottom: 0.75rem; }
 .stockCardFooter { display: flex; align-items: center; justify-content: space-between; }
 .thresholdLabel { font-size: 0.8rem; color: var(--muted-foreground); }
-.alertBadge {}
+
 
 .formsGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem; margin-bottom: 1.5rem; }
 .card { background-color: var(--card); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow); overflow: hidden; margin-bottom: 0; }
@@ -36,3 +36,16 @@
 /* Primary status-transition Button + kebab RowActionsMenu, side by side —
    never wrap the menu below the button (matches the Orders table). */
 .rowActions { display: flex; gap: 0.4rem; align-items: center; justify-content: flex-end; flex-wrap: nowrap; }
+
+.confirmStockBtn {
+  background-color: #007BC1 !important;
+  color: white !important;
+}
+.confirmStockBtn:hover, .confirmStockBtn:focus {
+  background-color: #006096 !important;
+}
+.confirmStockBtn:focus {
+  outline: 2px solid #007BC1;
+  outline-offset: 2px;
+}
+.stockCheckBtnSize { padding: 0.35rem 1rem !important; font-size: 0.8125rem !important; }
