@@ -49,17 +49,10 @@ Open http://localhost:3000.
 ## Logging in
 
 Users live in Supabase Auth. Log in by **username** (mapped internally to
-`<username>@superkalan.com`). The four seed accounts:
-
-| Username | Password | Role |
-|---|---|---|
-| `admin` | `admin123` | Franchise Administrator |
-| `owner` | `owner123` | Branch Owner (Quezon City) |
-| `owner.multi` | `owner123` | Branch Owner (all branches) |
-| `manager` | `manager123` | Branch Manager (Quezon City) |
-
-> These demo credentials are also listed on the login screen. Remove that panel (and rotate
-> the passwords) before going to production.
+`<username>@superkalan.com`). Seed accounts for local development are created by the
+backend's `seed:*` scripts (`superkalan-crm-api/src/seeds/*.seeder.ts`) — ask a teammate
+for the current local dev credentials rather than committing them here; this repo is
+public.
 
 ## How auth & users work
 

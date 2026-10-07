@@ -4,9 +4,7 @@ import { InputOTP, InputOTPGroup, InputOTPSlot } from './ui/input-otp';
 import {
   Account,
   activateFranchiseAdminInvitation,
-  DEMO_ACCOUNTS,
   requestPasswordReset,
-  ROLE_LABELS,
   signIn,
   updatePassword,
   verifyPasswordResetCode,
@@ -540,21 +538,6 @@ export function Login({
             {loading ? 'Signing in…' : 'Sign In'}
           </button>
         </form>
-
-        {/* Demo credentials — remove together with lib/auth.ts when API auth lands */}
-        <div className="mt-8 bg-gray-50 border border-gray-200 rounded-lg p-4">
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
-            Demo accounts
-          </p>
-          <ul className="space-y-1">
-            {DEMO_ACCOUNTS.map((demo) => (
-              <li key={demo.username} className="text-xs text-gray-600 flex justify-between gap-2">
-                <span className="font-mono">{demo.username} / {demo.password}</span>
-                <span className="text-gray-400">{ROLE_LABELS[demo.role]}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
       </>
     );
   };

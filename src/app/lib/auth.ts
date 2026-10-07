@@ -40,14 +40,6 @@ export function usernameToEmail(username: string): string {
   return u.includes('@') ? u : `${u}@${LOGIN_EMAIL_DOMAIN}`;
 }
 
-/** Demo credentials shown on the login screen. These map to real Supabase users. */
-export const DEMO_ACCOUNTS: { username: string; password: string; role: Role }[] = [
-  { username: 'admin', password: 'admin123', role: 'franchise-admin' },
-  { username: 'owner', password: 'owner123', role: 'branch-owner' },
-  { username: 'owner.multi', password: 'owner123', role: 'branch-owner' },
-  { username: 'manager', password: 'manager123', role: 'branch-manager' },
-];
-
 export const ROLE_LABELS: Record<Role, string> = {
   'super-admin': 'Super Administrator',
   'franchise-admin': 'Franchise Administrator',
