@@ -9,7 +9,6 @@ import {
   updatePassword,
   verifyPasswordResetCode,
 } from '../lib/auth';
-import { apiFetch } from '../lib/api';
 
 interface LoginProps {
   onLogin: (account: Account) => void;
@@ -74,19 +73,9 @@ export function Login({
 
     setLoading(true);
 
-    try {
-      const response = await apiFetch(`/auth/check-email?email=${encodeURIComponent(emailStr)}`);
-      const data = await response.json();
-      
-      if (!data.exists) {
-        setError('No account found with this email.');
-        setLoading(false);
-        return;
-      }
-    } catch (e) {
-      console.warn('Failed to verify email existence', e);
-    }
-
+    // Deliberately does not check whether the account exists first — doing so
+    // would let anyone probe the system for valid staff emails. Supabase's
+    // own reset endpoint already returns success uniformly either way.
     const { error: resetError } = await requestPasswordReset(recoveryUsername);
     setLoading(false);
 
@@ -133,8 +122,8 @@ export function Login({
     e.preventDefault();
     setError('');
 
-    if (newPassword.length < 6) {
-      setError('Password must be at least 6 characters.');
+    if (newPassword.length < 8) {
+      setError('Password must be at least 8 characters.');
       return;
     }
     if (newPassword !== confirmPassword) {
@@ -312,7 +301,7 @@ export function Login({
                 () => setShowNewPassword((visible) => !visible),
                 'new-password',
               )}
-              <p className="mt-2 text-xs text-gray-500">Use at least 6 characters.</p>
+              <p className="mt-2 text-xs text-gray-500">Use at least 8 characters.</p>
             </div>
 
             <div className="mb-6">

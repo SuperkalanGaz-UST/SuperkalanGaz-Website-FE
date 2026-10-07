@@ -8,6 +8,17 @@ import type { AuditCategory, AuditEvent } from '../types';
 import { ErrorState, formatDate, humanize, LoadingState, Panel } from '../components/GovernanceUi';
 import { SuperAdminHeader } from '../components/SuperAdminHeader';
 
+/**
+ * L7 fix: a cell starting with =, +, -, @, tab, or CR is interpreted as a
+ * formula by Excel/Sheets when the CSV is opened — and actorName/reason here
+ * are free text an FA/BO/SA sets themselves (display name, decision reason).
+ * Prefixing a leading apostrophe forces spreadsheet apps to treat it as
+ * literal text instead (standard CSV-injection mitigation).
+ */
+function escapeCsvFormula(cell: string): string {
+  return /^[=+\-@\t\r]/.test(cell) ? `'${cell}` : cell;
+}
+
 function stateSummary(state: Record<string, unknown> | null): string {
   if (!state) return '—';
   const prices = state.prices;
@@ -89,7 +100,7 @@ export function AuditLogs({ category }: { category: VisibleAuditCategory }) {
     if (!events?.length) return;
     const cells = events.map((event) => [event.occurredAt, event.action, event.actorName, event.actorRole, event.governanceRequestId ?? '', event.reason ?? '']);
     const csv = [['occurred_at', 'action', 'actor', 'role', 'governance_request_id', 'reason'], ...cells]
-      .map((row) => row.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(','))
+      .map((row) => row.map((cell) => `"${escapeCsvFormula(String(cell)).replaceAll('"', '""')}"`).join(','))
       .join('\n');
     const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
     const link = document.createElement('a');
