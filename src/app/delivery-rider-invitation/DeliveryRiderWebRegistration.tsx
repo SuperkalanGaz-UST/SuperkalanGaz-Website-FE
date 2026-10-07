@@ -114,6 +114,7 @@ export function DeliveryRiderWebRegistration({
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const credential = useMemo<DeliveryRiderRegistrationCredential | null>(
     () => token ? { mode: 'token', token } : sessionMode ? { mode: 'session' } : null,
@@ -265,7 +266,10 @@ export function DeliveryRiderWebRegistration({
             </label>
             <label className={styles.inputGroup}>
               <span>Confirm password</span>
-              <input autoComplete="new-password" minLength={8} maxLength={72} onChange={(event) => { setConfirmPassword(event.target.value); setError(''); }} placeholder="Enter password again" type={showPassword ? 'text' : 'password'} value={confirmPassword} />
+              <span className={styles.passwordInput}>
+                <input autoComplete="new-password" minLength={8} maxLength={72} onChange={(event) => { setConfirmPassword(event.target.value); setError(''); }} placeholder="Enter password again" type={showConfirmPassword ? 'text' : 'password'} value={confirmPassword} />
+                <button type="button" onClick={() => setShowConfirmPassword((visible) => !visible)} aria-label={showConfirmPassword ? 'Hide confirm password' : 'Show confirm password'}>{showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}</button>
+              </span>
             </label>
           </div>
           {error ? <div className={styles.errorBanner}>{error}</div> : null}

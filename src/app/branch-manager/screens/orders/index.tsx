@@ -270,7 +270,16 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
     const [customerSearchLoading, setCustomerSearchLoading] = useState(false);
     const [customerSearchError, setCustomerSearchError] = useState<string | null>(null);
     const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
+    const [highlightedCustomerIndex, setHighlightedCustomerIndex] = useState(-1);
     const customerDropdownRef = React.useRef<HTMLDivElement>(null);
+    const customerOptionsRef = React.useRef<HTMLDivElement>(null);
+
+    useEffect(() => setHighlightedCustomerIndex(-1), [customerResults, customerSearchLoading, customerSearchError]);
+
+    useEffect(() => {
+        if (highlightedCustomerIndex < 0) return;
+        customerOptionsRef.current?.querySelectorAll<HTMLElement>('[data-customer-option]')[highlightedCustomerIndex]?.scrollIntoView({ block: 'nearest' });
+    }, [highlightedCustomerIndex]);
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -597,10 +606,11 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
         }
     };
 
-    // Mark a Dispatched (or En Route) request as Delivered (BM-007). No body; the
-    // server sets delivered_at and returns the assigned rider to Available — hence
-    // both loaders refresh on success (loadRequests + loadRoster).
+    // Manual completion is reserved for Walk-in/Phone requests without a rider.
+    // Assigned deliveries are completed with proof from the rider app.
     const handleDeliver = async (requestId: string) => {
+        const request = requests.find((row) => row.id === requestId);
+        if (!request || request.order_source !== 'Walk-in/Phone' || request.rider_id !== null || deliveringId) return;
         setDeliveringId(requestId);
         try {
             const res = await apiFetch(`/service-requests/${requestId}/deliver`, { method: 'POST' });
@@ -1090,15 +1100,35 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                                                     <Input placeholder="Search existing customer or type new name..." value={customerSearch}
                                                         onChange={e => {
                                                             setCustomerSearch(e.target.value);
+                                                             setHighlightedCustomerIndex(-1);
                                                             form.setValues(p => ({ ...p, customerName: e.target.value }));
                                                             setShowCustomerDropdown(true);
                                                         }}
-                                                        onFocus={() => { if (customerSearch.length >= 2) setShowCustomerDropdown(true); }}
+                                                        onFocus={() => setShowCustomerDropdown(true)}
                                                         onBlur={() => form.validateField('customerName')}
-                                                        onKeyDown={e => { if (e.key === 'Enter') e.preventDefault(); }} />
+                                                        onKeyDown={e => {
+                                                            const results = !customerSearchLoading && !customerSearchError && customerSearch.trim().length >= 2 ? customerResults ?? [] : [];
+                                                            if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+                                                                e.preventDefault();
+                                                                setShowCustomerDropdown(true);
+                                                                setHighlightedCustomerIndex(current => current < 0
+                                                                    ? (e.key === 'ArrowDown' ? 0 : results.length)
+                                                                    : (current + (e.key === 'ArrowDown' ? 1 : results.length)) % (results.length + 1));
+                                                            } else if (e.key === 'Enter') {
+                                                                e.preventDefault();
+                                                                if (showCustomerDropdown && highlightedCustomerIndex >= 0) {
+                                                                    if (highlightedCustomerIndex === results.length) openCreateCustomer();
+                                                                    else if (results[highlightedCustomerIndex]) selectCustomer(results[highlightedCustomerIndex]);
+                                                                }
+                                                            } else if (e.key === 'Escape') {
+                                                                setShowCustomerDropdown(false);
+                                                                setHighlightedCustomerIndex(-1);
+                                                            }
+                                                        }} />
                                                 )}
                                                 {showCustomerDropdown && !selectedCustomer && (
                                                     <div className={styles.customerDropdown}>
+                                                        <div ref={customerOptionsRef} style={{ maxHeight: '200px', overflowY: 'auto' }}>
                                                         {customerSearch.trim().length > 0 && customerSearch.trim().length < 2 ? (
                                                             <div style={{ padding: '0.5rem', fontSize: '0.8125rem', color: 'var(--muted-foreground)' }}>Type at least 2 characters to search.</div>
                                                         ) : customerSearchLoading ? (
@@ -1109,8 +1139,8 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                                                             <div style={{ padding: '0.5rem', fontSize: '0.8125rem', color: '#dc2626' }}>{customerSearchError}</div>
                                                         ) : customerResults && customerResults.length > 0 ? (
                                                             <>
-                                                                {customerResults.map(c => (
-                                                                    <div key={c.id} className={styles.customerDropdownItem} onMouseDown={() => selectCustomer(c)}>
+                                                                {customerResults.map((c, index) => (
+                                                                    <div key={c.id} data-customer-option className={styles.customerDropdownItem} style={highlightedCustomerIndex === index ? { backgroundColor: 'rgba(0,0,0,0.05)' } : undefined} onMouseDown={() => selectCustomer(c)}>
                                                                         <div className={styles.customerChipInfo}>
                                                                             <span className={styles.boldText}>{c.name}</span>
                                                                             <span style={{ fontSize: '0.7rem', color: 'var(--muted-foreground)' }}>
@@ -1131,18 +1161,20 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                                                                 <p style={{ fontSize: '0.8125rem', color: 'var(--muted-foreground)', textAlign: 'center', margin: 0 }}>
                                                                     No customer found for <strong>&ldquo;{customerSearch.trim()}&rdquo;</strong>.
                                                                 </p>
-                                                                <Button
-                                                                    type="button"
-                                                                    variant="primary"
-                                                                    size="sm"
-                                                                    style={{ marginTop: '0.25rem', gap: '0.35rem' }}
-                                                                    onMouseDown={(e: React.MouseEvent) => { e.preventDefault(); setShowCustomerDropdown(false); openCreateCustomer(); }}
-                                                                >
-                                                                    <Plus size={14} />
-                                                                    Create new customer
-                                                                </Button>
                                                             </div>
                                                         ) : null}
+                                                        </div>
+                                                        <Button
+                                                            type="button"
+                                                            variant="primary"
+                                                            size="sm"
+                                                            data-customer-option
+                                                            style={{ marginTop: '0.25rem', gap: '0.35rem', outline: highlightedCustomerIndex === (!customerSearchLoading && !customerSearchError && customerSearch.trim().length >= 2 ? customerResults?.length ?? 0 : 0) ? '2px solid currentColor' : undefined }}
+                                                            onMouseDown={(e: React.MouseEvent) => { e.preventDefault(); setShowCustomerDropdown(false); openCreateCustomer(); }}
+                                                        >
+                                                            <Plus size={14} />
+                                                            Create new customer
+                                                        </Button>
                                                     </div>
                                                 )}
                                             </div>
@@ -1485,21 +1517,17 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                                                         ]} />
                                                     </div>
                                             ) : req.status === 'Dispatched' || req.status === 'En Route' ? (
-                                                // Out for delivery → let the BM close it out (BM-007), reassign to a
-                                                // closer available rider if it's running late (BM-010), log why
-                                                // (BM-011), or log a lost/undelivered cylinder complaint (BM-US-04)
-                                                // if something already went wrong mid-delivery. The primary action
-                                                // (Mark Delivered) stays a visible Button; the rest collapse into
-                                                // the kebab menu.
+                                                // Only non-rider Walk-in/Phone orders offer manual completion.
+                                                // Existing reassignment, delay, and complaint actions remain available.
                                                 <div className={styles.actionButtons}>
-                                                    <Button
+                                                    {req.order_source === 'Walk-in/Phone' && req.rider_id === null && <Button
                                                         size="sm"
                                                         variant="primary"
                                                         disabled={deliveringId === req.id}
                                                         onClick={() => handleDeliver(req.id)}
                                                     >
                                                         {deliveringId === req.id ? 'Delivering…' : 'Mark Delivered'}
-                                                    </Button>
+                                                    </Button>}
                                                     <RowActionsMenu items={[
                                                         { label: 'Reassign', onClick: () => openReassign(req.id), icon: <RefreshCw size={16} /> },
                                                         { label: 'Delay Reason', onClick: () => openDelayReason(req.id), icon: <Clock size={16} /> },
@@ -1548,6 +1576,14 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                                                             <div className={styles.timelineItem}>
                                                                 <span className={styles.timelineLabel}>Delivered</span>
                                                                 <span className={styles.timelineTime}>{formatRequestedAt(req.delivered_at)}</span>
+                                                            </div>
+                                                        )}
+                                                        {req.rider_id && req.delivered_at && (
+                                                            <div className={styles.timelineItem}>
+                                                                <DeliveryProofViewer
+                                                                    serviceRequestId={req.id}
+                                                                    serviceRequestCode={req.sr_code}
+                                                                />
                                                             </div>
                                                         )}
                                                         {req.delay_reason && (

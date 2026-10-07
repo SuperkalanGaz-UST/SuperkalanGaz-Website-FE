@@ -36,7 +36,7 @@ interface DeliveryRiderInvitation {
   mobile: string;
   branchId: string;
   branchName: string;
-  status: 'Pending' | 'Expired' | 'Revoked' | 'Accepted';
+  status: 'Pending' | 'Expired' | 'Revoked' | 'Accepted' | 'Inactive';
   invitedAt: string;
   confirmationSentAt: string;
   expiresAt: string;
@@ -156,7 +156,7 @@ export function UserManagement() {
   });
 
   const managers = useMemo(() => (managersData?.users ?? []).map(toManager), [managersData]);
-  const invitations = invitationsData?.invitations ?? [];
+  const invitations = useMemo(() => invitationsData?.invitations ?? [], [invitationsData]);
   const loading = managersLoading || invitationsLoading;
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -207,6 +207,8 @@ export function UserManagement() {
   const [showModal, setShowModal] = useState(false);
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [showRevokeDialog, setShowRevokeDialog] = useState(false);
+  const [riderToDeactivate, setRiderToDeactivate] = useState<DeliveryRiderInvitation | null>(null);
+  const [deactivateReason, setDeactivateReason] = useState('');
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [editingManager, setEditingManager] = useState<BranchManager | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -471,6 +473,30 @@ export function UserManagement() {
     }
   };
 
+  const handleDeactivateRider = async () => {
+    if (!riderToDeactivate || deactivateReason.trim().length < 3) {
+      toast.error('Enter a short reason for deactivating this Delivery Rider.');
+      return;
+    }
+    setInvitationBusyId(riderToDeactivate.invitationId);
+    try {
+      const response = await apiFetch(
+        `/delivery-rider-invitations/${riderToDeactivate.invitationId}/deactivate`,
+        { method: 'PATCH', body: JSON.stringify({ reason: deactivateReason.trim() }) },
+      );
+      const data = await response.json();
+      if (!response.ok) throw new Error(apiErrorMessage(data, 'Could not deactivate the Delivery Rider'));
+      toast.success('Delivery Rider account deactivated.');
+      setRiderToDeactivate(null);
+      setDeactivateReason('');
+      refreshAccounts();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not deactivate the Delivery Rider');
+    } finally {
+      setInvitationBusyId(null);
+    }
+  };
+
   return (
     <div className="flex-1 overflow-y-auto">
       <div style={{ position: 'static' }}>
@@ -694,20 +720,18 @@ export function UserManagement() {
                     </td>
                     <td className="py-3 text-[13px] text-gray-600 whitespace-nowrap">—</td>
                     <td className="py-3">
-                      {invitation.status !== 'Accepted' ? (
+                      {invitation.status === 'Pending' || invitation.status === 'Expired' || invitation.status === 'Revoked' ? (
                         <div className="flex items-center gap-2">
-                          {(invitation.status === 'Revoked' || !invitation.emailVerified) && (
-                            <button
-                              type="button"
-                              disabled={invitationBusyId === invitation.invitationId}
-                              onClick={() => void handleResendInvitation(invitation)}
-                              aria-label={`${invitation.status === 'Revoked' ? 'Reissue' : 'Resend'} invitation to ${invitation.recipientName}`}
-                              title={invitation.status === 'Revoked' ? 'Reissue invitation' : 'Resend invitation'}
-                              className="rounded p-1.5 text-gray-600 transition-colors hover:bg-gray-100 hover:text-[#007BC1] disabled:opacity-40"
-                            >
-                              <MailPlus className="h-4 w-4" />
-                            </button>
-                          )}
+                          <button
+                            type="button"
+                            disabled={invitationBusyId === invitation.invitationId}
+                            onClick={() => void handleResendInvitation(invitation)}
+                            aria-label={`${invitation.status === 'Revoked' ? 'Reissue' : 'Resend'} invitation to ${invitation.recipientName}`}
+                            title={invitation.status === 'Revoked' ? 'Reissue invitation' : 'Resend invitation'}
+                            className="rounded p-1.5 text-gray-600 transition-colors hover:bg-gray-100 hover:text-[#007BC1] disabled:opacity-40"
+                          >
+                            <MailPlus className="h-4 w-4" />
+                          </button>
                           {invitation.status !== 'Revoked' && (
                             <button
                               type="button"
@@ -721,6 +745,17 @@ export function UserManagement() {
                             </button>
                           )}
                         </div>
+                      ) : invitation.status === 'Accepted' ? (
+                        <button
+                          type="button"
+                          disabled={invitationBusyId === invitation.invitationId}
+                          onClick={() => { setRiderToDeactivate(invitation); setDeactivateReason(''); }}
+                          aria-label={`Deactivate Delivery Rider ${invitation.recipientName}`}
+                          title="Deactivate Delivery Rider"
+                          className="rounded p-1.5 text-gray-600 transition-colors hover:bg-gray-100 hover:text-red-600 disabled:opacity-40"
+                        >
+                          <UserX className="h-4 w-4" />
+                        </button>
                       ) : (
                         <span className="text-[11px] text-gray-400">—</span>
                       )}
@@ -1149,6 +1184,39 @@ export function UserManagement() {
                 {invitationBusyId === invitationToRevoke.invitationId
                   ? 'Revoking…'
                   : 'Revoke invitation'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {riderToDeactivate && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-[420px] max-w-full rounded-xl border border-gray-200 bg-white p-6 shadow-xl">
+            <h3 className="font-semibold text-gray-900">Deactivate Delivery Rider</h3>
+            <p className="mt-2 text-sm leading-5 text-gray-600">
+              {riderToDeactivate.recipientName} will lose account access and become unavailable for dispatch. Their history will be retained.
+            </p>
+            <label className="mt-4 block">
+              <span className="mb-1.5 block text-sm text-gray-700">Reason <span className="text-red-500">*</span></span>
+              <textarea
+                value={deactivateReason}
+                onChange={(event) => setDeactivateReason(event.target.value)}
+                rows={3}
+                maxLength={300}
+                placeholder="Why is this Delivery Rider being deactivated?"
+                className="w-full resize-none rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-transparent focus:ring-2 focus:ring-[#007BC1]"
+              />
+            </label>
+            <div className="mt-6 flex items-center justify-end gap-3">
+              <button type="button" onClick={() => setRiderToDeactivate(null)} className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">Cancel</button>
+              <button
+                type="button"
+                disabled={invitationBusyId === riderToDeactivate.invitationId}
+                onClick={() => void handleDeactivateRider()}
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-60"
+              >
+                {invitationBusyId === riderToDeactivate.invitationId ? 'Deactivating…' : 'Deactivate'}
               </button>
             </div>
           </div>
