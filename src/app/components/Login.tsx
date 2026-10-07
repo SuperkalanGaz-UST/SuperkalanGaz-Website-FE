@@ -122,8 +122,8 @@ export function Login({
     e.preventDefault();
     setError('');
 
-    if (newPassword.length < 6) {
-      setError('Password must be at least 6 characters.');
+    if (newPassword.length < 8) {
+      setError('Password must be at least 8 characters.');
       return;
     }
     if (newPassword !== confirmPassword) {
@@ -301,7 +301,7 @@ export function Login({
                 () => setShowNewPassword((visible) => !visible),
                 'new-password',
               )}
-              <p className="mt-2 text-xs text-gray-500">Use at least 6 characters.</p>
+              <p className="mt-2 text-xs text-gray-500">Use at least 8 characters.</p>
             </div>
 
             <div className="mb-6">
