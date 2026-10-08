@@ -75,6 +75,13 @@
 .setupCopy { display: flex; flex-direction: column; align-items: center; gap: 0.25rem; text-align: center; }
 .setupStepTitle { font-size: 1.35rem; font-weight: 700; line-height: 1.25; color: var(--foreground); }
 .setupStepDescription { max-width: 620px; font-size: 0.9rem; line-height: 1.5; color: var(--muted-foreground); }
+.smsInstructions { width: 100%; padding: 1rem; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--muted); font-size: 0.85rem; line-height: 1.5; }
+.smsInstructions h4 { margin: 0 0 0.5rem; font-weight: 650; color: var(--foreground); }
+.smsInstructions p { margin: 0.65rem 0; color: var(--muted-foreground); }
+.smsInstructions ol { padding-left: 1.25rem; margin: 0.75rem 0; list-style: decimal; }
+.smsInstructions li { margin-bottom: 0.65rem; }
+.smsInstructions code { display: block; margin-top: 0.2rem; padding: 0.45rem 0.6rem; border-radius: 0.375rem; background: var(--card); color: var(--foreground); overflow-wrap: anywhere; }
+.smsInstructions a { color: var(--primary); text-decoration: underline; }
 .wizardFooter { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; padding: 1rem 1.5rem; border-top: 1px solid var(--border); }
 .detailsScreen { display: flex; flex-direction: column; align-self: center; gap: 1.25rem; width: 100%; max-width: 560px; padding: 1.5rem; }
 

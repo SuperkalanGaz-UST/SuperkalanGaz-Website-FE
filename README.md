@@ -46,6 +46,29 @@ npm run dev
 
 Open http://localhost:3000.
 
+### Current cloud Traccar setup
+
+For the deployed backend, set this in your ignored `.env.local`, then restart dev
+or rebuild for production (public variables are embedded at build time):
+
+```dotenv
+NEXT_PUBLIC_API_URL=https://superkalan-crm-api-7icfrdyg5a-as.a.run.app
+```
+
+Use `http://localhost:3000`; the deployed API currently permits that origin and
+`http://192.168.1.5:3000`, not arbitrary LAN addresses or hosted web domains.
+This changes **all CRM API requests** to the cloud backend, not only Fleet requests.
+To return to local development, set `NEXT_PUBLIC_API_URL=http://localhost:3001`
+and restart/rebuild.
+
+Branch Manager → Vehicles → Connect SinoTrack contains the standard ST-901 SMS
+guide for the public hardware destination `34.158.48.168:5013`. Registration goes
+through NestJS to the private Traccar API; the browser never calls Traccar directly
+or receives its token. Send SMS manually to the physical tracker's SIM and use its
+reporting ID. **Registered in Traccar does not mean live GPS reception is verified.**
+Hosting the website, physical-device verification and live Fleet polling remain
+separate work; see [shared release status](../docs/architecture/gcp-release-status.md).
+
 ## Logging in
 
 Users live in Supabase Auth. Log in by **username** (mapped internally to
@@ -138,6 +161,8 @@ src/app/branch-owner/components/BranchOwnerFleetMap.tsx
 | `npm run build` | Production build |
 | `npm run start` | Serve the production build |
 | `npm run lint` | Run ESLint |
+| `npm run test:traccar` | Focused setup/status tests (Node.js 24 recommended for native TypeScript support) |
+| `npm run test:traccar:browser` | Mocked browser flow; first rebuild and serve at localhost:3000; no production writes |
 
 ## Troubleshooting
 

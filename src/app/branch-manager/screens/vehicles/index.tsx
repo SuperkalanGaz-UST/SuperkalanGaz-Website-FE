@@ -10,6 +10,7 @@ import { Button } from "../../components/Button";
 import { Progress } from "../../components/Progress";
 import { Input } from "../../components/Input";
 import { apiFetch, apiErrorMessage, fetchJson } from "../../../lib/api";
+import { gpsRegistrationBadge, gpsRegistrationNotice, trackerDestination, trackerManualUrl, trackerSmsCommands } from "./traccar-setup";
 import styles from "./screen.module.css";
 
 /** A vehicle row from GET /vehicles (story BM-US-09). */
@@ -53,7 +54,7 @@ const todayIso = () => new Date().toISOString().slice(0, 10);
 const vehicleSetupSteps = [
     {
         title: "Prepare the SIM",
-        description: "Turn off the ST-901, then insert a SIM with mobile data and no PIN lock.",
+        description: "Turn off the ST-901, then insert an activated, compatible SIM with SMS, mobile data and no PIN lock.",
         image: "/fleet/setup/01-prepare-sim.jpg",
         imageWidth: 1040,
         imageHeight: 390,
@@ -61,7 +62,7 @@ const vehicleSetupSteps = [
     },
     {
         title: "Find the hardware ID",
-        description: "Copy the IMEI or unique ID printed on the physical device label.",
+        description: "Send RCONF by SMS to the tracker SIM and note its ID. Match that ID to the device label; do not assume the full IMEI is the reporting ID.",
         image: "/fleet/setup/02-find-hardware-id.jpg",
         imageWidth: 1040,
         imageHeight: 410,
@@ -77,7 +78,7 @@ const vehicleSetupSteps = [
     },
     {
         title: "Connect to Traccar",
-        description: "Use the device manual to set your SIM APN and Traccar host on TCP port 5013.",
+        description: `Standard ST-901: send H02 data to ${trackerDestination.host}:${trackerDestination.port} (public TCP). The Traccar web/API interface stays private.`,
         image: "/fleet/setup/04-connect-traccar.jpg",
         imageWidth: 1040,
         imageHeight: 420,
@@ -85,15 +86,15 @@ const vehicleSetupSteps = [
     },
     {
         title: "Get the first GPS fix",
-        description: "Power on the vehicle outdoors and wait for the GPS and mobile-network signals.",
+        description: "Power on outdoors and wait for GPS and mobile-network signals. Continuing this guide does not verify that Traccar has received a position.",
         image: "/fleet/setup/05-first-gps-fix.jpg",
         imageWidth: 1040,
         imageHeight: 440,
         imageAlt: "Cartoon showing a delivery motorcycle outdoors receiving GPS signals",
     },
     {
-        title: "Ready to connect",
-        description: "Your hardware setup is complete. Continue to enter the device ID and connect it to the registered vehicle.",
+        title: "Ready to register",
+        description: "Enter the reporting device ID to register it through the CRM API. Registration alone does not confirm live GPS reception.",
         image: "/fleet/setup/06-ready-to-register.jpg",
         imageWidth: 1040,
         imageHeight: 440,
@@ -250,7 +251,7 @@ export default function VehicleManagementPage() {
 
         const normalizedHardwareId = hardwareUniqueId.trim();
         if (!/^[A-Za-z0-9_-]{4,64}$/.test(normalizedHardwareId)) {
-            setGpsSetupError('Enter the hardware identifier printed on the SinoTrack ST-901.');
+            setGpsSetupError('Enter the ST-901 reporting ID from RCONF, matched to the device label.');
             return;
         }
 
@@ -267,7 +268,7 @@ export default function VehicleManagementPage() {
             const updated = data.vehicle as VehicleRow;
             void queryClient.invalidateQueries({ queryKey: ['vehicles'] });
             if (updated.gps_provisioning_status === 'provisioned') {
-                toast.success(`${updated.plate_number} is now connected to its SinoTrack ST-901.`);
+                toast.success(gpsRegistrationNotice(updated.plate_number));
             } else {
                 toast.warning(`${updated.plate_number} remains registered, but Traccar could not complete the connection.`);
             }
@@ -370,7 +371,7 @@ export default function VehicleManagementPage() {
             const updated = data.vehicle as VehicleRow;
             void queryClient.invalidateQueries({ queryKey: ['vehicles'] });
             if (updated.gps_provisioning_status === 'provisioned') {
-                toast.success(`${updated.plate_number} GPS device is now ready.`);
+                toast.success(gpsRegistrationNotice(updated.plate_number));
             } else {
                 toast.warning('Traccar is still unreachable. The vehicle remains registered.');
             }
@@ -442,13 +443,7 @@ export default function VehicleManagementPage() {
                         const progressPercent = Math.min((sinceLastPms / threshold) * 100, 100);
                         const isOverdue = vehicle.status === "maintenance";
                         const isWarning = !isOverdue && sinceLastPms >= threshold * 0.8;
-                        const gpsBadge = vehicle.gps_provisioning_status === 'provisioned'
-                            ? { label: 'SinoTrack Connected', variant: 'success' as const }
-                            : vehicle.gps_provisioning_status === 'failed'
-                                ? { label: 'Connection Error', variant: 'destructive' as const }
-                                : vehicle.gps_provisioning_status === 'pending'
-                                    ? { label: 'Connecting', variant: 'warning' as const }
-                                    : { label: 'SinoTrack Not Connected', variant: 'secondary' as const };
+                        const gpsBadge = gpsRegistrationBadge(vehicle.gps_provisioning_status);
 
                         return (
                             <div key={vehicle.id} className={styles.vehicleCard}>
@@ -463,7 +458,7 @@ export default function VehicleManagementPage() {
                                         </Badge>
                                         <Badge
                                             variant={gpsBadge.variant}
-                                            title={vehicle.gps_provisioning_error ?? undefined}
+                                            title={vehicle.gps_provisioning_error ?? (vehicle.gps_provisioning_status === 'provisioned' ? 'Device registration succeeded; live GPS reception is not verified by this badge.' : undefined)}
                                         >
                                             {gpsBadge.label}
                                         </Badge>
@@ -726,6 +721,23 @@ export default function VehicleManagementPage() {
                                         <h3 id="setup-step-title" className={styles.setupStepTitle}>{activeSetupStep.title}</h3>
                                         <p className={styles.setupStepDescription}>{activeSetupStep.description}</p>
                                     </div>
+                                    {gpsSetupStep === 3 && (
+                                        <div className={styles.smsInstructions}>
+                                            <h4>Send these SMS messages to the tracker SIM</h4>
+                                            <p>Use the device&apos;s actual SMS password in place of factory-default 0000. Get the APN from your SIM carrier; this website does not send SMS.</p>
+                                            <ol>
+                                                {trackerSmsCommands.map(({ label, command }, index) => (
+                                                    <li key={`${index}-${command}`}>
+                                                        <span>{label}</span>
+                                                        <code>{command}</code>
+                                                    </li>
+                                                ))}
+                                            </ol>
+                                            <p>Wait for SET OK after setting commands. Confirm ID, APN, GPRS mode and the cloud IP/port in the final RCONF reply. Keep replies private: they can contain passwords and phone numbers.</p>
+                                            <p>Changing the server may stop updates in the SinoTrack app. These instructions are not for ST-901 A+. No protocol-conversion command is required for the standard H02 model.</p>
+                                            <a href={trackerManualUrl} target="_blank" rel="noopener noreferrer">Manufacturer manual (including APNs requiring a username/password)</a>
+                                        </div>
+                                    )}
                                 </section>
 
                                 <div className={styles.wizardFooter}>
@@ -747,7 +759,7 @@ export default function VehicleManagementPage() {
                                 <div className={styles.dialogHeader}>
                                     <span className={styles.stepEyebrow}>Device details</span>
                                     <h2 id="gps-setup-title" className={styles.dialogTitle}>Connect SinoTrack to {gpsSetupVehicle.plate_number}</h2>
-                                    <p className={styles.dialogDescription}>The API will associate this physical device with the registered vehicle and provision it in Traccar.</p>
+                                    <p className={styles.dialogDescription}>The CRM API registers this device in cloud Traccar for this vehicle. SMS configuration and live GPS verification are separate steps.</p>
                                 </div>
                                 <div className={styles.formFields}>
                                     <div>
@@ -756,13 +768,13 @@ export default function VehicleManagementPage() {
                                             id="vehicle-hardware-id"
                                             value={hardwareUniqueId}
                                             onChange={(event) => setHardwareUniqueId(event.target.value)}
-                                            placeholder="Device IMEI or unique ID"
+                                            placeholder="Reporting device ID from RCONF"
                                             autoComplete="off"
                                             maxLength={64}
                                             autoFocus
                                             required
                                         />
-                                        <div className={styles.fieldHint}>Enter the identifier printed on the physical ST-901 label.</div>
+                                        <div className={styles.fieldHint}>Enter only the ID from RCONF, matched to the ST-901 label — not the whole SMS reply or its password.</div>
                                     </div>
                                     {gpsSetupError && <div className={styles.fieldError} role="alert">{gpsSetupError}</div>}
                                 </div>
@@ -771,7 +783,7 @@ export default function VehicleManagementPage() {
                                         <ArrowLeft size={16} aria-hidden="true" /> Back
                                     </Button>
                                     <Button type="submit" variant="primary" disabled={connectingGps}>
-                                        {connectingGps ? 'Connecting…' : 'Connect SinoTrack'}
+                                        {connectingGps ? 'Registering…' : 'Register device in Traccar'}
                                     </Button>
                                 </div>
                             </div>

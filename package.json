@@ -6,7 +6,9 @@
     "dev": "next dev --port 3000 --webpack",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "test:traccar": "node --experimental-strip-types --test tests/traccar-setup.test.mjs",
+    "test:traccar:browser": "node --test tests/traccar-setup.browser.test.mjs"
   },
   "dependencies": {
     "@radix-ui/react-accordion": "1.2.3",
