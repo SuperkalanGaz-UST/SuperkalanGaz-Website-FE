@@ -3,6 +3,10 @@
 .pageTitle { font-size: 1.5rem; font-weight: 700; color: var(--foreground); }
 .pageDescription { font-size: 0.9rem; color: var(--muted-foreground); }
 
+.toolbar { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.toolbarTitle { font-size: 1rem; font-weight: 600; color: var(--foreground); }
+.toolbarDescription { margin-top: 0.2rem; font-size: 0.85rem; color: var(--muted-foreground); }
+
 .statsGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; }
 .statCard { background-color: var(--card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 1.25rem; box-shadow: var(--shadow); }
 .statHeader { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem; }
@@ -14,6 +18,7 @@
 
 .vehicleCard { background-color: var(--card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 1.25rem; box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 1.25rem; }
 .cardHeader { display: flex; justify-content: space-between; align-items: flex-start; }
+.statusStack { display: flex; flex-direction: column; align-items: flex-end; gap: 0.35rem; }
 .vehicleIdentity { display: flex; flex-direction: column; gap: 0.15rem; }
 .vehicleName { font-size: 1.1rem; font-weight: 600; color: var(--foreground); }
 .vehiclePlate { font-family: var(--font-family-monospace); font-size: 0.85rem; color: var(--muted-foreground); background: var(--muted); padding: 0.15rem 0.4rem; border-radius: var(--radius-sm); width: fit-content; }
@@ -30,12 +35,67 @@
 .progressText { color: var(--muted-foreground); }
 .progressPercentage { font-weight: 600; color: var(--foreground); }
 
-.actionRow { display: flex; justify-content: flex-end; margin-top: auto; padding-top: 0.5rem; border-top: 1px solid var(--border); }
+.actionRow { display: flex; flex-direction: column; margin-top: auto; padding-top: 0.75rem; border-top: 1px solid var(--border); }
+
+.emptyState { text-align: center; padding: 2rem; color: var(--muted-foreground); }
+
+/* Mileage log history (story BM-042/043 — "appears in the vehicle's
+   maintenance log history"), expanded inline under a card's actions. */
+.historyPanel { display: flex; flex-direction: column; gap: 0.35rem; margin-top: 0.6rem; padding: 0.6rem 0.75rem; background-color: var(--muted); border-radius: var(--radius-md); max-height: 160px; overflow-y: auto; }
+.historyEmpty { font-size: 0.8rem; color: var(--muted-foreground); text-align: center; padding: 0.5rem 0; }
+.historyRow { display: grid; grid-template-columns: 1fr auto auto; gap: 0.75rem; font-size: 0.8rem; color: var(--foreground); }
+
+.fieldError { font-size: 0.8rem; color: var(--error, #ef4444); }
+.formFields { display: flex; flex-direction: column; gap: 0.85rem; }
+.fieldLabel { display: block; margin-bottom: 0.35rem; font-size: 0.875rem; font-weight: 500; color: var(--foreground); }
+.fieldHint { margin-top: 0.3rem; font-size: 0.75rem; color: var(--muted-foreground); }
+.select { display: flex; width: 100%; height: 2.5rem; padding: 0.5rem 0.75rem; border: 1px solid rgba(0,0,0,0.1); border-radius: 0.375rem; background-color: white; color: var(--foreground); font-size: 0.875rem; outline: none; }
 
 /* Dialog Styles */
 .dialogOverlay { position: fixed; inset: 0; background-color: rgba(0, 0, 0, 0.5); z-index: 50; display: flex; align-items: center; justify-content: center; padding: 1rem; }
-.dialogContent { background-color: var(--card); border-radius: var(--radius-lg); padding: 1.5rem; width: 100%; max-width: 400px; box-shadow: var(--shadow-lg); display: flex; flex-direction: column; gap: 1.25rem; }
+.dialogContent { background-color: var(--card); border-radius: var(--radius-lg); padding: 1.5rem; width: 100%; max-width: 400px; max-height: calc(100vh - 2rem); overflow-y: auto; box-shadow: var(--shadow-lg); display: flex; flex-direction: column; gap: 1.25rem; }
 .dialogHeader { display: flex; flex-direction: column; gap: 0.25rem; }
 .dialogTitle { font-size: 1.25rem; font-weight: 600; color: var(--foreground); }
 .dialogDescription { font-size: 0.875rem; color: var(--muted-foreground); }
 .dialogFooter { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem; }
+.confirmationDialog { max-width: 480px; }
+
+.registrationDialog { max-width: 760px; padding: 0; gap: 0; overflow-x: hidden; }
+.wizardHeader { display: flex; flex-direction: column; align-items: center; gap: 0.9rem; padding: 1.25rem 1.5rem 0.65rem; }
+.wizardTitle { font-size: 1.05rem; font-weight: 650; color: var(--foreground); }
+.wizardProgress { position: relative; display: flex; align-items: center; justify-content: space-between; width: min(100%, 390px); margin: 0; padding: 0; list-style: none; }
+.wizardProgress::before { content: ""; position: absolute; z-index: 0; top: 50%; right: 1rem; left: 1rem; height: 2px; background: var(--border); transform: translateY(-50%); }
+.progressStep { position: relative; z-index: 1; display: inline-flex; align-items: center; justify-content: center; width: 2rem; height: 2rem; border: 1px solid var(--border); border-radius: 999px; background: var(--card); color: var(--muted-foreground); font-size: 0.75rem; font-weight: 650; }
+.progressStepActive { border-color: var(--primary); background: var(--primary); color: white; }
+.progressStepCompleted { border-color: #58b957; background: #58b957; color: white; }
+.setupStepContent { display: flex; flex-direction: column; align-items: center; gap: 0.7rem; padding: 0.15rem 1.5rem 1rem; }
+.stepEyebrow { display: inline-flex; width: fit-content; padding: 0.25rem 0.65rem; border-radius: 999px; background: color-mix(in srgb, var(--primary) 10%, var(--card)); color: var(--primary); font-size: 0.75rem; font-weight: 650; }
+.setupImageFrame { width: 100%; overflow: hidden; border: 1px solid color-mix(in srgb, var(--primary) 12%, var(--border)); border-radius: 1.1rem; background: #f4f9fc; }
+.setupImage { display: block; width: 100%; height: auto; }
+.setupCopy { display: flex; flex-direction: column; align-items: center; gap: 0.25rem; text-align: center; }
+.setupStepTitle { font-size: 1.35rem; font-weight: 700; line-height: 1.25; color: var(--foreground); }
+.setupStepDescription { max-width: 620px; font-size: 0.9rem; line-height: 1.5; color: var(--muted-foreground); }
+.smsInstructions { width: 100%; padding: 1rem; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--muted); font-size: 0.85rem; line-height: 1.5; }
+.smsInstructions h4 { margin: 0 0 0.5rem; font-weight: 650; color: var(--foreground); }
+.smsInstructions p { margin: 0.65rem 0; color: var(--muted-foreground); }
+.smsInstructions ol { padding-left: 1.25rem; margin: 0.75rem 0; list-style: decimal; }
+.smsInstructions li { margin-bottom: 0.65rem; }
+.smsInstructions code { display: block; margin-top: 0.2rem; padding: 0.45rem 0.6rem; border-radius: 0.375rem; background: var(--card); color: var(--foreground); overflow-wrap: anywhere; }
+.smsInstructions a { color: var(--primary); text-decoration: underline; }
+.wizardFooter { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; padding: 1rem 1.5rem; border-top: 1px solid var(--border); }
+.detailsScreen { display: flex; flex-direction: column; align-self: center; gap: 1.25rem; width: 100%; max-width: 560px; padding: 1.5rem; }
+
+@media (max-width: 640px) {
+  .toolbar { align-items: stretch; flex-direction: column; }
+  .toolbar button { width: 100%; }
+  .dialogOverlay { align-items: flex-end; padding: 0; }
+  .registrationDialog { max-height: 94vh; border-radius: var(--radius-lg) var(--radius-lg) 0 0; }
+  .wizardHeader { gap: 0.7rem; padding: 1rem 1rem 0.55rem; }
+  .wizardProgress { width: min(100%, 310px); }
+  .progressStep { width: 1.75rem; height: 1.75rem; }
+  .setupStepContent { padding: 0.1rem 1rem 0.8rem; }
+  .setupStepTitle { font-size: 1.15rem; }
+  .setupStepDescription { font-size: 0.82rem; }
+  .wizardFooter { padding: 0.85rem 1rem; }
+  .detailsScreen { padding: 1.25rem 1rem; }
+}

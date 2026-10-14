@@ -69,7 +69,7 @@ export function RedemptionHistoryFull({ onBack }: { onBack: () => void }) {
           className="flex items-center gap-2 text-sm text-[#007BC1] hover:text-[#005a8f] mb-6 transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
-          Back to Loyalty Program
+          Back to Rewards
         </button>
 
         <div className="bg-white rounded-lg border border-gray-200 p-6">

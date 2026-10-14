@@ -1,8 +1,7 @@
 import dynamic from 'next/dynamic';
 import { useEffect, useState } from 'react';
 
-// Leaflet touches `window` at module load, so the map components must be
-// loaded client-side only.
+// The WebGL map is browser-only, so keep it out of the server-rendered bundle.
 const DrawableMap = dynamic(
   () => import('./DrawableMap').then((m) => m.DrawableMap),
   { ssr: false },
@@ -13,8 +12,10 @@ import { apiFetch, apiErrorMessage } from '../lib/api';
 import { BranchCreatedModal } from './BranchCreatedModal';
 import { StoreLocationCombobox, StoreLocation } from './StoreLocationCombobox';
 import { ProvinceCombobox } from './ProvinceCombobox';
+import { CityMunicipalityCombobox } from './CityMunicipalityCombobox';
 import { provinceFocus } from '../lib/phProvinces';
-import { formatPHMobile, normalizePhMobile, formatPhMobileNational } from '../lib/phMobile';
+import { cityMunicipalityFocus } from '../lib/phCitiesMunicipalities';
+import { normalizePhMobile, formatPhMobileNational } from '../lib/phMobile';
 
 interface RegisterBranchModalProps {
   isOpen: boolean;
@@ -86,7 +87,10 @@ export function RegisterBranchModal({ isOpen, onClose }: RegisterBranchModalProp
   // Form state — all Step 1 fields start empty; the old sample values now live
   // in each input's `placeholder` for visual reference only.
   const [branchName, setBranchName] = useState('');
+  // Holds the editable national digits "9XX XXX XXXX"; the +63 prefix lives in
+  // the UI, never in this value — same treatment as the New owner mobile field.
   const [contactNumber, setContactNumber] = useState('');
+  const [contactNumberTouched, setContactNumberTouched] = useState(false);
   const [address, setAddress] = useState('');
   const [city, setCity] = useState('');
   const [province, setProvince] = useState('');
@@ -119,6 +123,13 @@ export function RegisterBranchModal({ isOpen, onClose }: RegisterBranchModalProp
     setSelectedReferenceId(null);
   };
 
+  // A city/municipality selection is valid only within its current province.
+  // Clear it when that parent selection changes to prevent mismatched addresses.
+  const handleProvinceChange = (nextProvince: string) => {
+    if (nextProvince !== province) setCity('');
+    setProvince(nextProvince);
+  };
+
   // New owner fields
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
@@ -139,6 +150,14 @@ export function RegisterBranchModal({ isOpen, onClose }: RegisterBranchModalProp
   const mobileValid = mobileNationalDigits !== null;
   const canonicalOwnerMobile = mobileNationalDigits ? `+63${mobileNationalDigits}` : '';
   const showMobileError = ownerType === 'new' && mobileTouched && !mobileValid;
+
+  // Branch contact number: same canonical PH-mobile treatment as the owner
+  // mobile above. National digits in state; +63 is a fixed UI segment. Canonical
+  // E.164 (+639XXXXXXXXX) or '' is what leaves the form.
+  const contactNationalDigits = normalizePhMobile(contactNumber);
+  const contactNumberValid = contactNationalDigits !== null;
+  const canonicalContactNumber = contactNationalDigits ? `+63${contactNationalDigits}` : '';
+  const showContactError = contactNumberTouched && !contactNumberValid;
 
   // Geofence fields
   const [curfewStart, setCurfewStart] = useState('06:00');
@@ -208,7 +227,7 @@ export function RegisterBranchModal({ isOpen, onClose }: RegisterBranchModalProp
         method: 'POST',
         body: JSON.stringify({
           name: branchName,
-          contactNumber,
+          contactNumber: canonicalContactNumber,
           address,
           city,
           province,
@@ -264,6 +283,7 @@ export function RegisterBranchModal({ isOpen, onClose }: RegisterBranchModalProp
     setBranchName('');
     setSelectedReferenceId(null);
     setContactNumber('');
+    setContactNumberTouched(false);
     setAddress('');
     setCity('');
     setProvince('');
@@ -329,7 +349,7 @@ export function RegisterBranchModal({ isOpen, onClose }: RegisterBranchModalProp
     if (currentStep === 1) {
       return (
         branchName.trim() !== '' &&
-        contactNumber.trim() !== '' &&
+        contactNumberValid &&
         address.trim() !== '' &&
         city.trim() !== '' &&
         province.trim() !== '' &&
@@ -438,15 +458,36 @@ export function RegisterBranchModal({ isOpen, onClose }: RegisterBranchModalProp
                 </div>
                 <div>
                   <label className="block text-xs text-[#6B6B67] mb-1">Contact number</label>
-                  <input
-                    type="tel"
-                    inputMode="tel"
-                    value={contactNumber}
-                    // Re-normalize to +63 form on every keystroke (controlled + masked).
-                    onChange={(e) => setContactNumber(formatPHMobile(e.target.value))}
-                    placeholder="+63 9XX XXX XXXX"
-                    className="w-full h-[34px] px-3 text-[13px] border border-[#E4E4E0] rounded-lg bg-[#F7F7F6] outline-none focus:border-[#185FA5]"
-                  />
+                  {/* Same +63-prefixed group as the New owner mobile field (Step
+                      2): fixed +63 segment + editable national digits. +63 is a
+                      UI element, not part of the stored value. */}
+                  <div
+                    className={`flex items-center h-[34px] rounded-lg bg-[#F7F7F6] border overflow-hidden ${
+                      showContactError
+                        ? 'border-[#C0392B] focus-within:border-[#C0392B]'
+                        : 'border-[#E4E4E0] focus-within:border-[#185FA5]'
+                    }`}
+                  >
+                    <span className="pl-3 pr-2 text-[13px] text-[#6B6B67] border-r border-[#E4E4E0] select-none">
+                      +63
+                    </span>
+                    <input
+                      type="tel"
+                      inputMode="numeric"
+                      value={contactNumber}
+                      // Strip non-digits, cap at 10, live-format for readability.
+                      onChange={(e) => setContactNumber(formatPhMobileNational(e.target.value))}
+                      onBlur={() => setContactNumberTouched(true)}
+                      aria-invalid={showContactError}
+                      placeholder="9XX XXX XXXX"
+                      className="flex-1 min-w-0 h-full px-3 text-[13px] bg-transparent outline-none"
+                    />
+                  </div>
+                  {showContactError && (
+                    <p className="mt-1 text-[11px] text-[#C0392B]">
+                      Enter a valid PH mobile number
+                    </p>
+                  )}
                 </div>
               </div>
 
@@ -464,12 +505,11 @@ export function RegisterBranchModal({ isOpen, onClose }: RegisterBranchModalProp
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs text-[#6B6B67] mb-1">City / Municipality</label>
-                  <input
-                    type="text"
+                  <CityMunicipalityCombobox
+                    province={province}
                     value={city}
-                    onChange={(e) => setCity(e.target.value)}
-                    placeholder="Calamba"
-                    className="w-full h-[34px] px-3 text-[13px] border border-[#E4E4E0] rounded-lg bg-[#F7F7F6] outline-none focus:border-[#185FA5]"
+                    onChange={setCity}
+                    placeholder="Search city or municipality…"
                   />
                 </div>
                 <div>
@@ -480,7 +520,7 @@ export function RegisterBranchModal({ isOpen, onClose }: RegisterBranchModalProp
                       zoomed into this province. */}
                   <ProvinceCombobox
                     value={province}
-                    onChange={setProvince}
+                    onChange={handleProvinceChange}
                     placeholder="Search province…"
                   />
                 </div>
@@ -693,15 +733,17 @@ export function RegisterBranchModal({ isOpen, onClose }: RegisterBranchModalProp
               </div>
 
                 <div className="space-y-3">
-                  {/* Live Leaflet map */}
+                  {/* Live MapLibre map */}
                   <div className="h-[230px] border border-[#E4E4E0] rounded-lg overflow-hidden relative">
                     <DrawableMap
                       points={polygonPoints}
                       isDrawing={isDrawingPolygon}
                       onAddPoint={handleAddPoint}
-                      // Frame the map on the province chosen in Step 1 so the
-                      // coverage area is already in view when drawing starts.
-                      focus={provinceFocus(province)}
+                      // Prefer the Step 1 city/municipality; retain province
+                      // framing as a safe fallback for older saved values.
+                      focus={
+                        cityMunicipalityFocus(province, city) ?? provinceFocus(province)
+                      }
                     />
                     {/* Drawing mode badge overlay */}
                     {isDrawingPolygon && (

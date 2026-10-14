@@ -1,49 +1,54 @@
 import React, { useState, createContext, useContext, useRef, useEffect } from "react";
+import ReactDOM from "react-dom";
 import { ChevronDown } from "lucide-react";
 
 const SelectContext = createContext<any>(null);
 
 export function Select({ children, value, onValueChange }: any) {
   const [open, setOpen] = useState(false);
-  const selectRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const [rect, setRect] = useState<DOMRect | null>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
+
+  const openWithRect = () => {
+    if (triggerRef.current) setRect(triggerRef.current.getBoundingClientRect());
+    setOpen(true);
+  };
 
   useEffect(() => {
+    if (!open) return;
     const handleClickOutside = (event: MouseEvent) => {
-      if (selectRef.current && !selectRef.current.contains(event.target as Node)) {
+      if (
+        triggerRef.current && !triggerRef.current.contains(event.target as Node) &&
+        contentRef.current && !contentRef.current.contains(event.target as Node)
+      ) {
         setOpen(false);
       }
     };
-
-    if (open) {
-      document.addEventListener("mousedown", handleClickOutside);
-    } else {
-      document.removeEventListener("mousedown", handleClickOutside);
-    }
-
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [open]);
 
   return (
-    <SelectContext.Provider value={{ value, onValueChange, open, setOpen }}>
-      <div ref={selectRef} style={{ position: "relative", width: "100%" }}>{children}</div>
+    <SelectContext.Provider value={{ value, onValueChange, open, setOpen, triggerRef, contentRef, rect, openWithRect }}>
+      <div style={{ position: "relative", width: "100%" }}>{children}</div>
     </SelectContext.Provider>
   );
 }
 
 export function SelectTrigger({ children, className = "", style, asChild = false, hideIcon = false }: any) {
-  const { open, setOpen } = useContext(SelectContext);
+  const { open, openWithRect, setOpen, triggerRef } = useContext(SelectContext);
   if (asChild) {
     return React.cloneElement(children, {
-      onClick: () => setOpen(!open),
+      onClick: () => open ? setOpen(false) : openWithRect(),
       style: { ...children.props.style, cursor: 'pointer' }
     });
   }
   return (
     <button
+      ref={triggerRef}
       type="button"
-      onClick={() => setOpen(!open)}
+      onClick={() => open ? setOpen(false) : openWithRect()}
       style={{
         display: "flex",
         alignItems: "center",
@@ -55,6 +60,7 @@ export function SelectTrigger({ children, className = "", style, asChild = false
         border: "1px solid rgba(0,0,0,0.1)",
         backgroundColor: "white",
         fontSize: "0.875rem",
+        fontWeight: 400,
         cursor: "pointer",
         ...style
       }}
@@ -67,36 +73,38 @@ export function SelectTrigger({ children, className = "", style, asChild = false
 
 export function SelectValue({ placeholder }: any) {
   const { value } = useContext(SelectContext);
-  return <span>{value || placeholder}</span>;
+  if (!value) {
+    return <span style={{ color: '#9ca3af', fontWeight: 400 }}>{placeholder}</span>;
+  }
+  return <span style={{ fontWeight: 400 }}>{value}</span>;
 }
 
 export function SelectContent({ children }: any) {
-  const { open } = useContext(SelectContext);
-  if (!open) return null;
-  return (
-    <div
-      style={{
-        position: "absolute",
-        top: "100%",
-        left: 0,
-        width: "100%",
-        marginTop: "0.25rem",
-        backgroundColor: "white",
-        border: "1px solid rgba(0,0,0,0.1)",
-        borderRadius: "0.375rem",
-        boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.1)",
-        zIndex: 50,
-        maxHeight: "200px",
-        overflowY: "auto",
-        padding: "0.25rem"
-      }}
-    >
-      {children}
-    </div>
+  const { open, rect, contentRef } = useContext(SelectContext);
+  if (!open || !rect) return null;
+
+  const dropdownStyle: React.CSSProperties = {
+    position: "fixed",
+    top: rect.bottom + 4,
+    left: rect.left,
+    width: rect.width,
+    backgroundColor: "white",
+    border: "1px solid rgba(0,0,0,0.1)",
+    borderRadius: "0.375rem",
+    boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.1)",
+    zIndex: 9999,
+    maxHeight: "200px",
+    overflowY: "auto",
+    padding: "0.25rem",
+  };
+
+  return ReactDOM.createPortal(
+    <div ref={contentRef} style={dropdownStyle}>{children}</div>,
+    document.body
   );
 }
 
-export function SelectItem({ children, value: itemValue }: any) {
+export function SelectItem({ children, value: itemValue, style }: any) {
   const { onValueChange, setOpen } = useContext(SelectContext);
   return (
     <div
@@ -109,7 +117,8 @@ export function SelectItem({ children, value: itemValue }: any) {
         fontSize: "0.875rem",
         cursor: "pointer",
         borderRadius: "0.25rem",
-        transition: "background-color 0.2s"
+        transition: "background-color 0.2s",
+        ...style
       }}
       onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "rgba(0,0,0,0.05)")}
       onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}

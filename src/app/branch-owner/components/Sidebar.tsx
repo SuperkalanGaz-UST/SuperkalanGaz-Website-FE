@@ -9,19 +9,19 @@ import {
   HeartHandshake,
   Star,
   Gift,
-  Package,
+  Boxes,
   Bike,
   FileText,
+  UserRound,
   Users,
   Settings,
 } from 'lucide-react';
 import { AppSidebar, SidebarNavEntry } from '../../components/AppSidebar';
 
 /**
- * Branch Owner navigation: branch-scoped configuration and analytics
- * (loyalty catalog, thresholds, BM accounts) — no daily order processing,
- * which is Branch Manager territory (AGENTS.md §7). Every leaf id maps to
- * an existing screen in BranchOwnerApp.
+ * Branch Owner navigation: branch-scoped configuration and analytics only.
+ * The shared shell supplies the same expanded/minimized presentation used by
+ * Franchise Administrator and Branch Manager without changing this RBAC list.
  */
 const NAV_ENTRIES: SidebarNavEntry[] = [
   { icon: LayoutDashboard, label: 'Dashboard', id: 'dashboard' },
@@ -29,24 +29,25 @@ const NAV_ENTRIES: SidebarNavEntry[] = [
     icon: BarChart2,
     label: 'Analytics',
     children: [
-      { icon: TrendingUp, label: 'Order Analytics', id: 'order-analytics' },
+      { icon: TrendingUp, label: 'Orders', id: 'order-analytics' },
       { icon: BarChart3, label: 'Sales', id: 'sales-overview' },
-      { icon: Wallet, label: 'Operational Expenses', id: 'operational-expenses' },
+      { icon: Wallet, label: 'Running Costs', id: 'operational-expenses' },
     ],
   },
   {
     icon: HeartHandshake,
     label: 'Customer',
     children: [
+      { icon: UserRound, label: 'Customer Directory', id: 'customers' },
       { icon: Star, label: 'Ratings & Reviews', id: 'csat' },
-      { icon: Gift, label: 'Loyalty Program', id: 'loyalty' },
+      { icon: Gift, label: 'Rewards', id: 'loyalty' },
     ],
   },
   {
-    icon: Package,
+    icon: Boxes,
     label: 'Operations',
     children: [
-      { icon: Package, label: 'Inventory', id: 'supply-chain' },
+      { icon: Boxes, label: 'Inventory', id: 'inventory' },
       { icon: Bike, label: 'Fleet', id: 'fleet-overview' },
     ],
   },
@@ -61,5 +62,5 @@ interface SidebarProps {
 }
 
 export function Sidebar({ activeScreen, onNavigate }: SidebarProps) {
-  return <AppSidebar entries={NAV_ENTRIES} activeScreen={activeScreen} onNavigate={onNavigate} />;
+  return <AppSidebar entries={NAV_ENTRIES} activeScreen={activeScreen} onNavigate={onNavigate} compactSpacing />;
 }

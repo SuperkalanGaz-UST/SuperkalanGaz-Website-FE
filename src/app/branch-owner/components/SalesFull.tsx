@@ -1,60 +1,68 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Header } from './Header';
 import { Pagination } from './Pagination';
 import { Select } from './Select';
 import { ArrowLeft, Search } from 'lucide-react';
+import { apiFetch } from '../../lib/api';
+import { useBranch } from '../contexts/BranchContext';
 
-// Full historical sales data
-const salesData = [
-  { id: '1', date: 'May 2, 2026', receipt: 'RCP-0001', customer: 'Maria Santos', orders: 2, spent: 2200, paid: 'Paid' },
-  { id: '2', date: 'May 2, 2026', receipt: 'RCP-0002', customer: 'Juan Dela Cruz', orders: 1, spent: 1100, paid: 'Paid' },
-  { id: '3', date: 'May 1, 2026', receipt: 'RCP-0003', customer: 'Pedro Penduko', orders: 3, spent: 3300, paid: 'Unpaid' },
-  { id: '4', date: 'May 1, 2026', receipt: 'RCP-0004', customer: 'Lola Basyang', orders: 1, spent: 1100, paid: 'Paid' },
-  { id: '5', date: 'May 1, 2026', receipt: 'RCP-0005', customer: 'Carlos Miguel', orders: 2, spent: 2200, paid: 'Paid' },
-  { id: '6', date: 'Apr 30, 2026', receipt: 'RCP-0006', customer: 'Ana Reyes', orders: 1, spent: 1100, paid: 'Paid' },
-  { id: '7', date: 'Apr 30, 2026', receipt: 'RCP-0007', customer: 'Rita Lopez', orders: 4, spent: 4400, paid: 'Unpaid' },
-  { id: '8', date: 'Apr 29, 2026', receipt: 'RCP-0008', customer: 'Sofia Cruz', orders: 2, spent: 2200, paid: 'Paid' },
-  { id: '9', date: 'Apr 29, 2026', receipt: 'RCP-0009', customer: 'Ben Reyes', orders: 1, spent: 1100, paid: 'Paid' },
-  { id: '10', date: 'Apr 28, 2026', receipt: 'RCP-0010', customer: 'Diana Cruz', orders: 3, spent: 3300, paid: 'Paid' },
-  { id: '11', date: 'Apr 28, 2026', receipt: 'RCP-0011', customer: 'Edgar Santos', orders: 2, spent: 2200, paid: 'Unpaid' },
-  { id: '12', date: 'Apr 27, 2026', receipt: 'RCP-0012', customer: 'Fiona Reyes', orders: 1, spent: 1100, paid: 'Paid' },
-  { id: '13', date: 'Apr 27, 2026', receipt: 'RCP-0013', customer: 'Gabriel Cruz', orders: 2, spent: 2200, paid: 'Paid' },
-  { id: '14', date: 'Apr 26, 2026', receipt: 'RCP-0014', customer: 'Helen Lopez', orders: 1, spent: 1100, paid: 'Paid' },
-  { id: '15', date: 'Apr 26, 2026', receipt: 'RCP-0015', customer: 'Ivan Santos', orders: 3, spent: 3300, paid: 'Unpaid' },
-  { id: '16', date: 'Apr 25, 2026', receipt: 'RCP-0016', customer: 'Julia Reyes', orders: 2, spent: 2200, paid: 'Paid' },
-  { id: '17', date: 'Apr 25, 2026', receipt: 'RCP-0017', customer: 'Kevin Cruz', orders: 1, spent: 1100, paid: 'Paid' },
-  { id: '18', date: 'Apr 24, 2026', receipt: 'RCP-0018', customer: 'Luna Santos', orders: 2, spent: 2200, paid: 'Paid' },
-];
+type SaleRow = { id: string; date: string; receipt: string; customer: string; orders: number; spent: number; paid: string };
 
 export function SalesFull({ onBack }: { onBack: () => void }) {
+  const { selectedBranchId } = useBranch();
+  const [salesData, setSalesData] = useState<SaleRow[]>([]);
+  const [totalCount, setTotalCount] = useState(0);
+  const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
 
   const itemsPerPage = 10;
 
-  const filteredData = useMemo(() => {
-    let data = salesData;
+  useEffect(() => {
+    let active = true;
+    if (!selectedBranchId) return () => { active = false; };
+    const controller = new AbortController();
+    
+    const fetchSales = () => {
+      setLoading(true);
+      const params = new URLSearchParams({
+        branchId: selectedBranchId,
+        page: currentPage.toString(),
+        limit: itemsPerPage.toString(),
+      });
+      if (searchQuery) params.append('search', searchQuery);
+      if (filterStatus !== 'all') params.append('status', filterStatus);
 
-    if (searchQuery) {
-      data = data.filter(row =>
-        Object.values(row).some(val =>
-          String(val).toLowerCase().includes(searchQuery.toLowerCase())
-        )
-      );
-    }
+      apiFetch(`/service-requests/reports/branch-owner-sales?${params.toString()}`, { signal: controller.signal })
+        .then(async (response) => {
+          const data = await response.json().catch(() => null);
+          if (!response.ok) throw new Error('Could not load sales records.');
+          if (active) {
+            setSalesData((data?.sales ?? []) as SaleRow[]);
+            setTotalCount(data?.totalCount ?? 0);
+          }
+        }).catch(() => {
+        if (active && !controller.signal.aborted) {
+          setSalesData([]);
+          setTotalCount(0);
+        }
+      }).finally(() => {
+        if (active && !controller.signal.aborted) setLoading(false);
+      });
+    };
 
-    if (filterStatus !== 'all') {
-      data = data.filter(row => row.paid.toLowerCase() === filterStatus.toLowerCase());
-    }
+    const timeoutId = setTimeout(fetchSales, 300);
 
-    return data;
-  }, [searchQuery, filterStatus]);
+    return () => { 
+      active = false; 
+      clearTimeout(timeoutId);
+      controller.abort(); 
+    };
+  }, [selectedBranchId, currentPage, searchQuery, filterStatus]);
 
-  const totalPages = Math.ceil(filteredData.length / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const endIndex = startIndex + itemsPerPage;
-  const currentData = filteredData.slice(startIndex, endIndex);
+  const totalPages = Math.ceil(totalCount / itemsPerPage);
+  const currentData = salesData;
 
   const hasActiveFilters = searchQuery || filterStatus !== 'all';
 
@@ -120,22 +128,26 @@ export function SalesFull({ onBack }: { onBack: () => void }) {
             <table className="w-full">
               <thead>
                 <tr className="border-b border-gray-200">
-                  <th className="text-left text-[11px] font-medium text-gray-600 pb-3">Order Date</th>
-                  <th className="text-left text-[11px] font-medium text-gray-600 pb-3">Receipt No.</th>
-                  <th className="text-left text-[11px] font-medium text-gray-600 pb-3">Customer</th>
-                  <th className="text-left text-[11px] font-medium text-gray-600 pb-3">Total Orders</th>
-                  <th className="text-left text-[11px] font-medium text-gray-600 pb-3">Cash Received</th>
-                  <th className="text-left text-[11px] font-medium text-gray-600 pb-3">Status</th>
+                  <th className="text-left text-xs font-semibold text-gray-700 pb-3">Order Date</th>
+                  <th className="text-left text-xs font-semibold text-gray-700 pb-3">Receipt No.</th>
+                  <th className="text-left text-xs font-semibold text-gray-700 pb-3">Customer</th>
+                  <th className="text-left text-xs font-semibold text-gray-700 pb-3">Total Orders</th>
+                  <th className="text-left text-xs font-semibold text-gray-700 pb-3">Cash Received</th>
+                  <th className="text-left text-xs font-semibold text-gray-700 pb-3">Status</th>
                 </tr>
               </thead>
               <tbody>
-                {currentData.map((row, index) => (
+                {loading ? (
+                  <tr><td colSpan={6} className="py-10 text-center text-sm text-gray-400">Loading sales records…</td></tr>
+                ) : currentData.length === 0 ? (
+                  <tr><td colSpan={6} className="py-10 text-center text-sm text-gray-400">No sales records found.</td></tr>
+                ) : currentData.map((row, index) => (
                   <tr key={row.id} className={`border-b border-gray-100 ${index % 2 === 1 ? 'bg-gray-50' : ''}`}>
-                    <td className="py-4 text-[13px] text-gray-900 whitespace-nowrap">{row.date}</td>
+                    <td className="py-4 text-[13px] text-gray-900 whitespace-nowrap">{new Intl.DateTimeFormat('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }).format(new Date(row.date))}</td>
                     <td className="py-4 text-[13px] text-gray-900 whitespace-nowrap font-mono">{row.receipt}</td>
                     <td className="py-4 text-[13px] text-gray-900 whitespace-nowrap">{row.customer}</td>
                     <td className="py-4 text-[13px] text-gray-600 whitespace-nowrap">{row.orders}</td>
-                    <td className="py-4 text-[13px] font-medium text-gray-900 whitespace-nowrap">₱{row.spent.toLocaleString()}</td>
+                    <td className="py-4 text-[13px] font-medium text-gray-900 whitespace-nowrap">₱{Number(row.spent).toLocaleString()}</td>
                     <td className="py-4">
                       <span
                         className={`inline-block px-3 py-1 rounded-full text-[11px] font-medium ${

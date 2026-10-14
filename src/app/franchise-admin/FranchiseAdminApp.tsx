@@ -18,6 +18,9 @@ import { ReorderLogFull } from '../components/ReorderLogFull';
 import { CustomerRatingsFull } from '../components/CustomerRatingsFull';
 import { CustomerList } from '../components/CustomerList';
 import { CustomerDetail } from '../components/CustomerDetail';
+import { FranchiseAdminSettings } from './components/FranchiseAdminSettings';
+import { GovernanceRequests } from './components/GovernanceRequests';
+import { StaffAccountReviews } from './components/StaffAccountReviews';
 
 export function FranchiseAdminApp() {
   const [activeScreen, setActiveScreen] = useState('dashboard');
@@ -48,8 +51,11 @@ export function FranchiseAdminApp() {
         {activeScreen === 'loyalty' && <LoyaltyProgram />}
         {activeScreen === 'supply-chain' && <SupplyChain />}
         {activeScreen === 'reports' && <ReportGeneration />}
-        {activeScreen === 'settings' && <BranchSettings />}
+        {activeScreen === 'franchise-registry' && <BranchSettings />}
         {activeScreen === 'price-config' && <PriceConfiguration />}
+        {activeScreen === 'governance-requests' && <GovernanceRequests />}
+        {activeScreen === 'account-reviews' && <StaffAccountReviews />}
+        {activeScreen === 'account-settings' && <FranchiseAdminSettings />}
         {activeScreen === 'delivery-completion-full' && <DeliveryCompletionFull onBack={() => setActiveScreen('order-analytics')} />}
         {activeScreen === 'complaint-log-full' && <ComplaintLogFull onBack={() => setActiveScreen('csat')} />}
         {activeScreen === 'purchase-tracker-full' && <PurchaseTrackerFull onBack={() => setActiveScreen('loyalty')} />}

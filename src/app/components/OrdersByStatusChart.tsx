@@ -10,7 +10,7 @@ const COLORS = ['#10b981', '#f59e0b', '#ef4444'];
 
 export function OrdersByStatusChart() {
   return (
-    <div className="bg-white rounded-lg border border-gray-200 p-6">
+    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
       <h3 className="font-semibold text-gray-900 mb-4">Orders by Status — All Branches</h3>
       <ResponsiveContainer width="100%" height={250}>
         <PieChart>

@@ -17,17 +17,28 @@ const AccountContext = createContext<Account | undefined>(undefined);
  * The handler ends the real Supabase session and returns to the login screen.
  */
 const LogoutContext = createContext<(() => void) | undefined>(undefined);
+const UpdateAccountContext = createContext<((patch: Partial<Account>) => void) | undefined>(undefined);
 
 interface AccountProviderProps {
   account: Account;
   onLogout: () => void;
+  onAccountUpdate: (patch: Partial<Account>) => void;
   children: ReactNode;
 }
 
-export function AccountProvider({ account, onLogout, children }: AccountProviderProps) {
+export function AccountProvider({
+  account,
+  onLogout,
+  onAccountUpdate,
+  children,
+}: AccountProviderProps) {
   return (
     <AccountContext.Provider value={account}>
-      <LogoutContext.Provider value={onLogout}>{children}</LogoutContext.Provider>
+      <LogoutContext.Provider value={onLogout}>
+        <UpdateAccountContext.Provider value={onAccountUpdate}>
+          {children}
+        </UpdateAccountContext.Provider>
+      </LogoutContext.Provider>
     </AccountContext.Provider>
   );
 }
@@ -46,4 +57,13 @@ export function useLogout(): () => void {
     throw new Error('useLogout must be used within an AccountProvider');
   }
   return logout;
+}
+
+/** Keeps shared chrome in sync after the signed-in user updates their profile. */
+export function useUpdateAccount(): (patch: Partial<Account>) => void {
+  const updateAccount = useContext(UpdateAccountContext);
+  if (!updateAccount) {
+    throw new Error('useUpdateAccount must be used within an AccountProvider');
+  }
+  return updateAccount;
 }

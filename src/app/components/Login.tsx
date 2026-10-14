@@ -1,15 +1,42 @@
 import { useState } from 'react';
-import { Eye, EyeOff } from 'lucide-react';
-import { Account, signIn, DEMO_ACCOUNTS, ROLE_LABELS } from '../lib/auth';
+import { ArrowLeft, CheckCircle2, Eye, EyeOff, Mail, X } from 'lucide-react';
+import { InputOTP, InputOTPGroup, InputOTPSlot } from './ui/input-otp';
+import {
+  Account,
+  activateFranchiseAdminInvitation,
+  requestPasswordReset,
+  signIn,
+  updatePassword,
+  verifyPasswordResetCode,
+} from '../lib/auth';
 
 interface LoginProps {
   onLogin: (account: Account) => void;
+  passwordRecovery?: boolean;
+  onPasswordReset?: () => Promise<void>;
+  invitationActivation?: boolean;
+  onInvitationActivation?: (account: Account) => void;
 }
 
-export function Login({ onLogin }: LoginProps) {
+export function Login({
+  onLogin,
+  passwordRecovery = false,
+  onPasswordReset,
+  invitationActivation = false,
+  onInvitationActivation,
+}: LoginProps) {
   const [username, setUsername] = useState('');
+  const [recoveryUsername, setRecoveryUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [forgotPassword, setForgotPassword] = useState(false);
+  const [resetCodeSent, setResetCodeSent] = useState(false);
+  const [resetCode, setResetCode] = useState('');
+  const [notice, setNotice] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [resetComplete, setResetComplete] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -26,6 +53,482 @@ export function Login({ onLogin }: LoginProps) {
     } else {
       setError(signInError ?? 'Invalid username or password');
     }
+  };
+
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+
+    const emailStr = recoveryUsername.trim();
+    if (!emailStr) {
+      setError('Enter your email address.');
+      return;
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(emailStr)) {
+      setError('Please enter a valid email address.');
+      return;
+    }
+
+    setLoading(true);
+
+    // Deliberately does not check whether the account exists first — doing so
+    // would let anyone probe the system for valid staff emails. Supabase's
+    // own reset endpoint already returns success uniformly either way.
+    const { error: resetError } = await requestPasswordReset(recoveryUsername);
+    setLoading(false);
+
+    if (resetError) {
+      setError(resetError);
+    } else {
+      setResetCode('');
+      setResetCodeSent(true);
+    }
+  };
+
+  const handleVerifyResetCode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setNotice('');
+    if (!/^\d{6}$/.test(resetCode)) {
+      setError('Enter the complete 6-digit reset code.');
+      return;
+    }
+
+    setLoading(true);
+    const { error: verificationError } = await verifyPasswordResetCode(recoveryUsername, resetCode);
+    setLoading(false);
+    if (verificationError) setError(verificationError);
+    // Success emits PASSWORD_RECOVERY. App keeps that temporary session out of
+    // every staff dashboard and returns this card in new-password mode.
+  };
+
+  const handleResendResetCode = async () => {
+    setError('');
+    setNotice('');
+    setLoading(true);
+    const { error: resetError } = await requestPasswordReset(recoveryUsername);
+    setLoading(false);
+    if (resetError) {
+      setError(resetError);
+      return;
+    }
+    setResetCode('');
+    setNotice('A new reset code has been sent.');
+  };
+
+  const handlePasswordReset = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+
+    if (newPassword.length < 8) {
+      setError('Password must be at least 8 characters.');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setError('Passwords do not match.');
+      return;
+    }
+
+    setLoading(true);
+    const { error: resetError } = await updatePassword(newPassword);
+    if (resetError) {
+      setError(resetError);
+      setLoading(false);
+      return;
+    }
+
+    await onPasswordReset?.();
+    setLoading(false);
+    setResetComplete(true);
+  };
+
+  const handleInvitationActivation = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+
+    if (newPassword.length < 8 || !/\d/.test(newPassword)) {
+      setError('Password must be at least 8 characters and include a number.');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setError('Passwords do not match.');
+      return;
+    }
+
+    setLoading(true);
+    const result = await activateFranchiseAdminInvitation(newPassword);
+    setLoading(false);
+    if (!result.account) {
+      setError(result.error ?? 'Could not activate this invitation.');
+      return;
+    }
+    onInvitationActivation?.(result.account);
+  };
+
+  const returnToLogin = () => {
+    setForgotPassword(false);
+    setResetCodeSent(false);
+    setResetCode('');
+    setNotice('');
+    setError('');
+    setRecoveryUsername('');
+    setUsername('');
+    setPassword('');
+  };
+
+  const passwordField = (
+    id: string,
+    value: string,
+    onChange: (value: string) => void,
+    visible: boolean,
+    onToggleVisibility: () => void,
+    autoComplete: 'current-password' | 'new-password',
+  ) => (
+    <div className="relative">
+      <input
+        id={id}
+        type={visible ? 'text' : 'password'}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        autoComplete={autoComplete}
+        required
+        className="w-full px-4 py-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-[#007BC1] focus:border-transparent outline-none pr-12 text-sm [&::-ms-reveal]:hidden [&::-ms-clear]:hidden"
+      />
+      <button
+        type="button"
+        onClick={onToggleVisibility}
+        aria-label={visible ? 'Hide password' : 'Show password'}
+        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+      >
+        {visible ? <Eye className="w-5 h-5" /> : <EyeOff className="w-5 h-5" />}
+      </button>
+    </div>
+  );
+
+  const renderCardContent = () => {
+    if (resetComplete) {
+      return (
+        <div className="py-6 text-center">
+          <CheckCircle2 className="mx-auto mb-5 h-12 w-12 text-emerald-600" aria-hidden="true" />
+          <h1 className="text-3xl font-bold text-gray-900">Password updated</h1>
+          <p className="mt-3 text-sm leading-6 text-gray-600">
+            Your password has been changed. You can now sign in with your new password.
+          </p>
+          <button
+            type="button"
+            onClick={() => window.location.assign(window.location.pathname)}
+            className="mt-8 w-full rounded-md bg-[#007BC1] py-3.5 text-base font-medium text-white transition-colors hover:bg-[#006399]"
+          >
+            Return to login
+          </button>
+        </div>
+      );
+    }
+
+    if (invitationActivation) {
+      return (
+        <>
+          <h1 className="text-3xl font-bold text-gray-900">Activate your account</h1>
+          <p className="mt-3 mb-8 text-sm leading-6 text-gray-600">
+            Your email is verified. Choose your own password to finish activating your
+            Franchise Administrator account.
+          </p>
+          <form onSubmit={handleInvitationActivation}>
+            <div className="mb-5">
+              <label htmlFor="invitation-password" className="block text-sm font-normal text-gray-700 mb-2">
+                New password
+              </label>
+              {passwordField(
+                'invitation-password',
+                newPassword,
+                setNewPassword,
+                showNewPassword,
+                () => setShowNewPassword((visible) => !visible),
+                'new-password',
+              )}
+              <p className="mt-2 text-xs text-gray-500">
+                Use at least 8 characters and include a number.
+              </p>
+            </div>
+
+            <div className="mb-6">
+              <label htmlFor="invitation-password-confirm" className="block text-sm font-normal text-gray-700 mb-2">
+                Confirm password
+              </label>
+              {passwordField(
+                'invitation-password-confirm',
+                confirmPassword,
+                setConfirmPassword,
+                showNewPassword,
+                () => setShowNewPassword((visible) => !visible),
+                'new-password',
+              )}
+            </div>
+
+            {error && <p className="text-sm text-red-600 mb-4" role="alert">{error}</p>}
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-[#007BC1] text-white py-3.5 rounded-md font-medium hover:bg-[#006399] transition-colors text-base disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              {loading ? 'Activating account…' : 'Activate account'}
+            </button>
+          </form>
+        </>
+      );
+    }
+
+    if (passwordRecovery) {
+      return (
+        <>
+          <h1 className="text-3xl font-bold text-gray-900">Set a new password</h1>
+          <p className="mt-3 mb-8 text-sm leading-6 text-gray-600">
+            Choose a new password for your Superkalan Gaz account.
+          </p>
+          <form onSubmit={handlePasswordReset}>
+            <div className="mb-5">
+              <label htmlFor="new-password" className="block text-sm font-normal text-gray-700 mb-2">
+                New password
+              </label>
+              {passwordField(
+                'new-password',
+                newPassword,
+                setNewPassword,
+                showNewPassword,
+                () => setShowNewPassword((visible) => !visible),
+                'new-password',
+              )}
+              <p className="mt-2 text-xs text-gray-500">Use at least 8 characters.</p>
+            </div>
+
+            <div className="mb-6">
+              <label htmlFor="confirm-password" className="block text-sm font-normal text-gray-700 mb-2">
+                Confirm new password
+              </label>
+              {passwordField(
+                'confirm-password',
+                confirmPassword,
+                setConfirmPassword,
+                showNewPassword,
+                () => setShowNewPassword((visible) => !visible),
+                'new-password',
+              )}
+            </div>
+
+            {error && (
+              <p className="text-sm text-red-600 mb-4" role="alert">{error}</p>
+            )}
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-[#007BC1] text-white py-3.5 rounded-md font-medium hover:bg-[#006399] transition-colors text-base disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              {loading ? 'Updating password…' : 'Update password'}
+            </button>
+          </form>
+        </>
+      );
+    }
+
+    if (forgotPassword) {
+      if (resetCodeSent) {
+        return (
+          <div className="py-6 text-center">
+            <Mail className="mx-auto mb-5 h-12 w-12 text-[#007BC1]" aria-hidden="true" />
+            <h1 className="text-3xl font-bold text-gray-900">Check your email</h1>
+            <p className="mt-3 text-sm leading-6 text-gray-600">
+              Enter the 6-digit password reset code sent to your email.
+            </p>
+            <form onSubmit={handleVerifyResetCode} className="mt-8">
+              <label className="sr-only" htmlFor="password-reset-code">
+                Password reset code
+              </label>
+              <InputOTP
+                id="password-reset-code"
+                maxLength={6}
+                value={resetCode}
+                onChange={(value) => {
+                  setResetCode(value.replace(/\D/g, '').slice(0, 6));
+                  setError('');
+                }}
+                containerClassName="justify-center"
+                autoFocus
+              >
+                <InputOTPGroup>
+                  {Array.from({ length: 6 }, (_, index) => (
+                    <InputOTPSlot key={index} index={index} className="h-12 w-11 text-base" />
+                  ))}
+                </InputOTPGroup>
+              </InputOTP>
+
+              {error && <p className="mt-4 text-sm text-red-600" role="alert">{error}</p>}
+              {notice && <p className="mt-4 text-sm text-emerald-600" role="status">{notice}</p>}
+
+              <button
+                type="submit"
+                disabled={loading || resetCode.length !== 6}
+                className="mt-6 w-full rounded-md bg-[#007BC1] py-3.5 text-base font-medium text-white transition-colors hover:bg-[#006399] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {loading ? 'Verifying code…' : 'Verify code'}
+              </button>
+            </form>
+
+            <div className="mt-5 flex items-center justify-center gap-4 text-sm">
+              <button
+                type="button"
+                disabled={loading}
+                onClick={() => void handleResendResetCode()}
+                className="font-medium text-[#007BC1] hover:text-[#006399] disabled:opacity-60"
+              >
+                Resend code
+              </button>
+              <button
+                type="button"
+                onClick={returnToLogin}
+                className="inline-flex items-center gap-1 font-medium text-gray-600 hover:text-[#007BC1]"
+              >
+                <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+                Back to login
+              </button>
+            </div>
+          </div>
+        );
+      }
+
+      return (
+        <>
+          <button
+            type="button"
+            onClick={returnToLogin}
+            className="mb-6 inline-flex items-center gap-2 text-sm font-medium text-gray-600 hover:text-[#007BC1]"
+          >
+            <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+            Back to login
+          </button>
+          <h1 className="text-3xl font-bold text-gray-900">Forgot password?</h1>
+          <p className="mt-3 mb-8 text-sm leading-6 text-gray-600">
+            Enter your username or account email and we’ll send you a 6-digit reset code.
+          </p>
+          <form onSubmit={handleForgotPassword}>
+            <div className="mb-6">
+              <label htmlFor="recovery-username" className="block text-sm font-normal text-gray-700 mb-2">
+                Username or email
+              </label>
+              <input
+                id="recovery-username"
+                type="text"
+                value={recoveryUsername}
+                onChange={(e) => {
+                  setRecoveryUsername(e.target.value);
+                  if (error) setError('');
+                }}
+                autoComplete="username"
+                autoFocus
+                required
+                className="w-full px-4 py-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-[#007BC1] focus:border-transparent outline-none text-sm transition-none"
+              />
+            </div>
+
+            {error && (
+              <p className="text-sm text-red-600 mb-4" role="alert">{error}</p>
+            )}
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-[#007BC1] text-white py-3.5 rounded-md font-medium hover:bg-[#006399] transition-colors text-base disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              {loading ? 'Sending reset code…' : 'Send reset code'}
+            </button>
+          </form>
+        </>
+      );
+    }
+
+    return (
+      <>
+        <h1 className="text-3xl font-bold text-gray-900 mb-10">Sign In</h1>
+
+        <form onSubmit={handleSubmit}>
+          {error && (
+            <div className="mb-6 flex items-start justify-between p-3 bg-red-50 border border-red-200 rounded-md">
+              <p className="text-sm text-red-600 font-medium" role="alert">{error}</p>
+              <button 
+                type="button" 
+                onClick={() => setError('')}
+                className="text-red-400 hover:text-red-600 mt-0.5"
+                aria-label="Dismiss"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+
+          <div className="mb-6">
+            <label htmlFor="username" className="block text-sm font-normal text-gray-700 mb-2">
+              Username or email
+            </label>
+            <input
+              id="username"
+              type="text"
+              value={username}
+              onChange={(e) => {
+                setUsername(e.target.value);
+                if (error) setError('');
+              }}
+              autoComplete="username"
+              required
+              className="w-full px-4 py-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-[#007BC1] focus:border-transparent outline-none text-sm"
+            />
+          </div>
+
+          <div className="mb-2">
+            <label htmlFor="password" className="block text-sm font-normal text-gray-700 mb-2">
+              Password
+            </label>
+            {passwordField(
+              'password',
+              password,
+              (val) => {
+                setPassword(val);
+                if (error) setError('');
+              },
+              showPassword,
+              () => setShowPassword((visible) => !visible),
+              'current-password',
+            )}
+          </div>
+
+          <div className="mb-6 text-right">
+            <button
+              type="button"
+              onClick={() => {
+                setForgotPassword(true);
+                setError('');
+                setUsername('');
+                setPassword('');
+                setRecoveryUsername('');
+              }}
+              className="text-sm font-medium text-[#007BC1] hover:text-[#006399] hover:underline"
+            >
+              Forgot password?
+            </button>
+          </div>
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full bg-[#007BC1] text-white py-3.5 rounded-md font-medium hover:bg-[#006399] transition-colors text-base disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            {loading ? 'Signing in…' : 'Sign In'}
+          </button>
+        </form>
+      </>
+    );
   };
 
   return (
@@ -60,75 +563,7 @@ export function Login({ onLogin }: LoginProps) {
             />
           </div>
 
-          <h1 className="text-3xl font-bold text-gray-900 mb-10">Login</h1>
-
-          <form onSubmit={handleSubmit}>
-            <div className="mb-6">
-              <label className="block text-sm font-normal text-gray-700 mb-2">
-                Username
-              </label>
-              <input
-                type="text"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-[#007BC1] focus:border-transparent outline-none text-sm"
-              />
-            </div>
-
-            <div className="mb-6">
-              <label className="block text-sm font-normal text-gray-700 mb-2">
-                Password
-              </label>
-              <div className="relative">
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-[#007BC1] focus:border-transparent outline-none pr-12 text-sm"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                >
-                  {showPassword ? (
-                    <EyeOff className="w-5 h-5" />
-                  ) : (
-                    <Eye className="w-5 h-5" />
-                  )}
-                </button>
-              </div>
-            </div>
-
-            {error && (
-              <p className="text-sm text-red-600 mb-4" role="alert">
-                {error}
-              </p>
-            )}
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full bg-[#007BC1] text-white py-3.5 rounded-md font-medium hover:bg-[#006399] transition-colors text-base disabled:opacity-60 disabled:cursor-not-allowed"
-            >
-              {loading ? 'Signing in…' : 'Login'}
-            </button>
-          </form>
-
-          {/* Demo credentials — remove together with lib/auth.ts when API auth lands */}
-          <div className="mt-8 bg-gray-50 border border-gray-200 rounded-lg p-4">
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
-              Demo accounts
-            </p>
-            <ul className="space-y-1">
-              {DEMO_ACCOUNTS.map((demo) => (
-                <li key={demo.username} className="text-xs text-gray-600 flex justify-between gap-2">
-                  <span className="font-mono">{demo.username} / {demo.password}</span>
-                  <span className="text-gray-400">{ROLE_LABELS[demo.role]}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
+          {renderCardContent()}
         </div>
       </div>
     </div>

@@ -1,201 +1,796 @@
 'use client';
 
-import React, { useState, useMemo } from "react";
-import { Wrench, Settings, PenLine, AlertTriangle, ShieldCheck, Truck } from "lucide-react";
+import Image from "next/image";
+import React, { useCallback, useEffect, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
+import { Wrench, PenLine, AlertTriangle, ShieldCheck, Truck, History, Plus, RefreshCw, Check, ArrowLeft, ArrowRight } from "lucide-react";
 import { Badge } from "../../components/Badge";
 import { Button } from "../../components/Button";
 import { Progress } from "../../components/Progress";
 import { Input } from "../../components/Input";
+import { apiFetch, apiErrorMessage, fetchJson } from "../../../lib/api";
+import { gpsRegistrationBadge, gpsRegistrationNotice, trackerDestination, trackerManualUrl, trackerSmsCommands } from "./traccar-setup";
 import styles from "./screen.module.css";
 
-const PMS_INTERVAL = 3000;
-
-interface Vehicle {
-  id: string;
-  name: string;
-  plate: string;
-  status: "Active" | "Maintenance" | "Idle";
-  currentOdometer: number;
-  lastPmsOdometer: number;
+/** A vehicle row from GET /vehicles (story BM-US-09). */
+interface VehicleRow {
+    id: string;
+    branch_id: string;
+    plate_number: string;
+    vehicle_type: string | null;
+    assigned_rider_id: string | null;
+    assigned_rider_name: string | null;
+    status: "active" | "maintenance" | "inactive";
+    gps_provisioning_status: "unconfigured" | "pending" | "provisioned" | "failed";
+    gps_provisioning_error: string | null;
+    gps_provisioned_at: string | null;
+    current_odometer_km: number;
+    last_pms_odometer_km: number;
+    km_since_last_pms: number;
+    maintenance_threshold_km: number;
+    updated_at: string;
 }
 
-const INITIAL_VEHICLES: Vehicle[] = [
-  { id: "v1", name: "Honda Click 125i", plate: "NCD-1234", status: "Active", currentOdometer: 14500, lastPmsOdometer: 12000 },
-  { id: "v2", name: "Yamaha Mio i125", plate: "XYZ-9876", status: "Active", currentOdometer: 8900, lastPmsOdometer: 6000 },
-  { id: "v3", name: "Honda Beat", plate: "ABC-1122", status: "Active", currentOdometer: 21500, lastPmsOdometer: 21000 },
-  { id: "v4", name: "Suzuki Skydrive", plate: "QWE-5544", status: "Idle", currentOdometer: 35600, lastPmsOdometer: 32700 }, // Overdue!
-  { id: "v5", name: "Yamaha Aerox", plate: "PLM-3321", status: "Maintenance", currentOdometer: 18000, lastPmsOdometer: 15000 },
-];
+/** A maintenance log entry from GET /vehicles/:id. */
+interface MaintenanceLogRow {
+    id: string;
+    vehicle_id: string;
+    odometer_km: number;
+    fuel_liters: number | null;
+    logged_by: string;
+    logged_at: string;
+}
+
+interface RiderRow {
+    id: string;
+    name: string;
+    plate: string;
+    status: string;
+}
+
+const todayIso = () => new Date().toISOString().slice(0, 10);
+
+const vehicleSetupSteps = [
+    {
+        title: "Prepare the SIM",
+        description: "Turn off the ST-901, then insert an activated, compatible SIM with SMS, mobile data and no PIN lock.",
+        image: "/fleet/setup/01-prepare-sim.jpg",
+        imageWidth: 1040,
+        imageHeight: 390,
+        imageAlt: "Cartoon showing a SIM card between a SinoTrack device and a phone with data and PIN checks",
+    },
+    {
+        title: "Find the hardware ID",
+        description: "Send RCONF by SMS to the tracker SIM and note its ID. Match that ID to the device label; do not assume the full IMEI is the reporting ID.",
+        image: "/fleet/setup/02-find-hardware-id.jpg",
+        imageWidth: 1040,
+        imageHeight: 410,
+        imageAlt: "Cartoon showing a magnifying glass over the identifier label on a SinoTrack device",
+    },
+    {
+        title: "Install the device",
+        description: "Ask a qualified installer to mount and wire the ST-901 using its manual.",
+        image: "/fleet/setup/03-install-tracker.jpg",
+        imageWidth: 1040,
+        imageHeight: 420,
+        imageAlt: "Cartoon showing a qualified installer securing a GPS device beneath a motorcycle seat",
+    },
+    {
+        title: "Connect to Traccar",
+        description: `Standard ST-901: send H02 data to ${trackerDestination.host}:${trackerDestination.port} (public TCP). The Traccar web/API interface stays private.`,
+        image: "/fleet/setup/04-connect-traccar.jpg",
+        imageWidth: 1040,
+        imageHeight: 420,
+        imageAlt: "Cartoon showing a phone configuring a GPS device to send data to Traccar",
+    },
+    {
+        title: "Get the first GPS fix",
+        description: "Power on outdoors and wait for GPS and mobile-network signals. Continuing this guide does not verify that Traccar has received a position.",
+        image: "/fleet/setup/05-first-gps-fix.jpg",
+        imageWidth: 1040,
+        imageHeight: 440,
+        imageAlt: "Cartoon showing a delivery motorcycle outdoors receiving GPS signals",
+    },
+    {
+        title: "Ready to register",
+        description: "Enter the reporting device ID to register it through the CRM API. Registration alone does not confirm live GPS reception.",
+        image: "/fleet/setup/06-ready-to-register.jpg",
+        imageWidth: 1040,
+        imageHeight: 440,
+        imageAlt: "Cartoon showing a delivery motorcycle and GPS device successfully connected to Traccar",
+    },
+] as const;
 
 export default function VehicleManagementPage() {
-  const [mounted, setMounted] = React.useState(false);
-  const [vehicles, setVehicles] = useState<Vehicle[]>(INITIAL_VEHICLES);
-  const [updateDialogOpen, setUpdateDialogOpen] = useState(false);
-  const [selectedVehicleId, setSelectedVehicleId] = useState<string | null>(null);
-  const [newOdometerValue, setNewOdometerValue] = useState<string>("");
+    const [mounted, setMounted] = useState(false);
+    const queryClient = useQueryClient();
 
-  React.useEffect(() => {
-    setMounted(true);
-  }, []);
+    const {
+        data: vehiclesData,
+        isLoading: loading,
+        error: vehiclesQueryError,
+    } = useQuery({
+        queryKey: ['vehicles'],
+        queryFn: () => fetchJson<{ vehicles: VehicleRow[] }>('/vehicles'),
+        staleTime: 30_000,
+    });
+    const vehicles = vehiclesData?.vehicles ?? [];
+    const error = vehiclesQueryError ? vehiclesQueryError.message : null;
 
-  const totalVehicles = vehicles.length;
-  const overdueVehicles = vehicles.filter(v => (v.currentOdometer - v.lastPmsOdometer) >= PMS_INTERVAL).length;
-  const healthyVehicles = vehicles.filter(v => (v.currentOdometer - v.lastPmsOdometer) < PMS_INTERVAL * 0.8).length;
+    const [registrationOpen, setRegistrationOpen] = useState(false);
+    const [plateNumber, setPlateNumber] = useState("");
+    const [initialOdometerKm, setInitialOdometerKm] = useState("0");
+    const [assignedRiderId, setAssignedRiderId] = useState("");
+    const [riders, setRiders] = useState<RiderRow[]>([]);
+    const [ridersLoading, setRidersLoading] = useState(false);
+    const [registrationError, setRegistrationError] = useState<string | null>(null);
+    const [registering, setRegistering] = useState(false);
 
-  if (!mounted) {
-    return <div style={{ minHeight: "100vh", backgroundColor: "var(--background)" }} />;
-  }
+    const [gpsPromptVehicle, setGpsPromptVehicle] = useState<VehicleRow | null>(null);
+    const [gpsSetupVehicle, setGpsSetupVehicle] = useState<VehicleRow | null>(null);
+    const [gpsSetupStep, setGpsSetupStep] = useState(0);
+    const [hardwareUniqueId, setHardwareUniqueId] = useState("");
+    const [gpsSetupError, setGpsSetupError] = useState<string | null>(null);
+    const [connectingGps, setConnectingGps] = useState(false);
 
-  const handleOpenUpdateDialog = (id: string, currentVal: number) => {
-    setSelectedVehicleId(id);
-    setNewOdometerValue(currentVal.toString());
-    setUpdateDialogOpen(true);
-  };
+    const [updateDialogVehicleId, setUpdateDialogVehicleId] = useState<string | null>(null);
+    const [odometerValue, setOdometerValue] = useState("");
+    const [fuelValue, setFuelValue] = useState("");
+    const [dateValue, setDateValue] = useState(todayIso());
+    const [dialogError, setDialogError] = useState<string | null>(null);
+    const [saving, setSaving] = useState(false);
+    const [resettingId, setResettingId] = useState<string | null>(null);
+    const [retryingGpsId, setRetryingGpsId] = useState<string | null>(null);
 
-  const handleCloseDialog = () => {
-    setUpdateDialogOpen(false);
-    setSelectedVehicleId(null);
-    setNewOdometerValue("");
-  };
+    const [historyVehicleId, setHistoryVehicleId] = useState<string | null>(null);
+    const [historyLogs, setHistoryLogs] = useState<MaintenanceLogRow[]>([]);
+    const [historyLoading, setHistoryLoading] = useState(false);
 
-  const handleSaveOdometer = () => {
-    if (!selectedVehicleId) return;
-    const newVal = parseInt(newOdometerValue, 10);
-    if (isNaN(newVal)) return;
+    useEffect(() => { setMounted(true); }, []);
 
-    setVehicles(prev => prev.map(v => {
-      if (v.id === selectedVehicleId) {
-        // Prevent setting a lower value than current
-        const updatedOdo = Math.max(v.currentOdometer, newVal);
-        return { ...v, currentOdometer: updatedOdo };
-      }
-      return v;
-    }));
-    handleCloseDialog();
-  };
+    useEffect(() => { setMounted(true); }, []);
 
-  const handleMarkPmsCompleted = (id: string) => {
-    if (confirm("Are you sure you want to log a PMS completion for this vehicle? This will reset the PMS counter.")) {
-        setVehicles(prev => prev.map(v => {
-            if (v.id === id) {
-                return { ...v, lastPmsOdometer: v.currentOdometer, status: "Active" };
-            }
-            return v;
-        }));
+    if (!mounted) {
+        return <div style={{ minHeight: "100vh", backgroundColor: "var(--background)" }} />;
     }
-  };
 
-  return (
-    <div className={styles.pageWrapper}>
-      <section className={styles.statsGrid}>
-        <div className={styles.statCard}>
-          <div className={styles.statHeader}><span className={styles.statLabel}>Total Fleet</span><Truck className={styles.statIcon} size={20} /></div>
-          <div className={styles.statValue}>{totalVehicles}</div>
-        </div>
-        <div className={styles.statCard}>
-          <div className={styles.statHeader}><span className={styles.statLabel}>Healthy Vehicles</span><ShieldCheck className={styles.statIcon} style={{ color: "var(--success)" }} size={20} /></div>
-          <div className={styles.statValue} style={{ color: "var(--success)" }}>{healthyVehicles}</div>
-        </div>
-        <div className={styles.statCard} style={overdueVehicles > 0 ? { borderColor: "var(--error)" } : {}}>
-          <div className={styles.statHeader}><span className={styles.statLabel}>PMS Due / Overdue</span><AlertTriangle className={styles.statIcon} style={{ color: "var(--error)" }} size={20} /></div>
-          <div className={styles.statValue} style={{ color: "var(--error)" }}>{overdueVehicles}</div>
-        </div>
-      </section>
+    const totalVehicles = vehicles.length;
+    const overdueVehicles = vehicles.filter(v => v.status === "maintenance").length;
+    const healthyVehicles = vehicles.filter(v => v.status !== "maintenance" && v.km_since_last_pms < v.maintenance_threshold_km * 0.8).length;
+    const activeSetupStep = vehicleSetupSteps[Math.min(gpsSetupStep, vehicleSetupSteps.length - 1)];
 
-      <section className={styles.vehiclesGrid}>
-        {vehicles.map(vehicle => {
-          const sinceLastPms = vehicle.currentOdometer - vehicle.lastPmsOdometer;
-          const progressPercent = Math.min((sinceLastPms / PMS_INTERVAL) * 100, 100);
-          const isOverdue = sinceLastPms >= PMS_INTERVAL;
-          const isWarning = sinceLastPms >= PMS_INTERVAL * 0.8 && !isOverdue;
-          
-          let progressColor = "var(--primary)";
-          if (isOverdue) progressColor = "var(--error)";
-          else if (isWarning) progressColor = "var(--warning)";
+    const openRegistrationDialog = async () => {
+        setRegistrationOpen(true);
+        setRegistrationError(null);
+        setRidersLoading(true);
+        try {
+            const res = await apiFetch('/riders');
+            const data = await res.json();
+            if (!res.ok) throw new Error(apiErrorMessage(data, 'Failed to load riders'));
+            setRiders(data.riders as RiderRow[]);
+        } catch (err) {
+            setRiders([]);
+            setRegistrationError(err instanceof Error ? err.message : 'Failed to load riders');
+        } finally {
+            setRidersLoading(false);
+        }
+    };
 
-          return (
-            <div key={vehicle.id} className={styles.vehicleCard}>
-              <div className={styles.cardHeader}>
-                <div className={styles.vehicleIdentity}>
-                  <div className={styles.vehicleName}>{vehicle.name}</div>
-                  <div className={styles.vehiclePlate}>{vehicle.plate}</div>
+    const closeRegistrationDialog = () => {
+        if (registering) return;
+        setRegistrationOpen(false);
+        setPlateNumber("");
+        setInitialOdometerKm("0");
+        setAssignedRiderId("");
+        setRegistrationError(null);
+    };
+
+    const openGpsSetup = (vehicle: VehicleRow) => {
+        setGpsPromptVehicle(null);
+        setGpsSetupVehicle(vehicle);
+        setGpsSetupStep(0);
+        setHardwareUniqueId("");
+        setGpsSetupError(null);
+    };
+
+    const closeGpsSetup = () => {
+        if (connectingGps) return;
+        setGpsSetupVehicle(null);
+        setGpsSetupStep(0);
+        setHardwareUniqueId("");
+        setGpsSetupError(null);
+    };
+
+    const handleRegisterVehicle = async (event: React.FormEvent<HTMLFormElement>) => {
+        event.preventDefault();
+        const normalizedPlate = plateNumber.trim().toUpperCase().replace(/\s+/g, ' ');
+        const odometerKm = Number(initialOdometerKm);
+
+        if (!/^[A-Z0-9]+(?:[ -][A-Z0-9]+)*$/.test(normalizedPlate) || normalizedPlate.length < 2 || normalizedPlate.length > 20) {
+            setRegistrationError('Enter a valid plate number using letters, numbers, spaces, or hyphens.');
+            return;
+        }
+        if (!Number.isInteger(odometerKm) || odometerKm < 0) {
+            setRegistrationError('Enter a valid non-negative odometer reading.');
+            return;
+        }
+
+        setRegistering(true);
+        setRegistrationError(null);
+        try {
+            const res = await apiFetch('/vehicles', {
+                method: 'POST',
+                body: JSON.stringify({
+                    plateNumber: normalizedPlate,
+                    initialOdometerKm: odometerKm,
+                    ...(assignedRiderId ? { assignedRiderId } : {}),
+                }),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(apiErrorMessage(data, 'Failed to register vehicle'));
+
+            const created = data.vehicle as VehicleRow;
+            void queryClient.invalidateQueries({ queryKey: ['vehicles'] });
+            toast.success(`${created.plate_number} was registered.`);
+            setRegistrationOpen(false);
+            setPlateNumber("");
+            setInitialOdometerKm("0");
+            setAssignedRiderId("");
+            setGpsPromptVehicle(created);
+        } catch (err) {
+            setRegistrationError(err instanceof Error ? err.message : 'Failed to register vehicle');
+        } finally {
+            setRegistering(false);
+        }
+    };
+
+    const handleConnectGps = async (event: React.FormEvent<HTMLFormElement>) => {
+        event.preventDefault();
+        if (!gpsSetupVehicle) return;
+
+        const normalizedHardwareId = hardwareUniqueId.trim();
+        if (!/^[A-Za-z0-9_-]{4,64}$/.test(normalizedHardwareId)) {
+            setGpsSetupError('Enter the ST-901 reporting ID from RCONF, matched to the device label.');
+            return;
+        }
+
+        setConnectingGps(true);
+        setGpsSetupError(null);
+        try {
+            const res = await apiFetch(`/vehicles/${gpsSetupVehicle.id}/gps-provisioning`, {
+                method: 'POST',
+                body: JSON.stringify({ hardwareUniqueId: normalizedHardwareId }),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(apiErrorMessage(data, 'Failed to connect the SinoTrack ST-901'));
+
+            const updated = data.vehicle as VehicleRow;
+            void queryClient.invalidateQueries({ queryKey: ['vehicles'] });
+            if (updated.gps_provisioning_status === 'provisioned') {
+                toast.success(gpsRegistrationNotice(updated.plate_number));
+            } else {
+                toast.warning(`${updated.plate_number} remains registered, but Traccar could not complete the connection.`);
+            }
+            setGpsSetupVehicle(null);
+            setGpsSetupStep(0);
+            setHardwareUniqueId("");
+        } catch (err) {
+            setGpsSetupError(err instanceof Error ? err.message : 'Failed to connect the SinoTrack ST-901');
+        } finally {
+            setConnectingGps(false);
+        }
+    };
+
+    const openUpdateDialog = (vehicle: VehicleRow) => {
+        setUpdateDialogVehicleId(vehicle.id);
+        setOdometerValue(vehicle.current_odometer_km.toString());
+        setFuelValue("");
+        setDateValue(todayIso());
+        setDialogError(null);
+    };
+
+    const closeUpdateDialog = () => {
+        setUpdateDialogVehicleId(null);
+        setDialogError(null);
+    };
+
+    const handleSaveOdometer = async () => {
+        if (!updateDialogVehicleId) return;
+        const odometerKm = parseInt(odometerValue, 10);
+        if (isNaN(odometerKm)) { setDialogError('Enter a valid odometer reading'); return; }
+        const fuelLiters = fuelValue.trim() ? parseInt(fuelValue, 10) : undefined;
+        if (fuelValue.trim() && isNaN(fuelLiters as number)) { setDialogError('Enter a valid fuel amount'); return; }
+
+        setSaving(true);
+        setDialogError(null);
+        try {
+            const res = await apiFetch(`/vehicles/${updateDialogVehicleId}/mileage`, {
+                method: 'POST',
+                body: JSON.stringify({ odometerKm, fuelLiters, loggedAt: dateValue || undefined }),
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                if (res.status === 409) {
+                    toast.error(apiErrorMessage(data, 'A newer reading was already recorded'));
+                    closeUpdateDialog();
+                    void queryClient.invalidateQueries({ queryKey: ['vehicles'] });
+                    return;
+                }
+                setDialogError(apiErrorMessage(data, 'Failed to save reading'));
+                return;
+            }
+            const updated = data.vehicle as VehicleRow;
+            void queryClient.invalidateQueries({ queryKey: ['vehicles'] });
+            if (updated.status === 'maintenance') {
+                toast.warning(`${updated.plate_number} reached its PMS interval and is flagged for maintenance.`);
+            } else {
+                toast.success('Odometer reading logged.');
+            }
+            closeUpdateDialog();
+        } catch (err) {
+            setDialogError(err instanceof Error ? err.message : 'Failed to save reading');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const handleResetPms = async (vehicle: VehicleRow) => {
+        setResettingId(vehicle.id);
+        try {
+            const res = await apiFetch(`/vehicles/${vehicle.id}/reset-pms`, { method: 'POST' });
+            const data = await res.json();
+            if (!res.ok) {
+                if (res.status === 409) {
+                    toast.error('This vehicle is not currently flagged for maintenance.');
+                    void queryClient.invalidateQueries({ queryKey: ['vehicles'] });
+                    return;
+                }
+                toast.error(apiErrorMessage(data, 'Failed to reset PMS'));
+                return;
+            }
+            const updated = data.vehicle as VehicleRow;
+            void queryClient.invalidateQueries({ queryKey: ['vehicles'] });
+            toast.success(`${updated.plate_number} marked serviced — PMS counter reset.`);
+        } catch (err) {
+            toast.error(err instanceof Error ? err.message : 'Failed to reset PMS');
+        } finally {
+            setResettingId(null);
+        }
+    };
+
+    const handleRetryGps = async (vehicle: VehicleRow) => {
+        setRetryingGpsId(vehicle.id);
+        try {
+            const res = await apiFetch(`/vehicles/${vehicle.id}/retry-gps-provisioning`, {
+                method: 'POST',
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(apiErrorMessage(data, 'Failed to retry GPS provisioning'));
+
+            const updated = data.vehicle as VehicleRow;
+            void queryClient.invalidateQueries({ queryKey: ['vehicles'] });
+            if (updated.gps_provisioning_status === 'provisioned') {
+                toast.success(gpsRegistrationNotice(updated.plate_number));
+            } else {
+                toast.warning('Traccar is still unreachable. The vehicle remains registered.');
+            }
+        } catch (err) {
+            toast.error(err instanceof Error ? err.message : 'Failed to retry GPS provisioning');
+        } finally {
+            setRetryingGpsId(null);
+        }
+    };
+
+    const toggleHistory = async (vehicleId: string) => {
+        if (historyVehicleId === vehicleId) { setHistoryVehicleId(null); return; }
+        setHistoryVehicleId(vehicleId);
+        setHistoryLoading(true);
+        try {
+            const res = await apiFetch(`/vehicles/${vehicleId}`);
+            const data = await res.json();
+            if (!res.ok) throw new Error(apiErrorMessage(data, 'Failed to load history'));
+            setHistoryLogs(data.maintenanceLogs as MaintenanceLogRow[]);
+        } catch (err) {
+            toast.error(err instanceof Error ? err.message : 'Failed to load history');
+            setHistoryLogs([]);
+        } finally {
+            setHistoryLoading(false);
+        }
+    };
+
+    return (
+        <div className={styles.pageWrapper}>
+            <div className={styles.toolbar}>
+                <div>
+                    <div className={styles.toolbarTitle}>Branch Vehicle Roster</div>
+                    <div className={styles.toolbarDescription}>Register delivery motorcycles and track their PMS mileage.</div>
                 </div>
-                <Badge variant={isOverdue ? "destructive" : isWarning ? "warning" : "success"}>
-                  {isOverdue ? "Overdue" : isWarning ? "Due Soon" : "Healthy"}
-                </Badge>
-              </div>
-
-              <div className={styles.metricsRow}>
-                <div className={styles.metricBox}>
-                  <div className={styles.metricLabel}>Current Odometer</div>
-                  <div className={styles.metricValueWrapper}>
-                    <span className={styles.metricValue}>{vehicle.currentOdometer.toLocaleString()}</span>
-                    <span className={styles.metricUnit}>km</span>
-                  </div>
-                </div>
-                <div className={styles.metricBox}>
-                  <div className={styles.metricLabel}>Since Last PMS</div>
-                  <div className={styles.metricValueWrapper}>
-                    <span className={styles.metricValue} style={{ color: isOverdue ? "var(--error)" : isWarning ? "var(--warning)" : "inherit" }}>
-                      {sinceLastPms.toLocaleString()}
-                    </span>
-                    <span className={styles.metricUnit}>km</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className={styles.progressSection}>
-                <div className={styles.progressHeader}>
-                  <span className={styles.progressText}>PMS Interval: {PMS_INTERVAL.toLocaleString()} km</span>
-                  <span className={styles.progressPercentage}>{Math.round(progressPercent)}%</span>
-                </div>
-                <Progress value={progressPercent} style={{ backgroundColor: "rgba(0,0,0,0.05)" }} className={isOverdue ? "progress-error" : isWarning ? "progress-warning" : ""} />
-                {/* We can dynamically override the progress bar color using an inline style block if we wanted, but let's stick to standard classes or just standard Progress */}
-                 {/* As Progress component only has primary color by default, we can wrap it or just use it. */}
-              </div>
-
-              <div className={styles.actionRow}>
-                <div style={{ display: 'flex', gap: '0.5rem', width: '100%' }}>
-                  <Button variant="outline" size="sm" style={{ flex: 1 }} onClick={() => handleMarkPmsCompleted(vehicle.id)}>
-                    <Wrench size={16} style={{ marginRight: '0.3rem' }} /> Reset PMS
-                  </Button>
-                  <Button variant="primary" size="sm" style={{ flex: 1 }} onClick={() => handleOpenUpdateDialog(vehicle.id, vehicle.currentOdometer)}>
-                    <PenLine size={16} style={{ marginRight: '0.3rem' }} /> Update Odo
-                  </Button>
-                </div>
-              </div>
+                <Button variant="primary" onClick={() => void openRegistrationDialog()}>
+                    <Plus size={17} /> Register Vehicle
+                </Button>
             </div>
-          );
-        })}
-      </section>
 
-      {/* Update Dialog Modal */}
-      {updateDialogOpen && (
-        <div className={styles.dialogOverlay}>
-          <div className={styles.dialogContent}>
-            <div className={styles.dialogHeader}>
-              <h2 className={styles.dialogTitle}>Update Odometer</h2>
-              <p className={styles.dialogDescription}>Manually record the latest odometer reading. This will automatically update the distance since the last PMS.</p>
-            </div>
-            
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-              <label style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--foreground)' }}>New Reading (km)</label>
-              <Input 
-                type="number" 
-                value={newOdometerValue} 
-                onChange={(e) => setNewOdometerValue(e.target.value)} 
-                autoFocus 
-                min={vehicles.find(v => v.id === selectedVehicleId)?.currentOdometer || 0}
-              />
-            </div>
+            <section className={styles.statsGrid}>
+                <div className={styles.statCard}>
+                    <div className={styles.statHeader}><span className={styles.statLabel}>Total Fleet</span><Truck className={styles.statIcon} size={20} /></div>
+                    <div className={styles.statValue}>{totalVehicles}</div>
+                </div>
+                <div className={styles.statCard}>
+                    <div className={styles.statHeader}><span className={styles.statLabel}>Healthy Vehicles</span><ShieldCheck className={styles.statIcon} style={{ color: "var(--success)" }} size={20} /></div>
+                    <div className={styles.statValue} style={{ color: "var(--success)" }}>{healthyVehicles}</div>
+                </div>
+                <div className={styles.statCard} style={overdueVehicles > 0 ? { borderColor: "var(--error)" } : {}}>
+                    <div className={styles.statHeader}><span className={styles.statLabel}>PMS Due / Overdue</span><AlertTriangle className={styles.statIcon} style={{ color: "var(--error)" }} size={20} /></div>
+                    <div className={styles.statValue} style={{ color: "var(--error)" }}>{overdueVehicles}</div>
+                </div>
+            </section>
 
-            <div className={styles.dialogFooter}>
-              <Button variant="ghost" onClick={handleCloseDialog}>Cancel</Button>
-              <Button variant="primary" onClick={handleSaveOdometer}>Save Record</Button>
-            </div>
-          </div>
+            {loading ? (
+                <div className={styles.emptyState}>Loading vehicles…</div>
+            ) : error ? (
+                <div className={styles.emptyState}>
+                    <div style={{ marginBottom: '0.75rem' }}>{error}</div>
+                    <Button variant="outline" size="sm" onClick={() => void queryClient.invalidateQueries({ queryKey: ['vehicles'] })}>Try again</Button>
+                </div>
+            ) : vehicles.length === 0 ? (
+                <div className={styles.emptyState}>No vehicles on this branch&apos;s roster yet.</div>
+            ) : (
+                <section className={styles.vehiclesGrid}>
+                    {vehicles.map(vehicle => {
+                        const sinceLastPms = vehicle.km_since_last_pms;
+                        const threshold = vehicle.maintenance_threshold_km;
+                        const progressPercent = Math.min((sinceLastPms / threshold) * 100, 100);
+                        const isOverdue = vehicle.status === "maintenance";
+                        const isWarning = !isOverdue && sinceLastPms >= threshold * 0.8;
+                        const gpsBadge = gpsRegistrationBadge(vehicle.gps_provisioning_status);
+
+                        return (
+                            <div key={vehicle.id} className={styles.vehicleCard}>
+                                <div className={styles.cardHeader}>
+                                    <div className={styles.vehicleIdentity}>
+                                        <div className={styles.vehicleName}>{vehicle.assigned_rider_name ?? 'Unassigned'}</div>
+                                        <div className={styles.vehiclePlate}>{vehicle.plate_number}{vehicle.vehicle_type ? ` · ${vehicle.vehicle_type}` : ''}</div>
+                                    </div>
+                                    <div className={styles.statusStack}>
+                                        <Badge variant={isOverdue ? "destructive" : isWarning ? "warning" : "success"}>
+                                            {isOverdue ? "Overdue" : isWarning ? "Due Soon" : "Healthy"}
+                                        </Badge>
+                                        <Badge
+                                            variant={gpsBadge.variant}
+                                            title={vehicle.gps_provisioning_error ?? (vehicle.gps_provisioning_status === 'provisioned' ? 'Device registration succeeded; live GPS reception is not verified by this badge.' : undefined)}
+                                        >
+                                            {gpsBadge.label}
+                                        </Badge>
+                                    </div>
+                                </div>
+
+                                <div className={styles.metricsRow}>
+                                    <div className={styles.metricBox}>
+                                        <div className={styles.metricLabel}>Current Odometer</div>
+                                        <div className={styles.metricValueWrapper}>
+                                            <span className={styles.metricValue}>{vehicle.current_odometer_km.toLocaleString()}</span>
+                                            <span className={styles.metricUnit}>km</span>
+                                        </div>
+                                    </div>
+                                    <div className={styles.metricBox}>
+                                        <div className={styles.metricLabel}>Since Last PMS</div>
+                                        <div className={styles.metricValueWrapper}>
+                                            <span className={styles.metricValue} style={{ color: isOverdue ? "var(--error)" : isWarning ? "var(--warning)" : "inherit" }}>
+                                                {sinceLastPms.toLocaleString()}
+                                            </span>
+                                            <span className={styles.metricUnit}>km</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className={styles.progressSection}>
+                                    <div className={styles.progressHeader}>
+                                        <span className={styles.progressText}>PMS Interval: {threshold.toLocaleString()} km</span>
+                                        <span className={styles.progressPercentage}>{Math.round(progressPercent)}%</span>
+                                    </div>
+                                    <Progress value={progressPercent} style={{ backgroundColor: "rgba(0,0,0,0.05)" }} className={isOverdue ? "progress-error" : isWarning ? "progress-warning" : ""} />
+                                </div>
+
+                                <div className={styles.actionRow}>
+                                    <div style={{ display: 'flex', gap: '0.5rem', width: '100%' }}>
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            style={{ flex: 1 }}
+                                            disabled={!isOverdue || resettingId === vehicle.id}
+                                            onClick={() => void handleResetPms(vehicle)}
+                                        >
+                                            <Wrench size={16} style={{ marginRight: '0.3rem' }} /> {resettingId === vehicle.id ? 'Resetting…' : 'Reset PMS'}
+                                        </Button>
+                                        <Button variant="primary" size="sm" style={{ flex: 1 }} onClick={() => openUpdateDialog(vehicle)}>
+                                            <PenLine size={16} style={{ marginRight: '0.3rem' }} /> Update Odo
+                                        </Button>
+                                    </div>
+                                    <Button variant="ghost" size="sm" style={{ width: '100%', marginTop: '0.4rem' }} onClick={() => void toggleHistory(vehicle.id)}>
+                                        <History size={14} style={{ marginRight: '0.3rem' }} /> {historyVehicleId === vehicle.id ? 'Hide History' : 'View History'}
+                                    </Button>
+                                    {vehicle.gps_provisioning_status === 'unconfigured' && (
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            style={{ width: '100%', marginTop: '0.4rem' }}
+                                            onClick={() => openGpsSetup(vehicle)}
+                                        >
+                                            Connect SinoTrack
+                                        </Button>
+                                    )}
+                                    {vehicle.gps_provisioning_status === 'failed' && (
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            style={{ width: '100%', marginTop: '0.4rem' }}
+                                            disabled={retryingGpsId === vehicle.id}
+                                            onClick={() => void handleRetryGps(vehicle)}
+                                        >
+                                            <RefreshCw size={14} style={{ marginRight: '0.3rem' }} />
+                                            {retryingGpsId === vehicle.id ? 'Retrying…' : 'Retry SinoTrack Connection'}
+                                        </Button>
+                                    )}
+                                    {historyVehicleId === vehicle.id && (
+                                        <div className={styles.historyPanel}>
+                                            {historyLoading ? (
+                                                <div className={styles.historyEmpty}>Loading…</div>
+                                            ) : historyLogs.length === 0 ? (
+                                                <div className={styles.historyEmpty}>No mileage entries logged yet.</div>
+                                            ) : (
+                                                historyLogs.map(log => (
+                                                    <div key={log.id} className={styles.historyRow}>
+                                                        <span>{new Date(log.logged_at).toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' })}</span>
+                                                        <span>{log.odometer_km.toLocaleString()} km</span>
+                                                        <span>{log.fuel_liters != null ? `${log.fuel_liters} L` : '—'}</span>
+                                                    </div>
+                                                ))
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        );
+                    })}
+                </section>
+            )}
+
+            {updateDialogVehicleId && (
+                <div className={styles.dialogOverlay}>
+                    <div className={styles.dialogContent}>
+                        <div className={styles.dialogHeader}>
+                            <h2 className={styles.dialogTitle}>Update Odometer</h2>
+                            <p className={styles.dialogDescription}>Log the latest odometer reading and, optionally, fuel added. This updates the distance since the last PMS.</p>
+                        </div>
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                            <div>
+                                <label style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--foreground)', display: 'block', marginBottom: '0.35rem' }}>New Reading (km)</label>
+                                <Input
+                                    type="number"
+                                    value={odometerValue}
+                                    onChange={(e) => setOdometerValue(e.target.value)}
+                                    autoFocus
+                                    min={vehicles.find(v => v.id === updateDialogVehicleId)?.current_odometer_km ?? 0}
+                                />
+                            </div>
+                            <div>
+                                <label style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--foreground)', display: 'block', marginBottom: '0.35rem' }}>Fuel Added (L) — optional</label>
+                                <Input type="number" value={fuelValue} onChange={(e) => setFuelValue(e.target.value)} min={0} />
+                            </div>
+                            <div>
+                                <label style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--foreground)', display: 'block', marginBottom: '0.35rem' }}>Date</label>
+                                <Input type="date" value={dateValue} onChange={(e) => setDateValue(e.target.value)} max={todayIso()} />
+                            </div>
+                            {dialogError && <div className={styles.fieldError}>{dialogError}</div>}
+                        </div>
+
+                        <div className={styles.dialogFooter}>
+                            <Button variant="ghost" onClick={closeUpdateDialog} disabled={saving}>Cancel</Button>
+                            <Button variant="primary" onClick={() => void handleSaveOdometer()} disabled={saving}>
+                                {saving ? 'Saving…' : 'Save Record'}
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {registrationOpen && (
+                <div className={styles.dialogOverlay} role="presentation" onClick={closeRegistrationDialog}>
+                    <form className={`${styles.dialogContent} ${styles.registrationDialog}`} onSubmit={(event) => void handleRegisterVehicle(event)} onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="register-vehicle-title">
+                        <div className={styles.detailsScreen}>
+                            <div className={styles.dialogHeader}>
+                                <span className={styles.stepEyebrow}>Vehicle details</span>
+                                <h2 id="register-vehicle-title" className={styles.dialogTitle}>Register Vehicle</h2>
+                                <p className={styles.dialogDescription}>Add the vehicle to this branch. Connecting a SinoTrack ST-901 is optional and happens after registration.</p>
+                            </div>
+
+                            <div className={styles.formFields}>
+                                <div>
+                                    <label className={styles.fieldLabel} htmlFor="vehicle-plate">Plate Number</label>
+                                    <Input
+                                        id="vehicle-plate"
+                                        value={plateNumber}
+                                        onChange={(event) => setPlateNumber(event.target.value.toUpperCase())}
+                                        placeholder="ABC-1234"
+                                        autoComplete="off"
+                                        maxLength={20}
+                                        autoFocus
+                                    />
+                                </div>
+                                <div>
+                                    <label className={styles.fieldLabel} htmlFor="vehicle-odometer">Current Odometer (km)</label>
+                                    <Input
+                                        id="vehicle-odometer"
+                                        type="number"
+                                        value={initialOdometerKm}
+                                        onChange={(event) => setInitialOdometerKm(event.target.value)}
+                                        min={0}
+                                        step={1}
+                                    />
+                                    <div className={styles.fieldHint}>This becomes the starting PMS baseline.</div>
+                                </div>
+                                <div>
+                                    <label className={styles.fieldLabel} htmlFor="vehicle-rider">Assign Delivery Rider (optional)</label>
+                                    <select
+                                        id="vehicle-rider"
+                                        className={styles.select}
+                                        value={assignedRiderId}
+                                        onChange={(event) => setAssignedRiderId(event.target.value)}
+                                        disabled={ridersLoading}
+                                    >
+                                        <option value="">{ridersLoading ? 'Loading Delivery Riders…' : 'Unassigned'}</option>
+                                        {riders.map(rider => (
+                                            <option key={rider.id} value={rider.id}>
+                                                {rider.name} · {rider.plate} · {rider.status}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                                {registrationError && <div className={styles.fieldError} role="alert">{registrationError}</div>}
+                            </div>
+
+                            <div className={styles.dialogFooter}>
+                                <Button type="button" variant="ghost" onClick={closeRegistrationDialog} disabled={registering}>Cancel</Button>
+                                <Button type="submit" variant="primary" disabled={registering || ridersLoading}>
+                                    {registering ? 'Registering…' : 'Register Vehicle'}
+                                </Button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            )}
+
+            {gpsPromptVehicle && (
+                <div className={styles.dialogOverlay} role="presentation" onClick={() => setGpsPromptVehicle(null)}>
+                    <div className={`${styles.dialogContent} ${styles.confirmationDialog}`} onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="gps-prompt-title">
+                        <div className={styles.dialogHeader}>
+                            <span className={styles.stepEyebrow}>Vehicle registered</span>
+                            <h2 id="gps-prompt-title" className={styles.dialogTitle}>Connect a SinoTrack ST-901?</h2>
+                            <p className={styles.dialogDescription}><strong>{gpsPromptVehicle.plate_number}</strong> is now part of the branch roster. You can connect its SinoTrack device now or do it later from the vehicle card.</p>
+                        </div>
+                        <div className={styles.dialogFooter}>
+                            <Button type="button" variant="ghost" onClick={() => setGpsPromptVehicle(null)}>Do this later</Button>
+                            <Button type="button" variant="primary" onClick={() => openGpsSetup(gpsPromptVehicle)}>Connect SinoTrack</Button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {gpsSetupVehicle && (
+                <div className={styles.dialogOverlay} role="presentation" onClick={closeGpsSetup}>
+                    <form className={`${styles.dialogContent} ${styles.registrationDialog}`} onSubmit={(event) => void handleConnectGps(event)} onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="gps-setup-title">
+                        {gpsSetupStep < vehicleSetupSteps.length ? (
+                            <>
+                                <div className={styles.wizardHeader}>
+                                    <h2 id="gps-setup-title" className={styles.wizardTitle}>Connect a SinoTrack ST-901</h2>
+                                    <ol className={styles.wizardProgress} aria-label="SinoTrack setup progress">
+                                        {vehicleSetupSteps.map((step, index) => {
+                                            const completed = index < gpsSetupStep;
+                                            const active = index === gpsSetupStep;
+
+                                            return (
+                                                <li
+                                                    key={step.title}
+                                                    className={`${styles.progressStep} ${completed ? styles.progressStepCompleted : ''} ${active ? styles.progressStepActive : ''}`}
+                                                    aria-current={active ? 'step' : undefined}
+                                                    aria-label={`Step ${index + 1}: ${step.title}${completed ? ', completed' : active ? ', current' : ''}`}
+                                                >
+                                                    {completed ? <Check size={16} strokeWidth={3} aria-hidden="true" /> : index + 1}
+                                                </li>
+                                            );
+                                        })}
+                                    </ol>
+                                </div>
+
+                                <section className={styles.setupStepContent} aria-live="polite" aria-labelledby="setup-step-title">
+                                    <span className={styles.stepEyebrow}>Step {gpsSetupStep + 1} of {vehicleSetupSteps.length}</span>
+                                    <div className={styles.setupImageFrame}>
+                                        <Image
+                                            className={styles.setupImage}
+                                            src={activeSetupStep.image}
+                                            width={activeSetupStep.imageWidth}
+                                            height={activeSetupStep.imageHeight}
+                                            sizes="(max-width: 640px) 100vw, 720px"
+                                            alt={activeSetupStep.imageAlt}
+                                            priority={gpsSetupStep === 0}
+                                        />
+                                    </div>
+                                    <div className={styles.setupCopy}>
+                                        <h3 id="setup-step-title" className={styles.setupStepTitle}>{activeSetupStep.title}</h3>
+                                        <p className={styles.setupStepDescription}>{activeSetupStep.description}</p>
+                                    </div>
+                                    {gpsSetupStep === 3 && (
+                                        <div className={styles.smsInstructions}>
+                                            <h4>Send these SMS messages to the tracker SIM</h4>
+                                            <p>Use the device&apos;s actual SMS password in place of factory-default 0000. Get the APN from your SIM carrier; this website does not send SMS.</p>
+                                            <ol>
+                                                {trackerSmsCommands.map(({ label, command }, index) => (
+                                                    <li key={`${index}-${command}`}>
+                                                        <span>{label}</span>
+                                                        <code>{command}</code>
+                                                    </li>
+                                                ))}
+                                            </ol>
+                                            <p>Wait for SET OK after setting commands. Confirm ID, APN, GPRS mode and the cloud IP/port in the final RCONF reply. Keep replies private: they can contain passwords and phone numbers.</p>
+                                            <p>Changing the server may stop updates in the SinoTrack app. These instructions are not for ST-901 A+. No protocol-conversion command is required for the standard H02 model.</p>
+                                            <a href={trackerManualUrl} target="_blank" rel="noopener noreferrer">Manufacturer manual (including APNs requiring a username/password)</a>
+                                        </div>
+                                    )}
+                                </section>
+
+                                <div className={styles.wizardFooter}>
+                                    {gpsSetupStep === 0 ? (
+                                        <Button type="button" variant="ghost" onClick={closeGpsSetup}>Cancel</Button>
+                                    ) : (
+                                        <Button type="button" variant="ghost" onClick={() => setGpsSetupStep(step => step - 1)}>
+                                            <ArrowLeft size={16} aria-hidden="true" /> Back
+                                        </Button>
+                                    )}
+                                    <Button type="button" variant="primary" onClick={() => setGpsSetupStep(step => step + 1)}>
+                                        {gpsSetupStep === vehicleSetupSteps.length - 1 ? 'Enter device ID' : 'Next'}
+                                        <ArrowRight size={16} aria-hidden="true" />
+                                    </Button>
+                                </div>
+                            </>
+                        ) : (
+                            <div className={styles.detailsScreen}>
+                                <div className={styles.dialogHeader}>
+                                    <span className={styles.stepEyebrow}>Device details</span>
+                                    <h2 id="gps-setup-title" className={styles.dialogTitle}>Connect SinoTrack to {gpsSetupVehicle.plate_number}</h2>
+                                    <p className={styles.dialogDescription}>The CRM API registers this device in cloud Traccar for this vehicle. SMS configuration and live GPS verification are separate steps.</p>
+                                </div>
+                                <div className={styles.formFields}>
+                                    <div>
+                                        <label className={styles.fieldLabel} htmlFor="vehicle-hardware-id">SinoTrack Hardware ID</label>
+                                        <Input
+                                            id="vehicle-hardware-id"
+                                            value={hardwareUniqueId}
+                                            onChange={(event) => setHardwareUniqueId(event.target.value)}
+                                            placeholder="Reporting device ID from RCONF"
+                                            autoComplete="off"
+                                            maxLength={64}
+                                            autoFocus
+                                            required
+                                        />
+                                        <div className={styles.fieldHint}>Enter only the ID from RCONF, matched to the ST-901 label — not the whole SMS reply or its password.</div>
+                                    </div>
+                                    {gpsSetupError && <div className={styles.fieldError} role="alert">{gpsSetupError}</div>}
+                                </div>
+                                <div className={styles.dialogFooter}>
+                                    <Button type="button" variant="ghost" onClick={() => setGpsSetupStep(vehicleSetupSteps.length - 1)} disabled={connectingGps}>
+                                        <ArrowLeft size={16} aria-hidden="true" /> Back
+                                    </Button>
+                                    <Button type="submit" variant="primary" disabled={connectingGps}>
+                                        {connectingGps ? 'Registering…' : 'Register device in Traccar'}
+                                    </Button>
+                                </div>
+                            </div>
+                        )}
+                    </form>
+                </div>
+            )}
         </div>
-      )}
-    </div>
-  );
+    );
 }

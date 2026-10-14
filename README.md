@@ -8,6 +8,7 @@ Authentication and user records are backed by **Supabase Auth**.
 
 - **Node.js 18.18+** (or 20+) and npm
 - A **Supabase project** — one already exists for this app (project ref `oauxrwyjwfygnfnwgxfg`)
+- The **`superkalan-crm-api` NestJS backend** running locally or available at a configured URL
 
 ## Setup
 
@@ -31,16 +32,11 @@ cp .env.example .env.local
 |---|---|---|
 | `NEXT_PUBLIC_SUPABASE_URL` | Project URL (browser-safe) | Supabase Dashboard → Project Settings → API |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Publishable/anon key (browser-safe) | Supabase Dashboard → Project Settings → API |
-| `SUPABASE_SERVICE_ROLE_KEY` | **Server-only secret** for creating/editing/deleting users | Supabase Dashboard → Project Settings → API → `service_role` |
+| `NEXT_PUBLIC_API_URL` | Base URL of the NestJS backend | Local default: `http://localhost:3001` |
 
-The URL and anon key are pre-filled in `.env.example`. **You must add the `service_role` key
-yourself** — it is never committed.
-
-> **Security:** `SUPABASE_SERVICE_ROLE_KEY` bypasses row-level security. It is used only in
-> server-side route handlers (`src/app/api/users/**`) and must never be exposed to the browser
-> or prefixed with `NEXT_PUBLIC_`.
-
-Login works without the service-role key; only **user management** (create/edit/delete) requires it.
+> **Security:** The web app must never receive a Supabase service-role key. Auth
+> administration and all CRM business logic run in `superkalan-crm-api`; the browser sends
+> its Supabase access token to that backend.
 
 ### 3. Run the app
 
@@ -50,41 +46,111 @@ npm run dev
 
 Open http://localhost:3000.
 
+### Current cloud Traccar setup
+
+For the deployed backend, set this in your ignored `.env.local`, then restart dev
+or rebuild for production (public variables are embedded at build time):
+
+```dotenv
+NEXT_PUBLIC_API_URL=https://superkalan-crm-api-7icfrdyg5a-as.a.run.app
+```
+
+Use `http://localhost:3000`; the deployed API currently permits that origin and
+`http://192.168.1.5:3000`, not arbitrary LAN addresses or hosted web domains.
+This changes **all CRM API requests** to the cloud backend, not only Fleet requests.
+To return to local development, set `NEXT_PUBLIC_API_URL=http://localhost:3001`
+and restart/rebuild.
+
+Branch Manager → Vehicles → Connect SinoTrack contains the standard ST-901 SMS
+guide for the public hardware destination `34.158.48.168:5013`. Registration goes
+through NestJS to the private Traccar API; the browser never calls Traccar directly
+or receives its token. Send SMS manually to the physical tracker's SIM and use its
+reporting ID. **Registered in Traccar does not mean live GPS reception is verified.**
+Hosting the website, physical-device verification and live Fleet polling remain
+separate work; see [shared release status](../docs/architecture/gcp-release-status.md).
+
 ## Logging in
 
 Users live in Supabase Auth. Log in by **username** (mapped internally to
-`<username>@superkalan.com`). The four seed accounts:
-
-| Username | Password | Role |
-|---|---|---|
-| `admin` | `admin123` | Franchise Administrator |
-| `owner` | `owner123` | Branch Owner (Quezon City) |
-| `owner.multi` | `owner123` | Branch Owner (all branches) |
-| `manager` | `manager123` | Branch Manager (Quezon City) |
-
-After login, a floating persona switcher lets you preview the other dashboards.
-
-> These demo credentials are also listed on the login screen. Remove that panel (and rotate
-> the passwords) before going to production.
+`<username>@superkalan.com`). Seed accounts for local development are created by the
+backend's `seed:*` scripts (`superkalan-crm-api/src/seeds/*.seeder.ts`) — ask a teammate
+for the current local dev credentials rather than committing them here; this repo is
+public.
 
 ## How auth & users work
 
 - **`auth.users`** (Supabase) is the source of truth for identity and passwords.
-- **`public.profiles`** holds the CRM claims — `role`, `branches`, `username`, `display_name`,
-  `phone`, `status`, `email`. A database trigger auto-creates a profile row whenever an auth
-  user is created, so creating the auth user is all that's needed.
+- CRM claims—`role`, `branch_ids`, display-only `branches`, `username`, `display_name`,
+  `phone`, and `status`—live in each Auth user's service-role-managed **`app_metadata`**.
+  There is no `public.profiles` mirror or signup trigger.
+- `branch_ids` is the authorization scope. A Branch Owner may have multiple UUIDs and uses
+  the header branch selector to choose one active context at a time; branch names never
+  authorize access. A Branch Manager has exactly one UUID.
 - **Creating new users:** the Branch Owner's *User Management* screen posts to `/api/users`,
-  which calls the Supabase Auth Admin API. New users are stored in Supabase Auth, not in app
-  memory.
+  on the NestJS backend, which calls the Supabase Auth Admin API and writes the claims.
+
+### Authentication email delivery
+
+The shared Supabase project uses separate templates for separate proofs of identity:
+
+- **Confirm signup:** include `{{ .Token }}` only. Customer email verification uses a
+  six-digit code in mobile.
+- **Reset password:** include `{{ .Token }}` only. Mobile and web password recovery use a
+  six-digit code and never send a recovery link.
+- **Invite user:** include a link whose target is `{{ .ConfirmationURL }}`. Invitation-only
+  Franchise Administrator and Delivery Rider provisioning continues through a single-use,
+  expiring link.
+
+Set the Email OTP length to `6` in **Supabase Dashboard → Authentication → Sign In / Providers
+→ Email** so both clients match the hosted Auth configuration.
 
 Relevant files:
 
 ```
-src/app/lib/auth.ts              # signIn() — signInWithPassword + profile load
-src/app/lib/supabase/client.ts   # browser client (anon key)
-src/app/lib/supabase/admin.ts    # server-only admin client (service_role)
-src/app/api/users/route.ts       # GET (list) / POST (create)
-src/app/api/users/[id]/route.ts  # PATCH (update) / DELETE
+src/app/lib/auth.ts                              # sign-in and app_metadata projection
+src/app/lib/supabase/client.ts                   # browser Auth client (anon key)
+src/app/lib/api.ts                               # authenticated NestJS API client
+src/app/branch-owner/components/UserManagement.tsx
+../superkalan-crm-api/src/users/users.controller.ts
+../superkalan-crm-api/src/users/users.service.ts
+```
+
+## Map stack and data flow
+
+The internal staff maps use three distinct layers:
+
+1. **MapLibre GL JS 5.x** renders interactive maps in the browser using WebGL.
+2. **OpenFreeMap** hosts the `liberty` map style and vector tiles used by MapLibre.
+3. **OpenStreetMap** is the underlying geographic-data source used by OpenFreeMap.
+
+The browser therefore requests the style and vector tiles from
+`tiles.openfreemap.org`; it does not request raster tiles from
+`tile.openstreetmap.org`. The NestJS backend does not render maps or proxy public map
+tiles—it only supplies CRM-owned data such as rider coordinates and branch geofences.
+
+Current boundaries and conventions:
+
+- MapLibre/GeoJSON expects `[longitude, latitude]`, while existing CRM domain data stores
+  polygon points as `[latitude, longitude]`. Convert only at the renderer boundary through
+  `src/app/lib/mapConfig.ts`; do not change the persisted contract silently.
+- The shared OpenFreeMap style is configured in `src/app/lib/mapConfig.ts` and currently
+  uses `https://tiles.openfreemap.org/styles/liberty`.
+- Keep the map attribution control visible. OpenFreeMap automatically provides the required
+  OpenMapTiles/OpenStreetMap attribution through its source metadata.
+- Geocoding is not implemented. Known branch addresses come from the API snapshot, and the
+  province selector uses approximate local centroids only to frame the map.
+- Fleet positions are still mock data until the deferred SinoTrack ST-901 → Traccar → API
+  integration is implemented. This does not change the chosen rendering/tile stack.
+- The customer mobile app continues to show delivery milestones only and must not display
+  live coordinates or an internal fleet map.
+
+Relevant map files:
+
+```
+src/app/lib/mapConfig.ts
+src/app/components/DrawableMap.tsx
+src/app/branch-manager/screens/fleet/FleetMap.tsx
+src/app/branch-owner/components/BranchOwnerFleetMap.tsx
 ```
 
 ## Scripts
@@ -95,11 +161,13 @@ src/app/api/users/[id]/route.ts  # PATCH (update) / DELETE
 | `npm run build` | Production build |
 | `npm run start` | Serve the production build |
 | `npm run lint` | Run ESLint |
+| `npm run test:traccar` | Focused setup/status tests (Node.js 24 recommended for native TypeScript support) |
+| `npm run test:traccar:browser` | Mocked browser flow; first rebuild and serve at localhost:3000; no production writes |
 
 ## Troubleshooting
 
-- **"Missing NEXT_PUBLIC_SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY" when managing users** —
-  the `service_role` key isn't set in `.env.local`. Add it and restart `npm run dev`.
+- **User management requests fail** — confirm `NEXT_PUBLIC_API_URL` points to the running
+  NestJS API and that the browser session has a valid Supabase access token.
 - **"Invalid username or password"** — the account doesn't exist in Supabase Auth, or the
   password is wrong. Check the users in the Supabase Dashboard → Authentication.
 - **Env changes not taking effect** — restart the dev server; Next.js only reads `.env.local`

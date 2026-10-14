@@ -17,9 +17,11 @@ export function ChartContainer({ children, config, className = "", style }: any)
   );
 }
 
-export function ChartTooltip({ children, ...props }: any) {
-  return <Tooltip {...props} content={props.content || <ChartTooltipContent />} />;
-}
+// Recharts identifies its special children (Tooltip, Legend, ...) by checking
+// `child.type` against its own component references *before* rendering
+// anything — so these must be direct aliases, not wrapping function
+// components, or Recharts never recognizes them and hover never activates.
+export const ChartTooltip = Tooltip;
 
 export function ChartTooltipContent({ active, payload, label, hideLabel, indicator = "dot" }: any) {
   if (!active || !payload) return null;
@@ -38,9 +40,7 @@ export function ChartTooltipContent({ active, payload, label, hideLabel, indicat
   );
 }
 
-export function ChartLegend({ children, ...props }: any) {
-    return <Legend {...props} />;
-}
+export const ChartLegend = Legend;
 
 export function ChartLegendContent({ payload }: any) {
     if (!payload) return null;

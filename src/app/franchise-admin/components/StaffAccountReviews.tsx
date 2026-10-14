@@ -1,0 +1,344 @@
+'use client';
+
+import {
+  AlertCircle,
+  ChevronRight,
+  Clock3,
+  Loader2,
+  Search,
+  UserRound,
+} from 'lucide-react';
+import { useEffect, useMemo, useState, useCallback } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
+import { Header } from '../../components/Header';
+import {
+  DocumentReviewPanel,
+  type DocumentReviewState,
+} from '../../components/account-review/DocumentReviewPanel';
+import { apiFetch, fetchJson, apiErrorMessage } from '../../lib/api';
+
+type ReviewRole = 'branch-owner' | 'branch-manager';
+
+interface StaffAccountReviewRequest {
+  id: string;
+  role: ReviewRole;
+  status: 'pending' | 'approved' | 'rejected' | 'revision-requested';
+  applicant_name: string;
+  applicant_email: string;
+  applicant_phone: string | null;
+  branch_name: string | null;
+  branch_address: string | null;
+  submitted_at: string;
+  decided_by_name: string | null;
+  decision_reason: string | null;
+}
+
+function roleLabel(role: ReviewRole): string {
+  return role === 'branch-owner' ? 'Branch Owner' : 'Branch Manager';
+}
+
+function formatDate(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '—';
+  return new Intl.DateTimeFormat('en-PH', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+    timeZone: 'Asia/Manila',
+  }).format(date);
+}
+
+function initials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '?';
+  return `${parts[0][0] ?? ''}${parts.at(-1)?.[0] ?? ''}`.toUpperCase();
+}
+
+async function responseJson<T>(response: Response, fallback: string): Promise<T> {
+  const body: unknown = await response.json().catch(() => null);
+  if (!response.ok) throw new Error(apiErrorMessage(body, fallback));
+  return body as T;
+}
+
+export function StaffAccountReviews() {
+  const queryClient = useQueryClient();
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
+  const [roleFilter, setRoleFilter] = useState<'all' | ReviewRole>('all');
+  const [reason, setReason] = useState('');
+  const [working, setWorking] = useState(false);
+  const [documentReviewState, setDocumentReviewState] = useState<DocumentReviewState>('loading');
+
+  const { data: requestsData, isLoading, error: queryError } = useQuery({
+    queryKey: ['staff-registration-requests'],
+    queryFn: async () => {
+      try {
+        return await fetchJson<{ requests: StaffAccountReviewRequest[] }>('/staff-registration/requests?status=pending&roles=branch-owner,branch-manager');
+      } catch (err: any) {
+        if (err.status === 404) {
+          throw new Error('The secure staff-registration service is not connected yet.');
+        }
+        throw err;
+      }
+    },
+    staleTime: 30_000,
+  });
+
+  const requests = isLoading ? null : (requestsData?.requests ?? []);
+  const error = queryError ? 
+    (queryError.message === 'The secure staff-registration service is not connected yet.' 
+      ? queryError.message 
+      : 'The secure staff-registration service is unavailable.') 
+    : null;
+
+  useEffect(() => {
+    if (requests) {
+      setSelectedId((current) =>
+        current && requests.some((request) => request.id === current)
+          ? current
+          : requests[0]?.id ?? null,
+      );
+    }
+  }, [requests]);
+
+  const refreshRequests = useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: ['staff-registration-requests'] });
+  }, [queryClient]);
+
+  const filtered = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    return (requests ?? []).filter((request) => {
+      if (roleFilter !== 'all' && request.role !== roleFilter) return false;
+      if (!term) return true;
+      return `${request.applicant_name} ${request.applicant_email} ${request.branch_name ?? ''}`
+        .toLowerCase()
+        .includes(term);
+    });
+  }, [requests, roleFilter, search]);
+
+  const selected =
+    filtered.find((request) => request.id === selectedId) ?? filtered[0] ?? null;
+
+  const decide = async (decision: 'approve' | 'reject') => {
+    if (!selected) return;
+    if (documentReviewState !== 'ready') {
+      toast.error('Required documents must be securely available before deciding.');
+      return;
+    }
+    if (reason.trim().length < 5) {
+      toast.error('Enter a decision reason with at least 5 characters.');
+      return;
+    }
+
+    setWorking(true);
+    try {
+      const response = await apiFetch(
+        `/staff-registration/requests/${selected.id}/decision`,
+        {
+          method: 'PATCH',
+          body: JSON.stringify({ decision, reason: reason.trim() }),
+          signal: AbortSignal.timeout(10_000),
+        },
+      );
+      await responseJson(response, 'Could not record the account decision.');
+      toast.success(
+        decision === 'approve'
+          ? `${roleLabel(selected.role)} account approved.`
+          : `${roleLabel(selected.role)} registration rejected.`,
+      );
+      setReason('');
+      refreshRequests();
+    } catch (decisionError) {
+      toast.error(
+        decisionError instanceof Error
+          ? decisionError.message
+          : 'Could not record the account decision.',
+      );
+    } finally {
+      setWorking(false);
+    }
+  };
+
+  return (
+    <div className="flex-1 overflow-y-auto bg-slate-50">
+      <Header
+        title="Account Reviews"
+        description="Review Branch Owner and Branch Manager registrations for authorized branches."
+      />
+
+      <main className="mx-auto w-full max-w-[1540px] px-8 pb-10">
+        <section className="mb-5 flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:flex-row">
+          <label className="relative block min-w-0 flex-1">
+            <span className="sr-only">Search registrations</span>
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Search name, email, or branch"
+              className="h-11 w-full rounded-lg border border-slate-200 pl-10 pr-3 text-sm outline-none transition focus:border-[#007BC1] focus:ring-2 focus:ring-sky-100"
+            />
+          </label>
+          <label>
+            <span className="sr-only">Filter by role</span>
+            <select
+              value={roleFilter}
+              onChange={(event) => setRoleFilter(event.target.value as 'all' | ReviewRole)}
+              className="h-11 min-w-40 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 outline-none focus:border-[#007BC1]"
+            >
+              <option value="all">All roles</option>
+              <option value="branch-owner">Branch Owner</option>
+              <option value="branch-manager">Branch Manager</option>
+            </select>
+          </label>
+        </section>
+
+        {error && (
+          <section className="rounded-xl border border-slate-200 bg-white px-6 py-16 text-center shadow-sm" role="alert">
+            <span className="mx-auto flex h-11 w-11 items-center justify-center rounded-full bg-amber-50 text-amber-700">
+              <AlertCircle className="h-5 w-5" />
+            </span>
+            <h2 className="mt-4 font-semibold text-slate-900">Account reviews are not connected yet</h2>
+            <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-slate-500">
+              {error} Applicant information and account decisions remain unavailable until the secure service is ready.
+            </p>
+            <button
+              type="button"
+              onClick={() => refreshRequests()}
+              className="mt-5 rounded-lg border border-[#007BC1] px-4 py-2 text-sm font-semibold text-[#007BC1] hover:bg-sky-50"
+            >
+              Retry
+            </button>
+          </section>
+        )}
+
+        {!requests && !error && (
+          <div className="flex items-center justify-center gap-2 py-24 text-sm text-slate-500" role="status">
+            <Loader2 className="h-5 w-5 animate-spin text-[#007BC1]" /> Loading account registrations…
+          </div>
+        )}
+
+        {requests && (
+          <div className="grid min-h-[650px] gap-5 xl:grid-cols-[430px_minmax(0,1fr)]">
+            <section className="self-start overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+              <header className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+                <h2 className="font-semibold text-slate-900">Pending registrations</h2>
+                <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">
+                  {filtered.length} pending
+                </span>
+              </header>
+
+              <div className="divide-y divide-slate-100">
+                {filtered.length === 0 && (
+                  <p className="px-6 py-16 text-center text-sm text-slate-500">
+                    No pending registrations match this view.
+                  </p>
+                )}
+                {filtered.map((request) => (
+                  <button
+                    key={request.id}
+                    type="button"
+                    onClick={() => {
+                      setSelectedId(request.id);
+                      setReason('');
+                      setDocumentReviewState('loading');
+                    }}
+                    className={`grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-5 py-4 text-left transition ${
+                      selected?.id === request.id
+                        ? 'border-l-[3px] border-[#007BC1] bg-sky-50/70'
+                        : 'border-l-[3px] border-transparent hover:bg-slate-50'
+                    }`}
+                  >
+                    <span className="flex h-11 w-11 items-center justify-center rounded-full bg-slate-100 text-sm font-semibold text-slate-700">
+                      {initials(request.applicant_name)}
+                    </span>
+                    <span className="min-w-0">
+                      <span className="flex min-w-0 items-center gap-2">
+                        <strong className="truncate text-sm text-slate-900">{request.applicant_name}</strong>
+                        <span className="shrink-0 rounded-full bg-sky-50 px-2 py-0.5 text-[10px] font-semibold text-[#007BC1]">
+                          {roleLabel(request.role)}
+                        </span>
+                      </span>
+                      <span className="mt-1 block truncate text-xs text-slate-600">
+                        {request.branch_name ?? 'Branch pending'}
+                      </span>
+                      <span className="mt-1.5 flex items-center gap-1 text-[11px] text-slate-400">
+                        <Clock3 className="h-3.5 w-3.5" /> {formatDate(request.submitted_at)}
+                      </span>
+                    </span>
+                    <ChevronRight className="h-4 w-4 text-slate-400" />
+                  </button>
+                ))}
+              </div>
+            </section>
+
+            <section className="self-start overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+              <header className="border-b border-slate-100 px-6 py-5">
+                <h2 className="text-lg font-semibold text-slate-900">Review application</h2>
+              </header>
+
+              {!selected && (
+                <div className="px-6 py-24 text-center text-sm text-slate-500">
+                  <UserRound className="mx-auto mb-3 h-8 w-8 text-slate-300" />
+                  Select an applicant to review.
+                </div>
+              )}
+
+              {selected && (
+                <>
+                  <section className="px-6 py-5">
+                    <h3 className="text-sm font-semibold text-slate-900">Submitted details</h3>
+                    <dl className="mt-4 grid gap-x-10 gap-y-3 text-sm sm:grid-cols-2">
+                      <div><dt className="text-slate-500">Full name</dt><dd className="mt-1 font-medium text-slate-900">{selected.applicant_name}</dd></div>
+                      <div><dt className="text-slate-500">Role</dt><dd className="mt-1 font-medium text-slate-900">{roleLabel(selected.role)}</dd></div>
+                      <div><dt className="text-slate-500">Branch</dt><dd className="mt-1 font-medium text-slate-900">{selected.branch_name ?? '—'}</dd></div>
+                      <div><dt className="text-slate-500">Email</dt><dd className="mt-1 break-all font-medium text-slate-900">{selected.applicant_email}</dd></div>
+                      <div><dt className="text-slate-500">Mobile number</dt><dd className="mt-1 font-medium text-slate-900">{selected.applicant_phone ?? '—'}</dd></div>
+                    </dl>
+                  </section>
+
+                  <DocumentReviewPanel
+                    key={selected.id}
+                    requestId={selected.id}
+                    onReviewStateChange={setDocumentReviewState}
+                  />
+
+                  <section className="border-t border-slate-100 px-6 py-5">
+                    <label className="block text-sm font-medium text-slate-800">
+                      Decision reason
+                      <textarea
+                        value={reason}
+                        onChange={(event) => setReason(event.target.value)}
+                        rows={3}
+                        maxLength={500}
+                        placeholder="Provide a reason for your decision."
+                        className="mt-2 w-full resize-none rounded-lg border border-slate-300 p-3 text-sm outline-none focus:border-[#007BC1] focus:ring-2 focus:ring-sky-100"
+                      />
+                    </label>
+                    <div className="mt-4 flex flex-wrap justify-end gap-3">
+                      <button
+                        type="button"
+                        disabled={working || documentReviewState !== 'ready'}
+                        onClick={() => void decide('reject')}
+                        className="rounded-lg border border-red-400 px-5 py-2.5 text-sm font-semibold text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        Reject
+                      </button>
+                      <button
+                        type="button"
+                        disabled={working || documentReviewState !== 'ready'}
+                        onClick={() => void decide('approve')}
+                        className="rounded-lg bg-[#007BC1] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#006ba7] disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {working ? 'Saving…' : 'Approve account'}
+                      </button>
+                    </div>
+                  </section>
+                </>
+              )}
+            </section>
+          </div>
+        )}
+      </main>
+    </div>
+  );
+}

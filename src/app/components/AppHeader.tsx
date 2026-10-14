@@ -1,29 +1,32 @@
 'use client';
 
 import { ReactNode, useEffect, useRef, useState } from 'react';
-import { Search, ChevronDown, UserCircle, LogOut } from 'lucide-react';
+import { ChevronDown, UserCircle, LogOut } from 'lucide-react';
 import { useAccount, useLogout } from '../contexts/AccountContext';
+import { NotificationCenter } from './NotificationCenter';
 
 /**
- * Unified page header for all three web personas, in the Branch Owner reference
+ * Unified page header for all staff web personas, in the Branch Owner reference
  * format (DESIGN.md): a card-less bar over the gray canvas — bold title on the
- * left; the persona context badge, a search pill, and an account menu on the
- * right. The account menu is where logout lives (behind a confirm modal); the
- * sidebar no longer carries it. The profile always shows the REAL session user
- * from AccountContext, never a hardcoded persona.
+ * left; the persona context badge, notification control, and account menu on the
+ * right. The account menu provides a confirmed logout path in addition to the
+ * shared sidebar shortcut. The profile always shows the REAL session user from
+ * AccountContext, never a hardcoded persona.
  */
 interface AppHeaderProps {
   title: string;
-  /** Persona context chip: FA "Main Office", BO branch selector, BM branch. */
+  description?: string;
+  /** Persona context chip: SA/FA "Main Office", BO branch selector, BM branch. */
   badge?: ReactNode;
+  /** Optional page-level action rendered below the persona controls. */
+  actions?: ReactNode;
 }
 
-export function AppHeader({ title, badge }: AppHeaderProps) {
+export function AppHeader({ title, description, badge, actions }: AppHeaderProps) {
   const account = useAccount();
   const logout = useLogout();
 
   const [showAccount, setShowAccount] = useState(false);
-  const [showLogoutModal, setShowLogoutModal] = useState(false);
   const accountRef = useRef<HTMLDivElement>(null);
 
   // Close the account dropdown on any outside click.
@@ -41,81 +44,69 @@ export function AppHeader({ title, badge }: AppHeaderProps) {
   const name = account.displayName.split(' — ')[0].split(' - ')[0];
 
   return (
-    <div className="px-8 pt-8 pb-4 flex items-center justify-between gap-4">
-      <h1 className="text-2xl font-bold text-gray-900">{title}</h1>
-
-      <div className="flex items-center gap-2">
-        {badge}
-
-        {/* Search — visual scaffold; wiring to API search is a separate story */}
-        <div className="hidden md:flex items-center gap-1.5 px-3 py-1 rounded-full border border-gray-200 bg-white w-36">
-          <Search className="w-3 h-3 text-gray-400 shrink-0" />
-          <input
-            type="search"
-            placeholder="Search"
-            className="bg-transparent text-xs text-gray-700 placeholder-gray-400 outline-none w-full"
-          />
-        </div>
-
-        {/* Account menu — the only place logout lives now */}
-        <div className="relative" ref={accountRef}>
-          <button
-            type="button"
-            onClick={() => setShowAccount((v) => !v)}
-            className="flex items-center gap-1.5 hover:opacity-80 transition-opacity"
-          >
-            <div className="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center">
-              <UserCircle className="w-6 h-6 text-gray-400" />
-            </div>
-            <span className="hidden sm:block text-xs font-medium text-gray-700">{name}</span>
-            <ChevronDown className="w-3 h-3 text-gray-400" />
-          </button>
-
-          {showAccount && (
-            <div className="absolute top-full right-0 mt-2 bg-white rounded-xl shadow-lg border border-gray-200 py-1 z-50 w-36">
-              <button
-                type="button"
-                onClick={() => {
-                  setShowAccount(false);
-                  setShowLogoutModal(true);
-                }}
-                className="w-full px-4 py-2 text-sm text-left text-red-500 hover:bg-red-50 flex items-center gap-2 transition-colors"
-              >
-                <LogOut className="w-4 h-4" />
-                Logout
-              </button>
-            </div>
-          )}
-        </div>
+    <div
+      className={`flex justify-between gap-4 px-8 pt-8 ${
+        description ? 'items-start pb-10' : 'items-center pb-4'
+      }`}
+    >
+      <div className="min-w-0">
+        <h1
+          className={
+            description
+              ? 'text-[30px] font-semibold leading-[1.2] tracking-[-0.02em] text-gray-900'
+              : 'text-2xl font-bold text-gray-900'
+          }
+        >
+          {title}
+        </h1>
+        {description && (
+          <p className="mt-2.5 max-w-3xl text-[15px] font-normal leading-6 text-gray-500">
+            {description}
+          </p>
+        )}
       </div>
 
-      {/* Logout confirmation — ends the real Supabase session, back to login */}
-      {showLogoutModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[70] p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-[360px] p-6">
-            <h2 className="text-base font-semibold text-gray-900">Log out?</h2>
-            <p className="text-sm text-gray-500 mt-1">
-              You&apos;ll need to sign in again to access the dashboard.
-            </p>
-            <div className="flex justify-end gap-2 mt-5">
-              <button
-                type="button"
-                onClick={() => setShowLogoutModal(false)}
-                className="px-4 py-2 text-sm font-medium text-gray-700 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={logout}
-                className="px-4 py-2 text-sm font-medium text-white bg-red-500 hover:bg-red-600 rounded-lg transition-colors"
-              >
-                Log out
-              </button>
-            </div>
+      <div className={`flex shrink-0 flex-col items-end ${description ? 'mt-1' : ''}`}>
+        <div className="flex items-center gap-3">
+          {badge}
+
+          <NotificationCenter />
+
+          {/* Account menu — keeps the confirmed logout path available in the header. */}
+          <div className="relative" ref={accountRef}>
+            <button
+              type="button"
+              onClick={() => setShowAccount((v) => !v)}
+              className="flex items-center gap-1.5 transition-opacity hover:opacity-80"
+            >
+              <div className="flex h-6 w-6 items-center justify-center rounded-full bg-gray-200">
+                <UserCircle className="h-6 w-6 text-gray-400" />
+              </div>
+              <span className="hidden text-xs font-medium text-gray-700 sm:block">{name}</span>
+              <ChevronDown className="h-3 w-3 text-gray-400" />
+            </button>
+
+            {showAccount && (
+              <div className="absolute right-0 top-full z-50 mt-2 w-36 rounded-xl border border-gray-200 bg-white py-1 shadow-lg">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowAccount(false);
+                    logout();
+                  }}
+                  className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm text-red-500 transition-colors hover:bg-red-50"
+                >
+                  <LogOut className="h-4 w-4" />
+                  Logout
+                </button>
+              </div>
+            )}
           </div>
         </div>
-      )}
+
+        {actions && <div className="mt-4 flex justify-end">{actions}</div>}
+      </div>
+
     </div>
   );
 }

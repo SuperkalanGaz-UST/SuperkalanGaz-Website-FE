@@ -59,12 +59,12 @@ export function CustomerPurchaseTracker() {
           </colgroup>
           <thead>
             <tr className="border-b border-gray-200">
-              <th className="text-left text-[11px] font-medium text-gray-600 pb-3 px-3 whitespace-nowrap">NAME</th>
-              <th className="text-left text-[11px] font-medium text-gray-600 pb-3 px-3 whitespace-nowrap">PHONE</th>
-              <th className="text-left text-[11px] font-medium text-gray-600 pb-3 px-3 whitespace-nowrap">ADDRESS</th>
-              <th className="text-left text-[11px] font-medium text-gray-600 pb-3 px-3 pr-4 whitespace-nowrap">TOTAL PURCHASES</th>
-              <th className="text-left text-[11px] font-medium text-gray-600 pb-3 px-3 pl-16 whitespace-nowrap">LOYALTY PROGRESS</th>
-              <th className="text-left text-[11px] font-medium text-gray-600 pb-3 px-3 whitespace-nowrap">LAST ORDER</th>
+              <th className="text-left text-xs font-semibold text-gray-700 pb-3 px-3 whitespace-nowrap">NAME</th>
+              <th className="text-left text-xs font-semibold text-gray-700 pb-3 px-3 whitespace-nowrap">PHONE</th>
+              <th className="text-left text-xs font-semibold text-gray-700 pb-3 px-3 whitespace-nowrap">ADDRESS</th>
+              <th className="text-left text-xs font-semibold text-gray-700 pb-3 px-3 pr-4 whitespace-nowrap">TOTAL PURCHASES</th>
+              <th className="text-left text-xs font-semibold text-gray-700 pb-3 px-3 pl-16 whitespace-nowrap">LOYALTY PROGRESS</th>
+              <th className="text-left text-xs font-semibold text-gray-700 pb-3 px-3 whitespace-nowrap">LAST ORDER</th>
             </tr>
           </thead>
           <tbody>

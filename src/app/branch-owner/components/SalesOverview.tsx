@@ -1,65 +1,127 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Header } from './Header';
 import { KPICard } from './KPICard';
-import { ArrowUp } from 'lucide-react';
-import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
+import { TrendingUp, ShoppingBag, ArrowUpRight } from 'lucide-react';
+import {
+  AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer,
+  Cell, PieChart, Pie,
+} from 'recharts';
+import { apiFetch } from '../../lib/api';
+import { useBranch } from '../contexts/BranchContext';
 
-const monthlyRevenueData = [
-  { month: 'Dec', revenue: 198000 },
-  { month: 'Jan', revenue: 215000 },
-  { month: 'Feb', revenue: 203500 },
-  { month: 'Mar', revenue: 241000 },
-  { month: 'Apr', revenue: 253800 },
-  { month: 'May', revenue: 284500 },
-];
+const axisProps = {
+  axisLine: false as const,
+  tickLine: false as const,
+  stroke: '#9ca3af',
+};
 
-const quarterlyRevenueData = [
-  { quarter: 'Q4 2025', revenue: 198000 },
-  { quarter: 'Q1 2026', revenue: 659500 },
-  { quarter: 'Q2 2026', revenue: 538300 },
-];
-
-const revenueByTankData = [
-  { size: '2.7kg', revenue: 120000 },
-  { size: '5kg', revenue: 98500 },
-  { size: '11kg', revenue: 66000 },
-];
-
-const ordersByTankData = [
-  { name: '2.7kg', value: 52, color: '#1e3a5f' },
-  { name: '5kg', value: 31, color: '#007BC1' },
-  { name: '11kg', value: 17, color: '#76B4DD' },
-];
-
-const salesData = [
-  { id: '1', date: 'May 2, 2026', receipt: 'RCP-0001', customer: 'Maria Santos', orders: 2, spent: 2200, paid: 'Paid' },
-  { id: '2', date: 'May 2, 2026', receipt: 'RCP-0002', customer: 'Juan Dela Cruz', orders: 1, spent: 1100, paid: 'Paid' },
-  { id: '3', date: 'May 1, 2026', receipt: 'RCP-0003', customer: 'Pedro Penduko', orders: 3, spent: 3300, paid: 'Unpaid' },
-  { id: '4', date: 'May 1, 2026', receipt: 'RCP-0004', customer: 'Lola Basyang', orders: 1, spent: 1100, paid: 'Paid' },
-  { id: '5', date: 'May 1, 2026', receipt: 'RCP-0005', customer: 'Carlos Miguel', orders: 2, spent: 2200, paid: 'Paid' },
-  { id: '6', date: 'Apr 30, 2026', receipt: 'RCP-0006', customer: 'Ana Reyes', orders: 1, spent: 1100, paid: 'Paid' },
-  { id: '7', date: 'Apr 30, 2026', receipt: 'RCP-0007', customer: 'Rita Lopez', orders: 4, spent: 4400, paid: 'Unpaid' },
-  { id: '8', date: 'Apr 29, 2026', receipt: 'RCP-0008', customer: 'Sofia Cruz', orders: 2, spent: 2200, paid: 'Paid' },
-  { id: '9', date: 'Apr 29, 2026', receipt: 'RCP-0009', customer: 'Ben Reyes', orders: 1, spent: 1100, paid: 'Paid' },
-  { id: '10', date: 'Apr 28, 2026', receipt: 'RCP-0010', customer: 'Diana Cruz', orders: 3, spent: 3300, paid: 'Paid' },
-  { id: '11', date: 'Apr 28, 2026', receipt: 'RCP-0011', customer: 'Edgar Santos', orders: 2, spent: 2200, paid: 'Unpaid' },
-  { id: '12', date: 'Apr 27, 2026', receipt: 'RCP-0012', customer: 'Fiona Reyes', orders: 1, spent: 1100, paid: 'Paid' },
-  { id: '13', date: 'Apr 27, 2026', receipt: 'RCP-0013', customer: 'Gabriel Cruz', orders: 2, spent: 2200, paid: 'Paid' },
-  { id: '14', date: 'Apr 26, 2026', receipt: 'RCP-0014', customer: 'Helen Lopez', orders: 1, spent: 1100, paid: 'Paid' },
-  { id: '15', date: 'Apr 26, 2026', receipt: 'RCP-0015', customer: 'Ivan Santos', orders: 3, spent: 3300, paid: 'Unpaid' },
-  { id: '16', date: 'Apr 25, 2026', receipt: 'RCP-0016', customer: 'Julia Reyes', orders: 2, spent: 2200, paid: 'Paid' },
-  { id: '17', date: 'Apr 25, 2026', receipt: 'RCP-0017', customer: 'Kevin Cruz', orders: 1, spent: 1100, paid: 'Paid' },
-  { id: '18', date: 'Apr 24, 2026', receipt: 'RCP-0018', customer: 'Luna Santos', orders: 2, spent: 2200, paid: 'Paid' },
-];
+const pesoTooltip = (v: number | string) => [`₱${Number(v).toLocaleString()}`, 'Revenue'];
 
 export function SalesOverview() {
+  const { selectedBranchId } = useBranch();
   const [chartView, setChartView] = useState<'monthly' | 'quarterly'>('monthly');
+  const [salesMetrics, setSalesMetrics] = useState<any[]>([]);
+  const [allSales, setAllSales] = useState<any[]>([]);
+  const [salesLoading, setSalesLoading] = useState(true);
+
+  useEffect(() => {
+    if (!selectedBranchId) return;
+    const controller = new AbortController();
+    const now = new Date();
+    const months = Array.from({ length: 6 }, (_, index) => {
+      const date = new Date(now.getFullYear(), now.getMonth() - (5 - index), 1);
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const lastDay = new Date(year, date.getMonth() + 1, 0).getDate();
+      return { from: `${year}-${month}-01`, to: `${year}-${month}-${lastDay}`, label: date };
+    });
+    setSalesLoading(true);
+    Promise.all(months.map(async ({ from, to, label }) => {
+      const query = new URLSearchParams({ from, to, branchId: selectedBranchId }).toString();
+      const response = await apiFetch(`/service-requests/reports/branch-owner-dashboard?${query}`, { signal: controller.signal });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) throw new Error('Could not load sales data.');
+      return { label, ...(data?.metrics ?? {}) };
+    })).then(setSalesMetrics).catch(() => setSalesMetrics([])).finally(() => setSalesLoading(false));
+    apiFetch(`/service-requests/reports/branch-owner-sales?branchId=${encodeURIComponent(selectedBranchId)}&limit=5`, { signal: controller.signal })
+      .then((response) => response.json().then((data) => response.ok ? setAllSales(data?.sales ?? []) : setAllSales([])))
+      .catch(() => setAllSales([]));
+    return () => controller.abort();
+  }, [selectedBranchId]);
+
+  // "Month" reuses the already-fetched current month (no extra call); Day/Week
+  // need their own range since the pre-fetched months are already collapsed
+  // into one aggregate each and can't be re-bucketed client-side.
+  const [tankPeriod, setTankPeriod] = useState<'day' | 'week' | 'month'>('month');
+  const [tankRevenueOverride, setTankRevenueOverride] = useState<{ size: string; revenue: number }[] | null>(null);
+  const [tankRevenueLoading, setTankRevenueLoading] = useState(false);
+
+  useEffect(() => {
+    if (!selectedBranchId || tankPeriod === 'month') {
+      setTankRevenueOverride(null);
+      return;
+    }
+    const controller = new AbortController();
+    const now = new Date();
+    const format = (date: Date) =>
+      `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+    const from = tankPeriod === 'day'
+      ? format(now)
+      : format(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6));
+    const to = format(now);
+    setTankRevenueLoading(true);
+    const query = new URLSearchParams({ from, to, branchId: selectedBranchId }).toString();
+    apiFetch(`/service-requests/reports/branch-owner-dashboard?${query}`, { signal: controller.signal })
+      .then((response) => response.json().then((data) =>
+        setTankRevenueOverride(response.ok ? (data?.metrics?.revenueByTank ?? []) : [])))
+      .catch(() => setTankRevenueOverride([]))
+      .finally(() => setTankRevenueLoading(false));
+    return () => controller.abort();
+  }, [tankPeriod, selectedBranchId]);
+
+  const currentMetrics = salesMetrics.at(-1);
+  const previousMetrics = salesMetrics.at(-2);
+  const currentRevenue = Number(currentMetrics?.totalRevenue ?? 0);
+  const previousRevenue = Number(previousMetrics?.totalRevenue ?? 0);
+  const revenueChange = previousRevenue === 0 ? 0 : ((currentRevenue - previousRevenue) / previousRevenue) * 100;
+  const liveMonthlyRevenue = salesMetrics.map((metrics) => ({
+    period: new Intl.DateTimeFormat('en-PH', { month: 'short' }).format(metrics.label),
+    revenue: Number(metrics.totalRevenue ?? 0),
+  }));
+  // Re-derived from the same 6 already-fetched months — no new fetch/endpoint.
+  // Only 2-3 quarter buckets show up under this rolling window, same way the
+  // "Monthly" view is itself only a rolling 6 months, not a calendar year.
+  const liveQuarterlyRevenue = (() => {
+    const byQuarter = new Map<string, { year: number; quarter: number; revenue: number }>();
+    for (const metrics of salesMetrics) {
+      const date: Date = metrics.label;
+      const year = date.getFullYear();
+      const quarter = Math.floor(date.getMonth() / 3) + 1;
+      const key = `${year}-Q${quarter}`;
+      const existing = byQuarter.get(key) ?? { year, quarter, revenue: 0 };
+      existing.revenue += Number(metrics.totalRevenue ?? 0);
+      byQuarter.set(key, existing);
+    }
+    return [...byQuarter.values()]
+      .sort((a, b) => a.year - b.year || a.quarter - b.quarter)
+      .map((entry) => ({ period: `Q${entry.quarter} ${entry.year}`, revenue: entry.revenue }));
+  })();
+  const activeTankRevenue: { size: string; revenue: number }[] =
+    tankPeriod === 'month' ? (currentMetrics?.revenueByTank ?? []) : (tankRevenueOverride ?? []);
+  const liveTankRevenue = activeTankRevenue.map((entry, index) => ({
+    ...entry,
+    color: ['#007BC1', '#41A3E0', '#76B4DD', '#1a5f8a'][index % 4],
+  }));
+  const tankChartLoading = tankPeriod === 'month' ? salesLoading : tankRevenueLoading;
+  // A 0-revenue tank size renders as a meaningless sliver in a donut (unlike
+  // a bar chart's harmless 0-height bar), so it's dropped before charting.
+  const chartableTankRevenue = liveTankRevenue.filter((entry: { revenue: number }) => entry.revenue > 0);
+  const liveSales = allSales;
 
   // Limit the table data to only the 5 most recent entries
-  const recentSalesData = salesData.slice(0, 5);
+  const recentSalesData = liveSales.slice(0, 5);
 
-  const revenueData = chartView === 'monthly' ? monthlyRevenueData : quarterlyRevenueData;
-  const xKey = chartView === 'monthly' ? 'month' : 'quarter';
+  const revenueData = chartView === 'monthly' ? liveMonthlyRevenue : liveQuarterlyRevenue;
 
   return (
     <div className="flex-1 overflow-y-auto">
@@ -68,46 +130,58 @@ export function SalesOverview() {
       </div>
 
       <div className="p-8">
-
         <div className="grid grid-cols-3 gap-6 mb-8">
           <KPICard
             title="Total Revenue This Month"
-            value="₱284,500"
+            value={salesLoading ? '—' : `₱${currentRevenue.toLocaleString()}`}
+            icon={<TrendingUp className="w-4 h-4 text-[#007BC1]" />}
             accentColor="#007BC1"
+            trend={salesLoading ? undefined : { text: `${revenueChange >= 0 ? '+' : ''}${revenueChange.toFixed(1)}% from last month`, direction: revenueChange >= 0 ? 'up' : 'down', positive: revenueChange >= 0 }}
+            tooltip={salesLoading ? undefined : <span>Previous month: ₱{previousRevenue.toLocaleString()}</span>}
           />
           <KPICard
             title="Total Orders Completed"
-            value="274"
+            value={salesLoading ? '—' : String(currentMetrics?.completedDeliveries ?? 0)}
+            icon={<ShoppingBag className="w-4 h-4 text-[#007BC1]" />}
             accentColor="#007BC1"
+            trend={undefined}
+            tooltip={salesLoading ? undefined : (
+              <div className="flex flex-col gap-1">
+                <span>{currentMetrics?.totalOrders ?? 0} total orders this month</span>
+                <span>{currentMetrics?.cancelledFailedDeliveries ?? 0} cancelled/failed</span>
+              </div>
+            )}
           />
           <KPICard
             title="Revenue vs Last Month"
-            value="+12.4%"
-            icon={<ArrowUp className="w-5 h-5 text-green-600" />}
+            value={salesLoading ? '—' : `${revenueChange >= 0 ? '+' : ''}${revenueChange.toFixed(1)}%`}
+            icon={<ArrowUpRight className="w-4 h-4 text-[#22c55e]" />}
             accentColor="#22c55e"
+            trend={salesLoading ? undefined : { text: 'Compared to last month', direction: revenueChange >= 0 ? 'up' : 'down', positive: revenueChange >= 0 }}
+            tooltip={salesLoading ? undefined : <span>₱{(currentRevenue - previousRevenue).toLocaleString()} difference from last month</span>}
           />
         </div>
 
-        <div className="bg-white rounded-lg border border-gray-200 p-6 mb-8">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-8">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="font-semibold text-gray-900">Monthly Revenue Trend</h3>
-            <div className="flex gap-2">
+            <h3 className="font-semibold text-gray-900">Revenue Trend</h3>
+            <div className="flex rounded-lg border border-gray-200 p-0.5">
               <button
+                type="button"
                 onClick={() => setChartView('monthly')}
-                className={`px-3 py-1 text-xs rounded-lg transition-colors ${
-                  chartView === 'monthly'
-                    ? 'bg-[#007BC1] text-white'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                style={{ fontSize: '14px' }}
+                className={`px-1.5 py-0.5 rounded-md transition-colors ${
+                  chartView === 'monthly' ? 'bg-[#007BC1] text-white' : 'text-gray-600 hover:text-gray-900'
                 }`}
               >
                 Monthly
               </button>
               <button
+                type="button"
                 onClick={() => setChartView('quarterly')}
-                className={`px-3 py-1 text-xs rounded-lg transition-colors ${
-                  chartView === 'quarterly'
-                    ? 'bg-[#007BC1] text-white'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                style={{ fontSize: '14px' }}
+                className={`px-1.5 py-0.5 rounded-md transition-colors ${
+                  chartView === 'quarterly' ? 'bg-[#007BC1] text-white' : 'text-gray-600 hover:text-gray-900'
                 }`}
               >
                 Quarterly
@@ -115,58 +189,89 @@ export function SalesOverview() {
             </div>
           </div>
           <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={revenueData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-              <XAxis dataKey={xKey} stroke="#9ca3af" style={{ fontSize: '12px' }} />
-              <YAxis stroke="#9ca3af" style={{ fontSize: '12px' }} tickFormatter={(value) => `₱${(value / 1000).toFixed(0)}k`} />
-              <Tooltip formatter={(value) => `₱${Number(value).toLocaleString()}`} />
-              <Line type="monotone" dataKey="revenue" stroke="#1e3a5f" strokeWidth={2} dot={{ fill: '#1e3a5f', r: 4 }} />
-            </LineChart>
+            <AreaChart data={revenueData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+              <defs>
+                <linearGradient id="salesRevenueFill" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#007BC1" stopOpacity={0.25} />
+                  <stop offset="100%" stopColor="#007BC1" stopOpacity={0.02} />
+                </linearGradient>
+              </defs>
+              <XAxis dataKey="period" {...axisProps} style={{ fontSize: '11px' }} tick={{ dy: 4 }} />
+              <YAxis {...axisProps} style={{ fontSize: '11px' }} tickFormatter={(value) => `₱${(value / 1000).toFixed(0)}k`} width={52} />
+              <Tooltip formatter={pesoTooltip} />
+              <Area
+                type="monotone"
+                dataKey="revenue"
+                stroke="#007BC1"
+                strokeWidth={2}
+                fill="url(#salesRevenueFill)"
+                dot={false}
+                activeDot={{ r: 4 }}
+              />
+            </AreaChart>
           </ResponsiveContainer>
         </div>
 
-        <div className="grid grid-cols-2 gap-6 mb-8">
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <h3 className="font-semibold text-gray-900 mb-4">Revenue by LPG Tank Size</h3>
-            <ResponsiveContainer width="100%" height={250}>
-              <BarChart data={revenueByTankData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                <XAxis dataKey="size" stroke="#9ca3af" style={{ fontSize: '12px' }} />
-                <YAxis stroke="#9ca3af" style={{ fontSize: '12px' }} tickFormatter={(value) => `₱${(value / 1000).toFixed(0)}k`} />
-                <Tooltip formatter={(value) => `₱${Number(value).toLocaleString()}`} />
-                <Bar dataKey="revenue" fill="#1e3a5f" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+        <div className="grid grid-cols-1 gap-6 mb-8">
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-semibold text-gray-900">Revenue by LPG Tank Size</h3>
+              <div className="flex rounded-lg border border-gray-200 p-0.5">
+                {(['day', 'week', 'month'] as const).map((period) => (
+                  <button
+                    key={period}
+                    type="button"
+                    onClick={() => setTankPeriod(period)}
+                    style={{ fontSize: '14px' }}
+                    className={`px-1.5 py-0.5 rounded-md capitalize transition-colors ${
+                      tankPeriod === period ? 'bg-[#007BC1] text-white' : 'text-gray-600 hover:text-gray-900'
+                    }`}
+                  >
+                    {period}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {tankChartLoading ? (
+              <p className="py-10 text-center text-sm text-gray-400">Loading…</p>
+            ) : chartableTankRevenue.length === 0 ? (
+              <p className="py-10 text-center text-sm text-gray-400">No revenue recorded for this period.</p>
+            ) : (
+              <>
+                <ResponsiveContainer width="100%" height={250}>
+                  <PieChart>
+                    <Pie
+                      data={chartableTankRevenue}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={60}
+                      outerRadius={90}
+                      paddingAngle={2}
+                      dataKey="revenue"
+                      nameKey="size"
+                    >
+                      {chartableTankRevenue.map((entry: { size: string; color: string }) => (
+                        <Cell key={entry.size} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip formatter={(value: number, name: string) => [`₱${Number(value).toLocaleString()}`, name]} />
+                  </PieChart>
+                </ResponsiveContainer>
+                <div className="flex flex-wrap justify-center gap-6 mt-4">
+                  {chartableTankRevenue.map((entry: { size: string; revenue: number; color: string }) => (
+                    <div key={entry.size} className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: entry.color }}></div>
+                      <span className="text-xs text-gray-600">{entry.size}: ₱{entry.revenue.toLocaleString()}</span>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
           </div>
 
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <h3 className="font-semibold text-gray-900 mb-4">Orders by Tank Size</h3>
-            <ResponsiveContainer width="100%" height={250}>
-              <PieChart>
-                <Pie
-                  data={ordersByTankData}
-                  cx="50%"
-                  cy="45%"
-                  innerRadius={60}
-                  outerRadius={80}
-                  paddingAngle={2}
-                  dataKey="value"
-                >
-                  {ordersByTankData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
-                  ))}
-                </Pie>
-                <Legend
-                  verticalAlign="bottom"
-                  height={36}
-                  formatter={(value, entry: any) => `${value} - ${entry.payload.value}%`}
-                />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
         </div>
 
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
           <div className="flex justify-between items-center mb-6">
             <h3 className="font-semibold text-gray-900">Sales</h3>
             <a 
@@ -185,16 +290,16 @@ export function SalesOverview() {
             <table className="w-full">
               <thead>
                 <tr className="border-b border-gray-200">
-                  <th className="text-left text-[11px] font-medium text-gray-600 pb-3">Order Date</th>
-                  <th className="text-left text-[11px] font-medium text-gray-600 pb-3">Receipt No.</th>
-                  <th className="text-left text-[11px] font-medium text-gray-600 pb-3">Customer</th>
-                  <th className="text-left text-[11px] font-medium text-gray-600 pb-3">Total Orders</th>
-                  <th className="text-left text-[11px] font-medium text-gray-600 pb-3">Cash Received</th>
-                  <th className="text-left text-[11px] font-medium text-gray-600 pb-3">Paid</th>
+                  <th className="text-left text-xs font-semibold text-gray-700 pb-3">Order Date</th>
+                  <th className="text-left text-xs font-semibold text-gray-700 pb-3">Receipt No.</th>
+                  <th className="text-left text-xs font-semibold text-gray-700 pb-3">Customer</th>
+                  <th className="text-left text-xs font-semibold text-gray-700 pb-3">Total Orders</th>
+                  <th className="text-left text-xs font-semibold text-gray-700 pb-3">Cash Received</th>
+                  <th className="text-left text-xs font-semibold text-gray-700 pb-3">Paid</th>
                 </tr>
               </thead>
               <tbody>
-                {recentSalesData.map((row, index) => (
+                {recentSalesData.map((row: any, index: number) => (
                   <tr key={row.id} className={`border-b border-gray-100 ${index % 2 === 1 ? 'bg-gray-50' : ''}`}>
                     <td className="py-3 text-[13px] text-gray-900 whitespace-nowrap">{row.date}</td>
                     <td className="py-3 text-[13px] text-gray-900 whitespace-nowrap font-mono">{row.receipt}</td>
