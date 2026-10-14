@@ -1,12 +1,12 @@
 # Superkalan Gaz CRM — Web
 
-`superkalan-crm-web`, a Next.js 14 (App Router) app for the Superkalan Gaz CRM. It serves
-three personas — Franchise Admin, Branch Owner, and Branch Manager — behind a single login.
+`superkalan-crm-web`, a Next.js 16 (App Router) app for the Superkalan Gaz CRM. It serves
+Super Administrator, Franchise Administrator, Branch Owner, and Branch Manager behind a single login.
 Authentication and user records are backed by **Supabase Auth**.
 
 ## Prerequisites
 
-- **Node.js 18.18+** (or 20+) and npm
+- **Node.js 24** and npm (the verified Vercel build runtime)
 - A **Supabase project** — one already exists for this app (project ref `oauxrwyjwfygnfnwgxfg`)
 - The **`superkalan-crm-api` NestJS backend** running locally or available at a configured URL
 
@@ -55,8 +55,8 @@ or rebuild for production (public variables are embedded at build time):
 NEXT_PUBLIC_API_URL=https://superkalan-crm-api-7icfrdyg5a-as.a.run.app
 ```
 
-Use `http://localhost:3000`; the deployed API currently permits that origin and
-`http://192.168.1.5:3000`, not arbitrary LAN addresses or hosted web domains.
+The deployed API permits `https://superkalan-crm-web.vercel.app`,
+`http://localhost:3000`, and `http://192.168.1.5:3000`. Other origins need explicit configuration.
 This changes **all CRM API requests** to the cloud backend, not only Fleet requests.
 To return to local development, set `NEXT_PUBLIC_API_URL=http://localhost:3001`
 and restart/rebuild.
@@ -66,8 +66,29 @@ guide for the public hardware destination `34.158.48.168:5013`. Registration goe
 through NestJS to the private Traccar API; the browser never calls Traccar directly
 or receives its token. Send SMS manually to the physical tracker's SIM and use its
 reporting ID. **Registered in Traccar does not mean live GPS reception is verified.**
-Hosting the website, physical-device verification and live Fleet polling remain
-separate work; see [shared release status](../docs/architecture/gcp-release-status.md).
+Physical-device verification and live Fleet polling remain separate work; see
+[shared release status](../docs/architecture/gcp-release-status.md).
+
+### Vercel deployment
+
+The production website is https://superkalan-crm-web.vercel.app.
+The `superkalan-crm-web` Vercel project in the Superkalan team connects to
+`SuperkalanGaz-UST/SuperkalanGaz-Website-FE`, uses the Next.js framework preset and
+the repository root, and tracks `main` for production deployments. Pushes and merges
+to `main` trigger a build; other branches use Vercel's preview deployment settings.
+
+Configure `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, and
+`NEXT_PUBLIC_API_URL` in Vercel before deploying. `.env.local` is not committed or
+used as the source of environment variables for Git-triggered deployments.
+NestJS remains the application backend on GCP; no service-role key or CRM database
+connection belongs in Vercel.
+
+The API's production `WEB_ORIGIN` lists the hosted website first, so Franchise
+Administrator invitations return there. `DELIVERY_RIDER_INVITATION_REDIRECT_URL`
+points to its `/delivery-rider-invitation` page. Supabase Auth uses the hosted
+website as its Site URL and allows the invitation destinations; local development
+redirects remain allowed. See the shared [Vercel deployment record](../docs/architecture/vercel-web-deployment.md)
+for verification and remaining acceptance checks.
 
 ## Logging in
 
