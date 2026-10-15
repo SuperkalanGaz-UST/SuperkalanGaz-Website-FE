@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
+    "test:routing:browser": "node --test tests/staff-routing.browser.test.mjs",
     "test:traccar": "node --experimental-strip-types --test tests/traccar-setup.test.mjs",
     "test:traccar:browser": "node --test tests/traccar-setup.browser.test.mjs"
   },

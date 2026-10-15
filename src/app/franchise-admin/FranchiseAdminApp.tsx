@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useScreenNavigation } from '../hooks/useScreenNavigation';
 import { Sidebar } from '../components/Sidebar';
 import { Dashboard } from '../components/Dashboard';
 import { OrderAnalytics } from '../components/OrderAnalytics';
@@ -23,17 +23,7 @@ import { GovernanceRequests } from './components/GovernanceRequests';
 import { StaffAccountReviews } from './components/StaffAccountReviews';
 
 export function FranchiseAdminApp() {
-  const [activeScreen, setActiveScreen] = useState('dashboard');
-
-  useEffect(() => {
-    const handleNavigate = (e: Event) => {
-      const customEvent = e as CustomEvent;
-      setActiveScreen(customEvent.detail);
-    };
-
-    window.addEventListener('navigate', handleNavigate);
-    return () => window.removeEventListener('navigate', handleNavigate);
-  }, []);
+  const [activeScreen, setActiveScreen] = useScreenNavigation('franchise-admin');
 
   // Keep sidebar highlight on 'customers' when viewing customer detail
   const sidebarActive = activeScreen === 'customer-detail' ? 'customers' : activeScreen;

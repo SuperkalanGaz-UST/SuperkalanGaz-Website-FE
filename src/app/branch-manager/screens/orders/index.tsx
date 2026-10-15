@@ -37,7 +37,7 @@ import { Input } from '../../components/Input';
 import { Pagination } from '../../../components/Pagination';
 import { apiFetch, apiErrorMessage, fetchJson } from '../../../lib/api';
 import { DeliveryProofViewer } from '../../../components/DeliveryProofViewer';
-import { fetchLpgPrices, formatPeso, LpgPrice } from '../../../lib/pricing';
+import { fetchAssignedLpgPrices, formatPeso, LpgPrice } from '../../../lib/pricing';
 import { formatPHMobile, normalizePhMobile, toE164PhMobile } from '../../../lib/phMobile';
 import styles from './screen.module.css';
 
@@ -511,7 +511,7 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
 
     useEffect(() => {
         let active = true;
-        fetchLpgPrices()
+        fetchAssignedLpgPrices()
             .then(prices => {
                 if (active) setCatalogPrices(prices);
             })

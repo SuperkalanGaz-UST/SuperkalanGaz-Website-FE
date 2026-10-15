@@ -2,9 +2,11 @@
 
 import { ComponentType, useState } from 'react';
 import Image from 'next/image';
+import Link from 'next/link';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useAccount } from '../contexts/AccountContext';
 import { ROLE_LABELS } from '../lib/auth';
+import { staffScreenPath } from '../lib/staffRoutes';
 
 export interface SidebarNavLeaf {
   label: string;
@@ -27,10 +29,6 @@ interface AppSidebarProps {
   compactSpacing?: boolean;
 }
 
-function entryIsActive(entry: SidebarNavEntry, activeScreen: string): boolean {
-  return entry.id === activeScreen || !!entry.children?.some((child) => child.id === activeScreen);
-}
-
 /**
  * Shared sidebar shell for all staff personas. Role wrappers supply only the
  * destinations their persona may access; the shell owns the consistent
@@ -40,17 +38,6 @@ export function AppSidebar({ entries, activeScreen, onNavigate, compactSpacing }
   const [isExpanded, setIsExpanded] = useState(true);
   const account = useAccount();
   const navigationLabel = `${ROLE_LABELS[account.role]} navigation`;
-
-  const handleRailEntry = (entry: SidebarNavEntry) => {
-    if (entry.id) {
-      onNavigate(entry.id);
-      return;
-    }
-
-    // A category icon reveals its destinations instead of guessing which
-    // child screen the user intended to open.
-    setIsExpanded(true);
-  };
 
   return (
     <div
@@ -105,11 +92,16 @@ export function AppSidebar({ entries, activeScreen, onNavigate, compactSpacing }
             {entries.map((entry) => {
               if (entry.id) {
                 const isActive = activeScreen === entry.id;
+                const href = staffScreenPath(account.role, entry.id);
+                if (!href) return null;
                 return (
-                  <button
+                  <Link
                     key={entry.id}
-                    type="button"
-                    onClick={() => onNavigate(entry.id!)}
+                    href={href}
+                    onNavigate={(event) => {
+                      event.preventDefault();
+                      onNavigate(entry.id!);
+                    }}
                     aria-current={isActive ? 'page' : undefined}
                     className={`mb-1 flex ${compactSpacing ? 'h-[42px]' : 'h-11'} w-full items-center gap-3 rounded-lg px-3 text-left text-[13px] font-medium text-white transition-colors ${
                       isActive ? 'bg-white/15' : 'hover:bg-white/10'
@@ -117,7 +109,7 @@ export function AppSidebar({ entries, activeScreen, onNavigate, compactSpacing }
                   >
                     <entry.icon className="h-[18px] w-[18px] shrink-0" />
                     <span>{entry.label}</span>
-                  </button>
+                  </Link>
                 );
               }
 
@@ -128,11 +120,16 @@ export function AppSidebar({ entries, activeScreen, onNavigate, compactSpacing }
                   </h2>
                   {entry.children?.map((child) => {
                     const isActive = activeScreen === child.id;
+                    const href = staffScreenPath(account.role, child.id);
+                    if (!href) return null;
                     return (
-                      <button
+                      <Link
                         key={child.id}
-                        type="button"
-                        onClick={() => onNavigate(child.id)}
+                        href={href}
+                        onNavigate={(event) => {
+                          event.preventDefault();
+                          onNavigate(child.id);
+                        }}
                         aria-current={isActive ? 'page' : undefined}
                         className={`mb-0.5 flex ${compactSpacing ? 'h-[38px]' : 'h-10'} w-full items-center gap-3 rounded-lg px-3 text-left text-[13px] font-medium text-white transition-colors ${
                           isActive ? 'bg-white/15' : 'hover:bg-white/10'
@@ -140,7 +137,7 @@ export function AppSidebar({ entries, activeScreen, onNavigate, compactSpacing }
                       >
                         {child.icon && <child.icon className="h-[18px] w-[18px] shrink-0" />}
                         <span>{child.label}</span>
-                      </button>
+                      </Link>
                     );
                   })}
                 </section>
@@ -155,16 +152,21 @@ export function AppSidebar({ entries, activeScreen, onNavigate, compactSpacing }
             <div className="flex flex-col items-center justify-start gap-1">
               {entries
                 .flatMap((entry): (SidebarNavLeaf | SidebarNavEntry)[] => (entry.children ? entry.children : [entry]))
-                .map((item, index) => {
-                  if (!item.icon) return null;
+                .map((item) => {
+                  if (!item.icon || !item.id) return null;
+                  const href = staffScreenPath(account.role, item.id);
+                  if (!href) return null;
                   const isActive = activeScreen === item.id;
                   const Icon = item.icon;
 
                   return (
-                    <button
+                    <Link
                       key={item.id || item.label}
-                      type="button"
-                      onClick={() => onNavigate(item.id!)}
+                      href={href}
+                      onNavigate={(event) => {
+                        event.preventDefault();
+                        onNavigate(item.id!);
+                      }}
                       aria-label={item.label}
                       aria-current={isActive ? 'page' : undefined}
                       title={item.label}
@@ -173,7 +175,7 @@ export function AppSidebar({ entries, activeScreen, onNavigate, compactSpacing }
                       }`}
                     >
                       <Icon className="h-[18px] w-[18px] shrink-0" />
-                    </button>
+                    </Link>
                   );
                 })}
             </div>

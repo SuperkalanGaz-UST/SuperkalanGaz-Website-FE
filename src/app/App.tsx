@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
+import { usePathname, useRouter } from 'next/navigation';
 import type { Session } from '@supabase/supabase-js';
 import dynamic from 'next/dynamic';
 import { Loader2 } from 'lucide-react';
@@ -19,6 +21,7 @@ import {
   signOut,
 } from './lib/auth';
 import { supabase } from './lib/supabase/client';
+import { resolveStaffRoute, staffDashboardPath } from './lib/staffRoutes';
 
 // Lazy-load each persona app so a page load only compiles/downloads the one
 // that's actually shown instead of every dashboard bundle.
@@ -45,7 +48,10 @@ const AUTH_RESTORE_TIMEOUT_MS = 5_000;
 const IDLE_TIMEOUT_MS = 15 * 60_000;
 const IDLE_WARNING_SECONDS = 60;
 
-export default function App() {
+export default function App({ children }: { children: ReactNode }) {
+  const pathname = usePathname();
+  const router = useRouter();
+  const staffRoute = resolveStaffRoute(pathname);
   const [account, setAccount] = useState<Account | null>(null);
   const [authReady, setAuthReady] = useState(false);
   const [passwordRecovery, setPasswordRecovery] = useState(false);
@@ -54,6 +60,14 @@ export default function App() {
   const [loggingOut, setLoggingOut] = useState(false);
   const [showIdleWarning, setShowIdleWarning] = useState(false);
   const passwordRecoveryRef = useRef(false);
+  const needsRoleRedirect = !!account && (!staffRoute || staffRoute.role !== account.role);
+  const roleRedirectPath = account && (pathname === '/' || staffRoute) && needsRoleRedirect
+    ? staffDashboardPath(account.role)
+    : null;
+
+  useEffect(() => {
+    if (roleRedirectPath) router.replace(roleRedirectPath);
+  }, [roleRedirectPath, router]);
 
   const idleTimer = useIdleTimer({
     enabled: account?.role === 'super-admin',
@@ -177,6 +191,7 @@ export default function App() {
       await signOut();
       setShowLogoutConfirm(false);
       setAccount(null);
+      router.replace('/');
       toast.success('You have been successfully logged out.');
     } catch (logoutError) {
       toast.error(logoutError instanceof Error ? logoutError.message : 'Could not log out. Please try again.');
@@ -189,7 +204,10 @@ export default function App() {
     setAccount((current) => (current ? { ...current, ...patch } : current));
   };
 
-  if (!authReady) {
+  // Let Next.js render its not-found boundary for invalid role/screen URLs.
+  if (pathname !== '/' && !staffRoute) return children;
+
+  if (!authReady || needsRoleRedirect) {
     return (
       <main
         className="flex min-h-screen items-center justify-center bg-[#e8e8e8] text-gray-700"
@@ -197,7 +215,9 @@ export default function App() {
       >
         <div className="flex items-center gap-3" role="status">
           <Loader2 className="h-5 w-5 animate-spin text-[#007BC1]" aria-hidden="true" />
-          <span className="text-sm font-medium">Restoring your secure session…</span>
+          <span className="text-sm font-medium">
+            {authReady ? 'Opening your dashboard…' : 'Restoring your secure session…'}
+          </span>
         </div>
       </main>
     );
@@ -205,6 +225,7 @@ export default function App() {
 
   return (
     <>
+      {children}
       {account ? (
         <AccountProvider
           account={account}

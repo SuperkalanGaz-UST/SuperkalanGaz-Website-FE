@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useScreenNavigation } from '../hooks/useScreenNavigation';
 import BMSidebar from './components/BMSidebar';
 import { AppHeader } from '../components/AppHeader';
 import { useAccount } from '../contexts/AccountContext';
@@ -33,7 +34,7 @@ const SCREEN_TITLES: Record<string, string> = {
 };
 
 export function BranchManagerApp() {
-  const [activeScreen, setActiveScreen] = useState('overview');
+  const [activeScreen, setActiveScreen] = useScreenNavigation('branch-manager');
   // Set when the Customers screen's "view order history" link is clicked;
   // seeds the Orders screen's own search box so it lands pre-filtered to that
   // customer, then behaves like any other manual search from there on.

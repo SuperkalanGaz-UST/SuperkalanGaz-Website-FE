@@ -8,6 +8,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { Header } from './Header';
+import { useBranch } from '../contexts/BranchContext';
 import {
   CylinderSize,
   fetchLpgPrices,
@@ -323,14 +324,17 @@ function InventoryList({
 }
 
 export function Inventory() {
+  const { selectedBranchId } = useBranch();
   const [activeCategory, setActiveCategory] = useState<InventoryCategory>('lpg');
-  const [priceMap, setPriceMap] = useState<LpgPriceMap>({});
+  const [branchPrices, setBranchPrices] = useState<{ branchId: string; prices: LpgPriceMap } | null>(null);
+  const priceMap = branchPrices?.branchId === selectedBranchId ? branchPrices.prices : undefined;
 
   useEffect(() => {
     let active = true;
-    fetchLpgPrices()
+    if (!selectedBranchId) return;
+    fetchLpgPrices(selectedBranchId)
       .then((prices) => {
-        if (active) setPriceMap(toPriceMap(prices));
+        if (active) setBranchPrices({ branchId: selectedBranchId, prices: toPriceMap(prices) });
       })
       .catch(() => {
         // Stock visibility remains available when the independent pricing read is unavailable.
@@ -339,13 +343,13 @@ export function Inventory() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [selectedBranchId]);
 
   const inventoryItems = useMemo(
     () =>
       INVENTORY_ITEMS.map((item) => {
         if (!item.cylinderSize) return item;
-        const price = priceMap[item.cylinderSize];
+        const price = priceMap?.[item.cylinderSize];
         return {
           ...item,
           detail: price === undefined ? 'Price unavailable' : `${formatPeso(price)} retail price`,
