@@ -100,6 +100,33 @@ public.
 
 ## How auth & users work
 
+### Staff page URLs
+
+The shared login remains at `/`. After sign-in, staff land on the dashboard for
+their authenticated role:
+
+- `/super-admin/dashboard`
+- `/franchise-admin/dashboard`
+- `/branch-owner/dashboard`
+- `/branch-manager/dashboard`
+
+Sidebar links and report-detail navigation update the URL, so main screens support
+bookmarks, refresh, and browser Back/Forward. For example, Branch Manager Service
+Requests uses `/branch-manager/service-requests`; each role's settings uses
+`/<role>/settings`. Signed-out bookmarks show the login and resume the same screen
+after that role signs in. Another role's URL redirects to the signed-in user's own
+dashboard before rendering protected screens. Unknown destinations return 404.
+
+The shared staff layout preserves the session and Branch Owner's selected branch
+while navigating. URLs do not authorize access or select branch scope: existing
+NestJS role/branch guards remain authoritative. Delivery Rider registration stays
+at `/delivery-rider-invitation`, outside the staff layout.
+
+`src/app/lib/staffRoutes.ts` maps existing screen IDs to URLs;
+`src/app/hooks/useScreenNavigation.ts` connects screen controls to Next.js navigation.
+
+### Identity and authorization
+
 - **`auth.users`** (Supabase) is the source of truth for identity and passwords.
 - CRM claims—`role`, `branch_ids`, display-only `branches`, `username`, `display_name`,
   `phone`, and `status`—live in each Auth user's service-role-managed **`app_metadata`**.
@@ -182,6 +209,7 @@ src/app/branch-owner/components/BranchOwnerFleetMap.tsx
 | `npm run build` | Production build |
 | `npm run start` | Serve the production build |
 | `npm run lint` | Run ESLint |
+| `npm run test:routing:browser` | Mocked staff routing, session and invitation checks against a running app; defaults to localhost:3000, configurable through `TEST_BASE_URL` |
 | `npm run test:traccar` | Focused setup/status tests (Node.js 24 recommended for native TypeScript support) |
 | `npm run test:traccar:browser` | Mocked browser flow; first rebuild and serve at localhost:3000; no production writes |
 

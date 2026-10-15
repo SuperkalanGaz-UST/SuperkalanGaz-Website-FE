@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useScreenNavigation } from '../hooks/useScreenNavigation';
 import type { ReactNode } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { Dashboard } from './components/Dashboard';
@@ -51,17 +51,7 @@ function BranchContentTransition({ children }: { children: ReactNode }) {
 }
 
 export function BranchOwnerApp({ branchIds, branches }: BranchOwnerAppProps) {
-  const [activeScreen, setActiveScreen] = useState('dashboard');
-
-  useEffect(() => {
-    const handleNavigate = (e: Event) => {
-      const customEvent = e as CustomEvent;
-      setActiveScreen(customEvent.detail);
-    };
-
-    window.addEventListener('navigate', handleNavigate);
-    return () => window.removeEventListener('navigate', handleNavigate);
-  }, []);
+  const [activeScreen, setActiveScreen] = useScreenNavigation('branch-owner');
 
   return (
     <BranchProvider

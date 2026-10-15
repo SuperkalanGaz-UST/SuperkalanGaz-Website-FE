@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useScreenNavigation } from '../hooks/useScreenNavigation';
 import { SuperAdminSidebar } from './components/SuperAdminSidebar';
 import { AdminAccounts } from './screens/AdminAccounts';
 import { ApprovalRequests } from './screens/ApprovalRequests';
@@ -10,7 +10,7 @@ import { GovernanceDashboard } from './screens/GovernanceDashboard';
 import { SuperAdminSettings } from './screens/SuperAdminSettings';
 
 export function SuperAdminApp() {
-  const [activeScreen, setActiveScreen] = useState('dashboard');
+  const [activeScreen, setActiveScreen] = useScreenNavigation('super-admin');
   return (
     <div className="flex h-screen bg-[#f7f8fa]">
       <SuperAdminSidebar activeScreen={activeScreen} onNavigate={setActiveScreen} />

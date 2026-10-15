@@ -14,6 +14,7 @@ import { StoreLocationCombobox, StoreLocation } from './StoreLocationCombobox';
 import { ProvinceCombobox } from './ProvinceCombobox';
 import { CityMunicipalityCombobox } from './CityMunicipalityCombobox';
 import { provinceFocus } from '../lib/phProvinces';
+import { BranchPricingRegionField } from './BranchPricingRegionField';
 import { cityMunicipalityFocus } from '../lib/phCitiesMunicipalities';
 import { normalizePhMobile, formatPhMobileNational } from '../lib/phMobile';
 
@@ -94,6 +95,7 @@ export function RegisterBranchModal({ isOpen, onClose }: RegisterBranchModalProp
   const [address, setAddress] = useState('');
   const [city, setCity] = useState('');
   const [province, setProvince] = useState('');
+  const [region, setRegion] = useState('');
   const [stockThreshold, setStockThreshold] = useState('');
 
   // The known_store_locations row this branch is being provisioned from. Set
@@ -231,6 +233,7 @@ export function RegisterBranchModal({ isOpen, onClose }: RegisterBranchModalProp
           address,
           city,
           province,
+          region: region || null,
           // Provenance: the reference this branch came from, or null for free-text.
           sourceStoreLocationId: selectedReferenceId,
           ownerType,
@@ -525,6 +528,8 @@ export function RegisterBranchModal({ isOpen, onClose }: RegisterBranchModalProp
                   />
                 </div>
               </div>
+
+              <BranchPricingRegionField value={region} onChange={setRegion} disabled={submitting} />
 
               <div className="w-[160px]">
                 <label className="block text-xs text-[#6B6B67] mb-1">Low-stock alert threshold (cylinders)</label>
@@ -833,6 +838,9 @@ export function RegisterBranchModal({ isOpen, onClose }: RegisterBranchModalProp
                 <div className="grid grid-cols-[140px_1fr]">
                   <div className="bg-[#F7F7F6] px-3 py-2.5 text-[13px] text-[#6B6B67] border-b border-[#E4E4E0]">Branch name</div>
                   <div className="bg-white px-3 py-2.5 text-[13px] text-[#1A1A18] border-b border-[#E4E4E0]">{branchName}</div>
+
+                  <div className="bg-[#F7F7F6] px-3 py-2.5 text-[13px] text-[#6B6B67] border-b border-[#E4E4E0]">Pricing region</div>
+                  <div className="bg-white px-3 py-2.5 text-[13px] text-[#1A1A18] border-b border-[#E4E4E0]">{region || 'System-wide default'}</div>
 
                   <div className="bg-[#F7F7F6] px-3 py-2.5 text-[13px] text-[#6B6B67] border-b border-[#E4E4E0]">Address</div>
                   <div className="bg-white px-3 py-2.5 text-[13px] text-[#1A1A18] border-b border-[#E4E4E0]">{address}</div>

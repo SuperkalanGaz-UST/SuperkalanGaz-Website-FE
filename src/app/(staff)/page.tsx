@@ -1,4 +1,3 @@
-import App from './App';
 import { redirect } from 'next/navigation';
 
 const INVITATION_TOKEN = /^[A-Za-z0-9_-]{32,256}$/;
@@ -18,5 +17,5 @@ export default async function Home({
     redirect(`/delivery-rider-invitation?token=${encodeURIComponent(token)}`);
   }
 
-  return <App />;
+  return null;
 }

@@ -1,38 +1,46 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { ArrowDown, ArrowUp, Building2, Flame, Info } from 'lucide-react';
+import { FormEvent, useEffect, useRef, useState } from 'react';
+import { CheckCircle2, Flame, Info, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { apiErrorMessage, apiFetch } from '../lib/api';
-import { fetchLpgPrices } from '../lib/pricing';
+import {
+  CYLINDER_SIZES,
+  CylinderSize,
+  fetchLpgCatalog,
+  fetchPricingRegions,
+  LpgCatalog,
+  PricingRegion,
+} from '../lib/pricing';
 import { Header } from './Header';
+import { PricingRegionSelect } from './PricingRegionSelect';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from './ui/alert-dialog';
 
-const CYLINDERS = [
-  { id: '50kg', label: '50kg Cylinder' },
-  { id: '22kg', label: '22kg Cylinder' },
-  { id: '11kg', label: '11kg Cylinder' },
-  { id: '5kg', label: '5kg Cylinder' },
-  { id: '2.7kg', label: '2.7kg Cylinder' },
-] as const;
-
-type CylinderId = (typeof CYLINDERS)[number]['id'];
-type PriceMap = Record<CylinderId, string>;
-type PriceMovement = 'increase' | 'decrease' | 'unchanged';
-
-const INITIAL_PRICES: PriceMap = {
-  '50kg': '1,500.00',
-  '22kg': '1,100.00',
-  '11kg': '650.00',
-  '5kg': '350.00',
-  '2.7kg': '200.00',
+type PriceMap = Record<CylinderSize, string>;
+const EMPTY_PRICES: PriceMap = {
+  '50kg': '',
+  '22kg': '',
+  '11kg': '',
+  '5kg': '',
+  '2.7kg': '',
 };
 
 function parsePrice(value: string): number | null {
   const normalized = value.replace(/,/g, '').trim();
   if (!/^\d+(\.\d{0,2})?$/.test(normalized)) return null;
-
   const amount = Number(normalized);
-  return Number.isFinite(amount) ? amount : null;
+  return Number.isFinite(amount) && amount >= 0.01 && amount <= 99999999.99
+    ? amount
+    : null;
 }
 
 function formatPrice(amount: number): string {
@@ -42,23 +50,12 @@ function formatPrice(amount: number): string {
   });
 }
 
-function getMovement(currentValue: string, savedValue: string) {
-  const current = parsePrice(currentValue);
-  const saved = parsePrice(savedValue);
-
-  if (current === null || saved === null) {
-    return { movement: 'unchanged' as PriceMovement, delta: 0 };
-  }
-
-  const delta = current - saved;
-  if (delta > 0) return { movement: 'increase' as PriceMovement, delta };
-  if (delta < 0) return { movement: 'decrease' as PriceMovement, delta };
-  return { movement: 'unchanged' as PriceMovement, delta: 0 };
-}
-
-function CylinderIcon({ className }: { className?: string }) {
+function CylinderIcon() {
   return (
-    <span aria-hidden="true" className={`relative inline-flex shrink-0 ${className ?? ''}`}>
+    <span
+      aria-hidden="true"
+      className="relative inline-flex h-8 w-6 shrink-0 text-gray-500"
+    >
       <svg
         viewBox="0 0 24 32"
         fill="none"
@@ -75,285 +72,478 @@ function CylinderIcon({ className }: { className?: string }) {
       <Flame
         fill="currentColor"
         strokeWidth={1.5}
-        className="absolute left-1/2 top-[45%] h-[34%] w-[42%] -translate-x-1/2 text-current"
+        className="absolute left-1/2 top-[45%] h-[34%] w-[42%] -translate-x-1/2"
       />
     </span>
   );
 }
 
-function MovementIndicator({ movement, delta }: { movement: PriceMovement; delta: number }) {
-  if (movement === 'increase') {
-    return (
-      <span className="inline-flex items-center justify-end gap-1 whitespace-nowrap text-xs font-semibold text-red-600">
-        <ArrowUp aria-hidden="true" className="h-3.5 w-3.5" />
-        <span>₱{formatPrice(Math.abs(delta)).replace(/\.00$/, '')}</span>
-        <span className="sr-only">Price increased</span>
-      </span>
-    );
-  }
-
-  if (movement === 'decrease') {
-    return (
-      <span className="inline-flex items-center justify-end gap-1 whitespace-nowrap text-xs font-semibold text-green-600">
-        <ArrowDown aria-hidden="true" className="h-3.5 w-3.5" />
-        <span>₱{formatPrice(Math.abs(delta)).replace(/\.00$/, '')}</span>
-        <span className="sr-only">Price decreased</span>
-      </span>
-    );
-  }
-
-  return <span className="whitespace-nowrap text-xs font-normal text-gray-500">No change</span>;
-}
-
 export function PriceConfiguration() {
-  const [prices, setPrices] = useState<PriceMap>({ ...INITIAL_PRICES });
-  const [savedPrices, setSavedPrices] = useState<PriceMap>({ ...INITIAL_PRICES });
+  const [regionCode, setRegionCode] = useState('');
+  const [regions, setRegions] = useState<PricingRegion[]>([]);
+  const [catalog, setCatalog] = useState<LpgCatalog | null>(null);
+  const [prices, setPrices] = useState<PriceMap>({ ...EMPTY_PRICES });
   const [isLoading, setIsLoading] = useState(true);
-  const [isCatalogReady, setIsCatalogReady] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [reload, setReload] = useState(0);
   const [isSaving, setIsSaving] = useState(false);
+  const savingRef = useRef(false);
   const [requestReason, setRequestReason] = useState('');
-  const hasChanges = CYLINDERS.some(
-    (cylinder) => prices[cylinder.id] !== savedPrices[cylinder.id],
+  const [touched, setTouched] = useState<
+    Partial<Record<CylinderSize, boolean>>
+  >({});
+  const [pendingRegion, setPendingRegion] = useState<string | null>(null);
+  const savedPrices = new Map(
+    catalog?.prices.map((price) => [price.cylinder_size, price.unit_price]) ??
+      [],
   );
+  const changedCount = catalog
+    ? CYLINDER_SIZES.filter((size) => {
+        const amount = parsePrice(prices[size]);
+        return amount !== null && amount !== savedPrices.get(size);
+      }).length
+    : 0;
+  const isDirty =
+    changedCount > 0 ||
+    Boolean(requestReason.trim()) ||
+    (catalog !== null &&
+      CYLINDER_SIZES.some((size) => parsePrice(prices[size]) === null));
+  const allValid = CYLINDER_SIZES.every(
+    (size) => parsePrice(prices[size]) !== null,
+  );
+  const regionName =
+    regions.find((region) => region.code === regionCode)?.name ??
+    'System-wide default';
+  const canSubmit =
+    catalog !== null &&
+    !isLoading &&
+    !isSaving &&
+    allValid &&
+    changedCount > 0 &&
+    requestReason.trim().length >= 5;
 
   useEffect(() => {
     let active = true;
-    fetchLpgPrices()
-      .then((rows) => {
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 10000);
+    Promise.all([
+      fetchLpgCatalog(regionCode, controller.signal),
+      fetchPricingRegions(controller.signal),
+    ])
+      .then(([loadedCatalog, loadedRegions]) => {
         if (!active) return;
-        const databasePrices = rows.reduce<PriceMap>((result, row) => {
-          result[row.cylinder_size] = formatPrice(row.unit_price);
-          return result;
-        }, { ...INITIAL_PRICES });
-        setPrices(databasePrices);
-        setSavedPrices(databasePrices);
-        setIsCatalogReady(true);
+        const loadedPrices = { ...EMPTY_PRICES };
+        for (const price of loadedCatalog.prices)
+          loadedPrices[price.cylinder_size] = formatPrice(price.unit_price);
+        setPrices(loadedPrices);
+        setCatalog(loadedCatalog);
+        setRegions(loadedRegions);
+        setLoadError(null);
       })
-      .catch((loadError: unknown) => {
-        if (active) {
-          toast.error(loadError instanceof Error ? loadError.message : 'Could not load prices.');
-        }
+      .catch((error: unknown) => {
+        if (!active) return;
+        setCatalog(null);
+        setLoadError(
+          controller.signal.aborted
+            ? 'Prices took too long to load. Please retry.'
+            : error instanceof Error
+              ? error.message
+              : 'Could not load LPG prices.',
+        );
       })
       .finally(() => {
+        window.clearTimeout(timeout);
         if (active) setIsLoading(false);
       });
     return () => {
       active = false;
+      controller.abort();
+      window.clearTimeout(timeout);
     };
-  }, []);
+  }, [regionCode, reload]);
 
-  const handlePriceChange = (id: CylinderId, value: string) => {
-    setPrices((current) => ({ ...current, [id]: value }));
-  };
+  function resetChanges() {
+    const saved = { ...EMPTY_PRICES };
+    for (const price of catalog?.prices ?? [])
+      saved[price.cylinder_size] = formatPrice(price.unit_price);
+    setPrices(saved);
+    setRequestReason('');
+    setTouched({});
+  }
 
-  const handleSave = async () => {
-    if (!isCatalogReady) {
-      toast.error('Reload the page before editing prices.');
-      return;
-    }
-    const normalizedPrices = CYLINDERS.reduce<PriceMap>((result, cylinder) => {
-      const amount = parsePrice(prices[cylinder.id]);
-      result[cylinder.id] = amount === null ? prices[cylinder.id] : formatPrice(amount);
-      return result;
-    }, { ...prices });
+  function switchRegion(next: string) {
+    setCatalog(null);
+    setPrices({ ...EMPTY_PRICES });
+    setRequestReason('');
+    setTouched({});
+    setIsLoading(true);
+    setLoadError(null);
+    setRegionCode(next);
+    setPendingRegion(null);
+  }
 
-    const hasInvalidPrice = CYLINDERS.some((cylinder) => {
-      const amount = parsePrice(prices[cylinder.id]);
-      return amount === null || amount <= 0;
-    });
+  function selectRegion(next: string) {
+    if (next === regionCode) return;
+    if (isDirty) setPendingRegion(next);
+    else switchRegion(next);
+  }
 
-    if (hasInvalidPrice) {
-      toast.error('Enter a valid price greater than zero for every cylinder size.');
-      return;
-    }
-
+  async function submitProposal(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!canSubmit || savingRef.current) return;
+    savingRef.current = true;
     setIsSaving(true);
     try {
       const response = await apiFetch('/governance/requests', {
         method: 'POST',
         body: JSON.stringify({
           type: 'price-configuration',
-          title: 'System-wide LPG price configuration',
+          title: regionCode
+            ? `${regionName} LPG price configuration`
+            : 'System-wide LPG price configuration',
           reason: requestReason.trim(),
-          riskLevel: 'medium',
           payload: {
-            prices: CYLINDERS.map((cylinder) => ({
-              cylinderSize: cylinder.id,
-              unitPrice: parsePrice(normalizedPrices[cylinder.id]),
+            ...(regionCode ? { regionCode } : {}),
+            prices: CYLINDER_SIZES.map((size) => ({
+              cylinderSize: size,
+              unitPrice: parsePrice(prices[size]),
             })),
           },
         }),
+        signal: AbortSignal.timeout(15000),
       });
       const data: unknown = await response.json().catch(() => null);
-      if (!response.ok) {
-        throw new Error(apiErrorMessage(data, 'Could not submit the price request.'));
-      }
-      setPrices({ ...savedPrices });
-      setRequestReason('');
+      if (!response.ok)
+        throw new Error(
+          apiErrorMessage(data, 'Could not submit the price proposal.'),
+        );
+      resetChanges();
       window.dispatchEvent(new Event('notifications:refresh'));
-      toast.success('Price change request submitted for Super Administrator approval.');
-    } catch (saveError) {
-      toast.error(saveError instanceof Error ? saveError.message : 'Could not submit the price request.');
+      toast.success(
+        'Proposal submitted. Prices will change only after Super Administrator approval.',
+      );
+    } catch (error: unknown) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : 'Could not submit the price proposal.',
+      );
     } finally {
+      savingRef.current = false;
       setIsSaving(false);
     }
-  };
-
-  const handleCancel = () => {
-    setPrices({ ...savedPrices });
-  };
+  }
 
   return (
     <div className="flex-1 overflow-y-auto bg-gray-50">
       <Header
         title="LPG Pricing"
-        description="Propose the standard retail price for each cylinder size. Changes apply only after Super Administrator approval."
+        description="Select a region and propose updated cylinder prices."
       />
-
-      <main className="mx-auto w-full max-w-[1540px] px-8 pb-8">
-        <div className="grid gap-10 xl:grid-cols-[minmax(0,7fr)_minmax(20rem,3fr)]">
-          <section aria-labelledby="cylinder-prices-heading" className="min-w-0 xl:pr-2">
-            <div className="min-h-[60px]">
-              <h2
-                id="cylinder-prices-heading"
-                className="text-lg font-semibold leading-[1.35] text-gray-900"
-              >
-                Cylinder prices
-              </h2>
-              <div className="mt-3 flex h-5 items-center gap-2 text-[13px] font-medium text-[#007BC1]">
-                <Building2 aria-hidden="true" className="h-5 w-5" />
-                <span>Applies to all active branches</span>
-              </div>
-            </div>
-
-            <div className="mt-7 grid grid-cols-1 gap-x-12 gap-y-7 md:grid-cols-2">
-              {CYLINDERS.map((cylinder) => (
-                <div key={cylinder.id}>
-                  <label
-                    htmlFor={`price-${cylinder.id}`}
-                    className="mb-2 block text-[13.5px] font-medium leading-5 text-gray-800"
-                  >
-                    {cylinder.label}
-                  </label>
-                  <div className="relative">
-                    <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-gray-500">
-                      ₱
-                    </span>
-                    <input
-                      id={`price-${cylinder.id}`}
-                      type="text"
-                      inputMode="decimal"
-                      autoComplete="off"
-                      value={prices[cylinder.id]}
-                      disabled={!isCatalogReady || isLoading || isSaving}
-                      onChange={(event) => handlePriceChange(cylinder.id, event.target.value)}
-                      aria-label={`${cylinder.label} base price in Philippine pesos`}
-                      className="h-12 w-full rounded-lg border border-gray-300 bg-white py-3 pl-10 pr-4 text-base font-normal tabular-nums text-gray-900 outline-none transition focus:border-[#007BC1] focus:ring-2 focus:ring-[#007BC1]/20"
-                    />
-                  </div>
+      <main className="mx-auto w-full max-w-[1440px] px-4 pb-8 sm:px-8">
+        <form
+          onSubmit={submitProposal}
+          className="rounded-xl border border-gray-200 bg-white"
+        >
+          <div className="flex flex-wrap items-start justify-between gap-4 border-b border-gray-200 p-5 sm:p-6">
+            <div className="w-full max-w-xl">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-5">
+                <span className="text-sm font-semibold text-gray-900">
+                  Region
+                </span>
+                <div className="min-w-0 flex-1">
+                  <PricingRegionSelect
+                    value={regionCode}
+                    regions={regions}
+                    onChange={selectRegion}
+                    disabled={isSaving || regions.length === 0}
+                  />
                 </div>
-              ))}
-            </div>
-          </section>
-
-          <aside
-            aria-labelledby="pricing-summary-heading"
-            className="min-w-0 border-t border-gray-200 pt-8 xl:border-l xl:border-t-0 xl:pl-10 xl:pt-0"
-          >
-            <div className="min-h-[60px]">
-              <h2
-                id="pricing-summary-heading"
-                className="text-lg font-semibold leading-[1.35] text-gray-900"
-              >
-                Pricing summary
-              </h2>
-
-              <div
-                aria-label="Price movement legend"
-                className="mt-3 flex h-5 flex-wrap items-center gap-x-5 gap-y-2 text-[13px] font-normal text-gray-500"
-              >
-                <span className="inline-flex items-center gap-2">
-                  <span aria-hidden="true" className="h-2.5 w-2.5 rounded-full bg-red-600" />
-                  Price increased
-                </span>
-                <span className="inline-flex items-center gap-2">
-                  <span aria-hidden="true" className="h-2.5 w-2.5 rounded-full bg-green-600" />
-                  Price decreased
-                </span>
               </div>
+              <p className="mt-2 text-xs leading-5 text-gray-500 sm:ml-[66px]">
+                {regionCode
+                  ? 'Prices apply to active branches assigned to this region.'
+                  : 'Default prices apply to branches without an approved regional price list.'}
+              </p>
             </div>
-
-            <div className="mt-7">
-              {CYLINDERS.map((cylinder) => {
-                const currentAmount = parsePrice(prices[cylinder.id]);
-                const { movement, delta } = getMovement(prices[cylinder.id], savedPrices[cylinder.id]);
-                const movementColor =
-                  movement === 'increase'
-                    ? 'text-red-600'
-                    : movement === 'decrease'
-                      ? 'text-green-600'
-                      : 'text-gray-500';
-
-                return (
-                  <div
-                    key={cylinder.id}
-                    className="grid min-h-[72px] grid-cols-[1.75rem_minmax(6.5rem,1fr)_minmax(5rem,auto)_4.25rem] items-center gap-x-2 border-b border-gray-200 last:border-b-0 2xl:grid-cols-[1.75rem_minmax(7rem,1fr)_minmax(5.5rem,auto)_4.75rem] 2xl:gap-x-3"
-                  >
-                    <CylinderIcon className={`h-8 w-6 ${movementColor}`} />
-                    <p className="whitespace-nowrap text-[13.5px] font-medium leading-5 text-gray-900">
-                      {cylinder.label}
+            {catalog && !isLoading && (
+              <span className="inline-flex items-center gap-2 rounded-lg bg-gray-100 px-3 py-2 text-xs text-gray-600">
+                <CheckCircle2 aria-hidden="true" className="h-4 w-4" />
+                {catalog.source === 'regional'
+                  ? 'Approved regional prices loaded'
+                  : 'System-wide defaults loaded'}
+              </span>
+            )}
+          </div>
+          <div className="p-5 sm:p-6">
+            {isLoading ? (
+              <div
+                role="status"
+                className="flex min-h-72 items-center justify-center gap-3 text-sm text-gray-500"
+              >
+                <Loader2
+                  aria-hidden="true"
+                  className="h-5 w-5 animate-spin text-[#007BC1]"
+                />
+                Loading prices…
+              </div>
+            ) : loadError ? (
+              <div
+                role="alert"
+                className="rounded-lg border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900"
+              >
+                <p>{loadError}</p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsLoading(true);
+                    setLoadError(null);
+                    setReload((value) => value + 1);
+                  }}
+                  className="mt-3 font-semibold underline underline-offset-4"
+                >
+                  Retry loading prices
+                </button>
+              </div>
+            ) : (
+              catalog && (
+                <>
+                  {regionCode && catalog.source === 'system-wide' && (
+                    <p className="mb-5 flex items-start gap-2 rounded-lg bg-blue-50 p-3 text-xs leading-5 text-[#007BC1]">
+                      <Info
+                        aria-hidden="true"
+                        className="mt-0.5 h-4 w-4 shrink-0"
+                      />
+                      No regional price list has been approved yet. Current
+                      prices use the system-wide default.
                     </p>
-                    <span className="whitespace-nowrap text-right text-sm font-semibold tabular-nums text-gray-900">
-                      ₱ {currentAmount === null ? '—' : formatPrice(currentAmount)}
-                    </span>
-                    <span className="flex justify-end">
-                      <MovementIndicator movement={movement} delta={delta} />
-                    </span>
+                  )}
+                  <h2 className="mb-4 text-lg font-semibold text-gray-900">
+                    Cylinder prices
+                  </h2>
+                  <div className="overflow-x-auto">
+                    <table className="w-full min-w-[620px] text-left text-sm">
+                      <caption className="sr-only">
+                        Current and proposed cylinder prices for {regionName}
+                      </caption>
+                      <thead className="bg-gray-100 text-xs font-medium text-gray-500">
+                        <tr>
+                          <th scope="col" className="rounded-l-lg px-4 py-3">
+                            Cylinder size
+                          </th>
+                          <th scope="col" className="px-4 py-3">
+                            Current price
+                          </th>
+                          <th scope="col" className="px-4 py-3">
+                            Proposed price
+                          </th>
+                          <th scope="col" className="rounded-r-lg px-4 py-3">
+                            Change
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {CYLINDER_SIZES.map((size) => {
+                          const amount = parsePrice(prices[size]);
+                          const saved = savedPrices.get(size)!;
+                          const delta =
+                            amount === null
+                              ? 0
+                              : Math.round((amount - saved) * 100) / 100;
+                          const invalid =
+                            Boolean(touched[size]) && amount === null;
+                          return (
+                            <tr
+                              key={size}
+                              className={`border-b border-gray-100 ${delta !== 0 ? 'bg-blue-50/70' : ''}`}
+                            >
+                              <th
+                                scope="row"
+                                className="px-4 py-4 font-medium text-gray-900"
+                              >
+                                <span className="flex items-center gap-3">
+                                  <CylinderIcon />
+                                  {size} Cylinder
+                                </span>
+                              </th>
+                              <td className="px-4 py-4 tabular-nums text-gray-900">
+                                ₱ {formatPrice(saved)}
+                              </td>
+                              <td className="w-[32%] px-4 py-3">
+                                <div
+                                  className={`flex items-center overflow-hidden rounded-lg border bg-white focus-within:border-[#007BC1] focus-within:ring-2 focus-within:ring-[#007BC1]/20 ${invalid ? 'border-red-500' : delta !== 0 ? 'border-[#007BC1]' : 'border-gray-300'}`}
+                                >
+                                  <span
+                                    aria-hidden="true"
+                                    className="border-r border-gray-200 px-3 text-gray-500"
+                                  >
+                                    ₱
+                                  </span>
+                                  <input
+                                    aria-label={`${size} Cylinder proposed price in Philippine pesos`}
+                                    aria-invalid={invalid}
+                                    aria-describedby={
+                                      invalid
+                                        ? `price-error-${size}`
+                                        : undefined
+                                    }
+                                    inputMode="decimal"
+                                    autoComplete="off"
+                                    value={prices[size]}
+                                    disabled={isSaving}
+                                    onChange={(event) =>
+                                      setPrices((current) => ({
+                                        ...current,
+                                        [size]: event.target.value,
+                                      }))
+                                    }
+                                    onBlur={() => {
+                                      setTouched((current) => ({
+                                        ...current,
+                                        [size]: true,
+                                      }));
+                                      if (amount !== null)
+                                        setPrices((current) => ({
+                                          ...current,
+                                          [size]: formatPrice(amount),
+                                        }));
+                                    }}
+                                    className="h-10 min-w-0 w-full px-3 text-sm tabular-nums text-gray-900 outline-none disabled:opacity-60"
+                                  />
+                                </div>
+                                {invalid && (
+                                  <p
+                                    id={`price-error-${size}`}
+                                    className="mt-1 text-xs text-red-600"
+                                  >
+                                    Enter a positive price with up to 2
+                                    decimals.
+                                  </p>
+                                )}
+                              </td>
+                              <td className="px-4 py-4 tabular-nums">
+                                {amount === null ? (
+                                  <span className="text-xs text-gray-500">
+                                    Invalid price
+                                  </span>
+                                ) : delta === 0 ? (
+                                  <span className="text-gray-400">
+                                    <span aria-hidden="true">—</span>
+                                    <span className="sr-only">No change</span>
+                                  </span>
+                                ) : (
+                                  <span
+                                    className={`whitespace-nowrap font-semibold ${delta > 0 ? 'text-red-600' : 'text-green-600'}`}
+                                  >
+                                    {delta > 0 ? '+' : '−'}₱
+                                    {formatPrice(Math.abs(delta))}
+                                  </span>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
                   </div>
-                );
-              })}
+                  <label
+                    htmlFor="price-request-reason"
+                    className="mb-2 mt-5 block text-sm font-medium text-gray-900"
+                  >
+                    Reason for change <span className="text-red-600">*</span>
+                  </label>
+                  <textarea
+                    id="price-request-reason"
+                    value={requestReason}
+                    onChange={(event) => setRequestReason(event.target.value)}
+                    required
+                    minLength={5}
+                    maxLength={1000}
+                    disabled={isSaving}
+                    rows={2}
+                    placeholder="Explain why the price adjustment is needed…"
+                    aria-describedby="price-reason-help"
+                    className="w-full rounded-lg border border-gray-300 bg-white p-3 text-sm outline-none focus:border-[#007BC1] focus:ring-2 focus:ring-[#007BC1]/20 disabled:opacity-60"
+                  />
+                  <p
+                    id="price-reason-help"
+                    className="mt-1 text-xs text-gray-500"
+                  >
+                    Use at least 5 characters.
+                  </p>
+                </>
+              )
+            )}
+          </div>
+          <div className="flex flex-col gap-4 border-t border-gray-200 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+            <div aria-live="polite">
+              <p className="text-sm font-semibold text-gray-900">
+                {changedCount} {changedCount === 1 ? 'price' : 'prices'} changed
+                · {regionName}
+              </p>
+              <p className="mt-1 text-xs leading-5 text-gray-500">
+                Changes take effect after Super Administrator approval.
+              </p>
             </div>
-
-            <p className="mt-4 flex items-start gap-2 text-xs font-normal leading-5 text-gray-500">
-              <Info aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0 text-[#007BC1]" />
-              <span>Approved changes affect every branch. Current order prices remain snapshotted.</span>
-            </p>
-
-            <label className="mt-6 block text-[13.5px] font-medium text-gray-800">
-              Request reason <span className="text-red-600">*</span>
-              <textarea
-                value={requestReason}
-                onChange={(event) => setRequestReason(event.target.value)}
-                rows={4}
-                placeholder="Explain why this system-wide price adjustment is needed…"
-                className="mt-2 w-full resize-none rounded-lg border border-gray-300 bg-white p-3 text-sm font-normal outline-none transition focus:border-[#007BC1] focus:ring-2 focus:ring-[#007BC1]/20"
-              />
-            </label>
-          </aside>
-        </div>
-
-        <div className="mt-9 flex items-center justify-end gap-3 border-t border-gray-200 pt-5">
-          <button
-            type="button"
-            onClick={handleCancel}
-            className="rounded-lg px-6 py-2.5 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#007BC1]/30"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={!hasChanges || requestReason.trim().length < 5 || !isCatalogReady || isLoading || isSaving}
-            className={`rounded-lg px-7 py-2.5 text-sm font-semibold text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 ${
-              hasChanges && requestReason.trim().length >= 5 && isCatalogReady && !isLoading && !isSaving
-                ? 'bg-[#007BC1] hover:bg-[#006aa6] focus-visible:ring-[#007BC1]/35'
-                : 'cursor-not-allowed bg-gray-400'
-            }`}
-          >
-            {isLoading ? 'Loading…' : isSaving ? 'Submitting…' : 'Submit for approval'}
-          </button>
-        </div>
+            <div className="flex shrink-0 items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={resetChanges}
+                disabled={!catalog || !isDirty || isSaving || isLoading}
+                className="rounded-lg px-3 py-2.5 text-sm font-semibold text-[#007BC1] outline-none hover:bg-blue-50 focus-visible:ring-2 focus-visible:ring-[#007BC1]/30 disabled:opacity-40"
+              >
+                Reset changes
+              </button>
+              <button
+                type="submit"
+                disabled={!canSubmit}
+                className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#007BC1] px-6 py-2.5 text-sm font-semibold text-white outline-none hover:bg-[#006aa6] focus-visible:ring-2 focus-visible:ring-[#007BC1]/35 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {isSaving && (
+                  <Loader2
+                    aria-hidden="true"
+                    className="h-4 w-4 animate-spin"
+                  />
+                )}
+                {isSaving ? 'Submitting…' : 'Submit proposal'}
+              </button>
+            </div>
+          </div>
+        </form>
+        <p className="mt-3 flex items-start gap-2 text-xs leading-5 text-gray-500">
+          <Info
+            aria-hidden="true"
+            className="mt-0.5 h-4 w-4 shrink-0 text-[#007BC1]"
+          />
+          Existing service requests retain their recorded prices.
+        </p>
       </main>
+      <AlertDialog
+        open={pendingRegion !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingRegion(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Discard unsent changes?</AlertDialogTitle>
+            <AlertDialogDescription>
+              You have unsent changes for {regionName}. Switching regions will
+              discard those changes.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep editing</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (pendingRegion !== null) switchRegion(pendingRegion);
+              }}
+            >
+              Discard and switch
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

@@ -10,6 +10,7 @@ test('Branch Manager guide registers via the cloud API without claiming live GPS
     const supabaseUrl = env.match(/^NEXT_PUBLIC_SUPABASE_URL=(.+)$/m)?.[1]?.trim();
     assert.ok(supabaseUrl, 'Local public Supabase URL is required');
     const projectRef = new URL(supabaseUrl).hostname.split('.')[0];
+    const baseUrl = process.env.TEST_BASE_URL ?? 'http://localhost:3000';
     const cloudOrigin = 'https://superkalan-crm-api-7icfrdyg5a-as.a.run.app';
     const user = {
         id: '00000000-0000-4000-8000-000000000001',
@@ -38,7 +39,7 @@ test('Branch Manager guide registers via the cloud API without claiming live GPS
         await context.route('**/*', async route => {
             const request = route.request();
             const url = new URL(request.url());
-            if (url.origin === 'http://localhost:3000') return route.continue();
+            if (url.origin === new URL(baseUrl).origin) return route.continue();
             if (url.origin === new URL(supabaseUrl).origin && url.pathname === '/auth/v1/user') {
                 return route.fulfill({ json: user });
             }
@@ -58,8 +59,8 @@ test('Branch Manager guide registers via the cloud API without claiming live GPS
             return route.fulfill({ json: { serviceRequests: [], riders: [], summary: null, ratings: [], stockLevels: [], notifications: [], unreadCount: 0 } });
         });
         const page = await context.newPage();
-        await page.goto('http://localhost:3000');
-        await page.getByRole('button', { name: 'Vehicles', exact: true }).click();
+        await page.goto(baseUrl);
+        await page.getByRole('link', { name: 'Vehicles', exact: true }).click();
         await page.getByRole('button', { name: 'Connect SinoTrack', exact: true }).click();
         const dialog = page.getByRole('dialog');
         for (let step = 0; step < 3; step++) await dialog.getByRole('button', { name: 'Next', exact: true }).click();

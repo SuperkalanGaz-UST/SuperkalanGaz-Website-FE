@@ -22,6 +22,7 @@ export interface BranchRow {
   address: string | null;
   city: string | null;
   province: string | null;
+  region: string | null;
   geofence: BranchGeofence | null;
   created_at: string;
 }

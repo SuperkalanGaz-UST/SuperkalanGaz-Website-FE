@@ -29,22 +29,27 @@ function PayloadDetails({ request }: { request: GovernanceRequest }) {
   const prices = Array.isArray(request.payload.prices)
     ? (request.payload.prices as Record<string, unknown>[])
     : [];
+  const currentPrices = Array.isArray(request.payload.currentPrices)
+    ? request.payload.currentPrices as Record<string, unknown>[] : [];
   return (
     <div className="space-y-3">
       {entries.map(([key, value]) => (
         <div key={key} className="grid grid-cols-[10rem_1fr] gap-4 text-sm">
-          <span className="text-gray-500">{humanize(key)}</span>
+          <span className="text-gray-500">{key === 'regionCode' ? 'Pricing region' : humanize(key)}</span>
           <span className="font-medium text-gray-900">{String(value ?? '—')}</span>
         </div>
       ))}
       {prices.length > 0 && (
         <div className="rounded-xl border border-blue-100 bg-blue-50/50 p-4">
-          <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">Proposed prices</p>
-          <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
+          <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">{currentPrices.length ? 'Current → Proposed prices' : 'Proposed prices'}</p>
+          <div className="mt-3 space-y-2 text-sm">
             {prices.map((price) => (
               <div key={String(price.cylinderSize)} className="flex justify-between rounded-lg bg-white px-3 py-2">
                 <span>{String(price.cylinderSize)}</span>
-                <span className="font-semibold">₱{Number(price.unitPrice).toLocaleString('en-PH', { minimumFractionDigits: 2 })}</span>
+                <span className="font-semibold tabular-nums">
+                  {currentPrices.find((row) => row.cylinderSize === price.cylinderSize) && <span className="font-normal text-gray-500">₱{Number(currentPrices.find((row) => row.cylinderSize === price.cylinderSize)?.unitPrice).toLocaleString('en-PH', { minimumFractionDigits: 2 })} → </span>}
+                  ₱{Number(price.unitPrice).toLocaleString('en-PH', { minimumFractionDigits: 2 })}
+                </span>
               </div>
             ))}
           </div>

@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import type { BranchRow } from "./BranchSettings";
 import { ProvinceCombobox } from "./ProvinceCombobox";
 import { CityMunicipalityCombobox } from "./CityMunicipalityCombobox";
+import { BranchPricingRegionField } from './BranchPricingRegionField';
 import { provinceFocus } from "../lib/phProvinces";
 import { cityMunicipalityFocus } from "../lib/phCitiesMunicipalities";
 import { formatPhMobileNational, normalizePhMobile } from "../lib/phMobile";
@@ -50,6 +51,7 @@ export function EditBranchModal({ branch, onClose, onSaved }: EditBranchModalPro
   const [address, setAddress] = useState(branch.address ?? "");
   const [city, setCity] = useState(branch.city ?? "");
   const [province, setProvince] = useState(branch.province ?? "");
+  const [region, setRegion] = useState(branch.region ?? '');
 
   // --- Geofence (draw-on-map polygon) ---
   const [points, setPoints] = useState<[number, number][]>(branch.geofence?.points ?? []);
@@ -147,6 +149,7 @@ export function EditBranchModal({ branch, onClose, onSaved }: EditBranchModalPro
           address: address.trim(),
           city: city.trim(),
           province: province.trim(),
+          region: region || null,
           geofence: polygonClosed ? { type: "polygon", points } : null,
         }),
       });
@@ -222,6 +225,7 @@ export function EditBranchModal({ branch, onClose, onSaved }: EditBranchModalPro
         <div className="p-6 space-y-6">
           {/* Branch details */}
           <div className="space-y-4">
+            <BranchPricingRegionField value={region} onChange={setRegion} disabled={submitting} />
             <div>
               <label className={label}>Branch name</label>
               <input value={name} onChange={(e) => setName(e.target.value)} className={field} />
