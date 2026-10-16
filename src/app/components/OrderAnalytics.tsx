@@ -1,108 +1,44 @@
-import { Header } from "./Header";
-import { KPICard } from "./KPICard";
-import { DailyOrderVolumeChart } from "./DailyOrderVolumeChart";
-import { OrdersByStatusChart } from "./OrdersByStatusChart";
-import { DeliveryCompletionTable } from "./DeliveryCompletionTable";
-import { ShoppingCart, CheckCircle2, XCircle, Truck } from "lucide-react";
+import { useState } from 'react';
+import { ArrowUpRight, CheckCircle2, ShoppingCart, Truck, XCircle } from 'lucide-react';
+import { Header } from './Header';
+import { DailyOrderVolumeChart } from './DailyOrderVolumeChart';
+import { OrdersByStatusChart } from './OrdersByStatusChart';
+import { DeliveryCompletionTable } from './DeliveryCompletionTable';
+import { OrdersReport, reportPercent, useFranchiseReport } from '../lib/franchise-reports';
+import { ReportBranchSelect, ReportMetric, ReportScope, ReportStatus, ReportTable, reportCell } from './FranchiseReportUi';
+import styles from './FranchiseReports.module.css';
 
-const topCustomers = [
-  { name: 'Maria Dela Cruz Santos', branch: 'Quezon City', totalOrders: 18, loyaltyPoints: '18/30', avgRating: 4.2 },
-  { name: 'Kainan ni Aling Nena',   branch: 'Calamba',     totalOrders: 14, loyaltyPoints: '14/30', avgRating: 4.7 },
-  { name: 'Pedro Penduko',           branch: 'Sta. Rosa',   totalOrders: 12, loyaltyPoints: '12/30', avgRating: 3.9 },
-  { name: 'Carlos Miguel',           branch: 'Quezon City', totalOrders: 11, loyaltyPoints: '11/30', avgRating: 4.5 },
-  { name: 'Sofia Cruz',              branch: 'Calamba',     totalOrders: 9,  loyaltyPoints: '9/30',  avgRating: 4.1 },
-];
-
-export function OrderAnalytics() {
-  return (
-    <div className="flex-1 overflow-y-auto">
-      <div style={{ position: 'static' }}>
-        <Header title="Branch Accounts" />
-      </div>
-
-      <div className="p-8">
-        <div className="grid grid-cols-4 gap-6 mb-8">
-          <KPICard
-            title="Total Orders This Month"
-            value="1,847"
-            icon={<ShoppingCart className="w-4 h-4 text-[#eab308]" />}
-            accentColor="#eab308"
-            trend={{ text: '+6.2% from last month', direction: 'up', positive: true }}
-          />
-          <KPICard
-            title="Total Completed Deliveries"
-            value="1,739"
-            icon={<CheckCircle2 className="w-4 h-4 text-[#22c55e]" />}
-            accentColor="#22c55e"
-            trend={{ text: '+4.8% from last month', direction: 'up', positive: true }}
-          />
-          <KPICard
-            title="Total Cancelled / Failed"
-            value="108"
-            icon={<XCircle className="w-4 h-4 text-[#ef4444]" />}
-            accentColor="#ef4444"
-            trend={{ text: '-1.5% from last month', direction: 'down', positive: false }}
-          />
-          <KPICard
-            title="Avg. Delivery Completion Rate"
-            value="96.4%"
-            icon={<Truck className="w-4 h-4 text-[#1A6FBF]" />}
-            accentColor="#1A6FBF"
-            trend={{ text: 'Across all branches', direction: 'up', positive: true }}
-          />
+export function OrderAnalytics({ onViewCustomer }: { onViewCustomer: (id: string) => void }) {
+  const [branchId, setBranchId] = useState('');
+  const query = useFranchiseReport<OrdersReport>('orders', { branchId });
+  const report = query.data;
+  return <div className={styles.page}>
+    <Header title="Branch Accounts" />
+    <div className={styles.content}>
+      <div className={styles.toolbar}><ReportScope label="Current month (Manila)" /><ReportBranchSelect value={branchId} onChange={setBranchId} /></div>
+      <ReportStatus loading={query.isLoading} error={query.error} retry={query.refetch} />
+      {!query.error && report && <>
+        <div className={styles.metrics}>
+          <ReportMetric title="Total Orders" value={report.total.toLocaleString()} description="Service requests this month" icon={<ShoppingCart size={18} />} primary />
+          <ReportMetric title="Completed Deliveries" value={report.delivered.toLocaleString()} description="Orders marked as delivered" icon={<CheckCircle2 size={18} />} />
+          <ReportMetric title="Cancelled Orders" value={report.cancelled.toLocaleString()} description="Orders marked as cancelled" icon={<XCircle size={18} />} />
+          <ReportMetric title="Completion Rate" value={reportPercent(report.delivered, report.total)} description="Delivered out of all monthly orders" icon={<Truck size={18} />} />
         </div>
-
-        <div className="grid grid-cols-2 gap-6 mb-8">
-          <DailyOrderVolumeChart />
-          <OrdersByStatusChart />
+        <div className={styles.charts}><DailyOrderVolumeChart data={report.daily} /><OrdersByStatusChart data={report.statuses} /></div>
+        <DeliveryCompletionTable rows={report.completion} />
+        <div className={styles.panel}>
+          <div className={styles.panelHeader}><div><h3 className={styles.panelTitle}>Top customers</h3><p className={styles.panelSubtitle}>Highest order volumes for the current month</p></div><span className={styles.badge}>Top 5</span></div>
+          <ReportTable headers={['Rank', 'Customer', 'Branch', 'Orders', '']} empty={!report.topCustomers.length}>
+            {report.topCustomers.map((c, index) => <tr key={c.id}>
+              <td className={reportCell}><span className={styles.rank}>{String(index + 1).padStart(2, '0')}</span></td>
+              <td className={reportCell}><span className={styles.cellStrong}>{c.name}</span></td>
+              <td className={reportCell}><span className={styles.badge}>{c.branch}</span></td>
+              <td className={reportCell}><span className={styles.cellStrong}>{c.totalOrders}</span></td>
+              <td className={reportCell}><button className={styles.linkButton} onClick={() => onViewCustomer(c.id)}>View profile<ArrowUpRight size={14} aria-hidden="true" /></button></td>
+            </tr>)}
+          </ReportTable>
         </div>
-
-        <DeliveryCompletionTable />
-
-        {/* Top Customers Table */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mt-6">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h3 className="font-semibold text-gray-900">Top Customers</h3>
-              <p className="text-xs text-gray-500 mt-0.5">Customers with the highest order volumes across all branches</p>
-            </div>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-gray-200">
-                  <th className="text-left text-[11px] font-medium text-gray-600 pb-3">Customer Name</th>
-                  <th className="text-left text-[11px] font-medium text-gray-600 pb-3">Primary Branch</th>
-                  <th className="text-left text-[11px] font-medium text-gray-600 pb-3">Total Orders</th>
-                  <th className="text-left text-[11px] font-medium text-gray-600 pb-3">Loyalty Points</th>
-                  <th className="text-left text-[11px] font-medium text-gray-600 pb-3">Avg. Rating</th>
-                  <th className="text-left text-[11px] font-medium text-gray-600 pb-3"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {topCustomers.map((c, idx) => (
-                  <tr key={idx} className="border-b border-gray-100 last:border-0">
-                    <td className="py-3 text-[13px] font-medium text-gray-900">{c.name}</td>
-                    <td className="py-3 text-[13px] text-gray-600">{c.branch}</td>
-                    <td className="py-3 text-[13px] text-gray-600">{c.totalOrders}</td>
-                    <td className="py-3 text-[13px] text-gray-600">{c.loyaltyPoints}</td>
-                    <td className="py-3 text-[13px] text-gray-600">{c.avgRating} ★</td>
-                    <td className="py-3">
-                      <a
-                        href="#"
-                        onClick={(e) => { e.preventDefault(); window.dispatchEvent(new CustomEvent('navigate', { detail: 'customers' })); }}
-                        className="text-[11px] text-[#007BC1] hover:text-[#005a8f] font-medium transition-colors"
-                      >
-                        View →
-                      </a>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
+      </>}
     </div>
-  );
+  </div>;
 }

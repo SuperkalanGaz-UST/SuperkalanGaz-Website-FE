@@ -68,6 +68,7 @@ const CATEGORY_CLASS: Record<ExpenseCategory, string> = {
   Communication: styles.categoryCommunication,
   'Branch Supplies': styles.categorySupplies,
   'Facility Costs': styles.categoryFacility,
+  'Salary & Wages': styles.categoryFacility,
 };
 
 function toDateInputValue(date: Date): string {

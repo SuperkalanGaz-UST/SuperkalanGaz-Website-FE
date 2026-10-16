@@ -218,7 +218,6 @@ export function GovernanceRequests() {
     <div className="flex-1 overflow-y-auto bg-slate-50">
       <Header
         title="Governance Requests"
-        description="Submit controlled changes for Super Administrator review and track every decision."
       />
 
       <main className="mx-auto w-full max-w-[1540px] space-y-7 px-8 pb-10">

@@ -19,7 +19,9 @@ import {
 import { Header } from './Header';
 import { KPICard } from './KPICard';
 import { Select } from './Select';
-import { Wallet, Fuel, Wrench, Zap, Package, Building2 } from 'lucide-react';
+import { Fuel, Wrench, Zap, Package, Building2, Users } from 'lucide-react';
+import styles from './OperationalExpenses.module.css';
+import { Tooltip as CardTooltip, TooltipTrigger, TooltipContent } from '../../components/ui/tooltip';
 
 const TREND_CATEGORY_OPTIONS = [
   { value: 'all', label: 'All Categories' },
@@ -33,6 +35,7 @@ const CATEGORY_COLORS: Record<ExpenseCategory, string> = {
   Communication: '#76B4DD',
   'Branch Supplies': '#AED6F1',
   'Facility Costs': '#1a5f8a',
+  'Salary & Wages': '#2E86C1',
 };
 
 const CATEGORY_STYLES: Record<ExpenseCategory, string> = {
@@ -42,6 +45,7 @@ const CATEGORY_STYLES: Record<ExpenseCategory, string> = {
   Communication: 'bg-blue-50 text-blue-700',
   'Branch Supplies': 'bg-indigo-100 text-indigo-800',
   'Facility Costs': 'bg-slate-100 text-slate-800',
+  'Salary & Wages': 'bg-slate-100 text-slate-800',
 };
 
 interface MonthExpenses {
@@ -194,6 +198,8 @@ export function OperationalExpenses() {
     categoryData.find((entry) => entry.category === category)?.amount ?? 0;
 
   const utilitiesAndCommunication = categoryTotal('Utilities') + categoryTotal('Communication');
+  const monthCaption = new Intl.DateTimeFormat('en-PH', { month: 'long', year: 'numeric' })
+    .format(new Date(`${descriptors.at(-1)!.key}-01T00:00:00`));
   const recentExpenses = currentExpenses.slice(0, 6);
   const placeholder = loading ? '—' : '';
 
@@ -219,15 +225,21 @@ export function OperationalExpenses() {
         )}
 
         {!error && (
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-6">
-            <KPICard
-              title="Total This Month"
-              value={loading ? placeholder : formatPeso(currentTotal)}
-              icon={<Wallet className="w-4 h-4 text-[#007BC1]" />}
-              accentColor="#007BC1"
-              titleClassName="min-h-[40px]"
-              tooltip={loading ? undefined : <span>{currentExpenses.length} transactions recorded this month</span>}
-            />
+          <div className={`${styles.kpiGrid} gap-4`}>
+            <CardTooltip>
+              <TooltipTrigger asChild>
+                <div className="flex flex-col rounded-2xl border border-[#007BC1] bg-[#007BC1] p-6 text-white shadow-sm">
+                  <p className={`${styles.totalCard} text-sm font-medium text-white/80`}>Total Expenses This Month</p>
+                  <p className="font-bold leading-none">{loading ? placeholder : formatPeso(currentTotal)}</p>
+                  {!loading && <p className={`${styles.monthCaption} text-white/80`}>{monthCaption}</p>}
+                </div>
+              </TooltipTrigger>
+              {!loading && (
+                <TooltipContent side="top" className="max-w-[240px] text-left leading-relaxed">
+                  <span>{currentExpenses.length} transactions recorded this month</span>
+                </TooltipContent>
+              )}
+            </CardTooltip>
             <KPICard
               title="Fuel & Oil"
               value={loading ? placeholder : formatPeso(categoryTotal('Gasoline, Fuel & Oil'))}
@@ -267,6 +279,14 @@ export function OperationalExpenses() {
               accentColor="#2E86C1"
               titleClassName="min-h-[40px]"
               tooltip={loading ? undefined : <span>{pctOfTotal(categoryTotal('Facility Costs'))}</span>}
+            />
+            <KPICard
+              title="Salary & Wages"
+              value={loading ? placeholder : formatPeso(categoryTotal('Salary & Wages'))}
+              icon={<Users className="w-4 h-4 text-[#2E86C1]" />}
+              accentColor="#2E86C1"
+              titleClassName="min-h-[40px]"
+              tooltip={loading ? undefined : <span>{pctOfTotal(categoryTotal('Salary & Wages'))}</span>}
             />
           </div>
         )}

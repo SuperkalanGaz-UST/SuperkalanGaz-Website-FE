@@ -163,7 +163,6 @@ export function StaffAccountReviews() {
     <div className="flex-1 overflow-y-auto bg-slate-50">
       <Header
         title="Account Reviews"
-        description="Review Branch Owner and Branch Manager registrations for authorized branches."
       />
 
       <main className="mx-auto w-full max-w-[1540px] px-8 pb-10">

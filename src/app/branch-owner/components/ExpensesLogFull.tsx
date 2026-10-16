@@ -20,6 +20,7 @@ const CATEGORY_STYLES: Record<ExpenseCategory, string> = {
   Communication: 'bg-cyan-100 text-cyan-800',
   'Branch Supplies': 'bg-violet-100 text-violet-800',
   'Facility Costs': 'bg-rose-100 text-rose-800',
+  'Salary & Wages': 'bg-rose-100 text-rose-800',
 };
 
 interface MonthOption {

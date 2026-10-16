@@ -88,7 +88,7 @@ export function PurchaseTrackerFull({ onBack }: { onBack: () => void }) {
 
   return (
     <div className="flex-1 overflow-y-auto">
-      <div style={{ position: 'static' }} className="pt-4">
+      <div style={{ position: 'static' }}>
         <Header title="Customer Directory" />
       </div>
 

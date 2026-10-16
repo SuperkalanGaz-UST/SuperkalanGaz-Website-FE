@@ -7,6 +7,7 @@ export const EXPENSE_CATEGORIES = [
   'Communication',
   'Branch Supplies',
   'Facility Costs',
+  'Salary & Wages',
 ] as const;
 
 export type ExpenseCategory = (typeof EXPENSE_CATEGORIES)[number];

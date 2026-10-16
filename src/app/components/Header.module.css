@@ -1,0 +1,13 @@
+.header {
+  min-width: 0;
+}
+
+.header h1 {
+  overflow-wrap: anywhere;
+}
+
+/* Wrapped legacy screens already have p-8. Direct siblings need the same
+   header-to-content gap; this leaves their inner layouts and side padding intact. */
+.header + :is(div, main) {
+  padding-top: 2rem;
+}

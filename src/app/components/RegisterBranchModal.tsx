@@ -389,7 +389,6 @@ export function RegisterBranchModal({ isOpen, onClose }: RegisterBranchModalProp
           <div className="flex items-start justify-between">
             <div>
               <h2 className="text-[17px] font-medium text-[#1A1A18]">Register new branch account</h2>
-              <p className="text-[13px] text-[#6B6B67] mt-1">System Admin · Franchise Registry</p>
             </div>
             <button
               onClick={onClose}
@@ -400,38 +399,34 @@ export function RegisterBranchModal({ isOpen, onClose }: RegisterBranchModalProp
           </div>
 
           {/* Step Progress Bar */}
-          <div className="flex items-center gap-3 mt-6">
+          <div className="grid grid-cols-4 mt-6">
             {steps.map((step, idx) => (
-              <div key={step.number} className="flex items-center gap-3 flex-1">
-                <div className="flex flex-col items-center gap-2 flex-1">
-                  <div className="flex items-center gap-2 w-full">
-                    <div
-                      className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-medium ${
-                        step.status === 'completed'
-                          ? 'bg-[#1D9E75] text-white'
-                          : step.status === 'active'
-                          ? 'bg-[#185FA5] text-white'
-                          : 'border border-[#E4E4E0] text-[#6B6B67]'
-                      }`}
-                    >
-                      {step.status === 'completed' ? <Check className="w-4 h-4" /> : step.number}
-                    </div>
-                    {idx < steps.length - 1 && (
-                      <div className={`h-[1px] flex-1 ${idx === 0 && currentStep > 1 ? 'bg-[#1D9E75]' : 'bg-[#E4E4E0]'}`} />
-                    )}
-                  </div>
-                  <span
-                    className={`text-[11px] whitespace-nowrap ${
-                      step.status === 'completed'
-                        ? 'text-[#0F6E56]'
-                        : step.status === 'active'
-                        ? 'text-[#185FA5]'
-                        : 'text-[#6B6B67]'
-                    }`}
-                  >
-                    {step.label}
-                  </span>
+              <div key={step.number} className="relative flex flex-col items-center text-center gap-2 min-w-0">
+                <div
+                  className={`w-7 h-7 shrink-0 rounded-full flex items-center justify-center text-xs font-medium ${
+                    step.status === 'completed'
+                      ? 'bg-[#1D9E75] text-white'
+                      : step.status === 'active'
+                      ? 'bg-[#185FA5] text-white'
+                      : 'border border-[#E4E4E0] text-[#6B6B67]'
+                  }`}
+                >
+                  {step.status === 'completed' ? <Check className="w-4 h-4" /> : step.number}
                 </div>
+                {idx < steps.length - 1 && (
+                  <div className={`absolute top-[14px] -translate-y-1/2 left-[calc(50%+22px)] right-[calc(-50%+22px)] h-[1px] ${idx === 0 && currentStep > 1 ? 'bg-[#1D9E75]' : 'bg-[#E4E4E0]'}`} />
+                )}
+                <span
+                  className={`text-[11px] max-w-full whitespace-normal ${
+                    step.status === 'completed'
+                      ? 'text-[#0F6E56]'
+                      : step.status === 'active'
+                      ? 'text-[#185FA5]'
+                      : 'text-[#6B6B67]'
+                  }`}
+                >
+                  {step.label}
+                </span>
               </div>
             ))}
           </div>

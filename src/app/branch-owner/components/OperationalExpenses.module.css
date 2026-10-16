@@ -1,0 +1,75 @@
+.kpiGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.kpiGrid > div {
+  min-width: 0;
+  min-height: 0;
+  height: auto;
+  justify-content: flex-start;
+}
+
+.kpiGrid > div:not(:has(.totalCard)) {
+  padding-block: 14px;
+}
+
+.kpiGrid > div > div:first-child {
+  margin-bottom: 0;
+  min-width: 0;
+}
+
+.kpiGrid > div > div:first-child > div:first-child {
+  min-width: 0;
+}
+
+.kpiGrid > div > div:first-child > div:last-child {
+  flex-shrink: 0;
+}
+
+.kpiGrid > div > div:first-child > div:first-child > div {
+  min-height: 0;
+}
+
+.kpiGrid > div > div:nth-child(2) {
+  margin-top: 8px;
+}
+
+.kpiGrid > div:has(.totalCard) {
+  grid-column: 1 / -1;
+  grid-row: 1;
+  align-self: stretch;
+  align-items: flex-start;
+  justify-content: center;
+  text-align: left;
+  padding-inline: 20px;
+  gap: 8px;
+  overflow-wrap: anywhere;
+}
+
+.kpiGrid > div:has(.totalCard) > p:nth-child(2) {
+  font-size: 2.109375rem;
+}
+
+.monthCaption {
+  margin-top: 16px;
+  font-size: 12px;
+}
+
+@media (min-width: 700px) {
+  .kpiGrid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1100px) {
+  .kpiGrid {
+    grid-template-columns: minmax(0, 1.2fr) repeat(3, minmax(0, 1fr));
+  }
+
+  .kpiGrid > div:has(.totalCard) {
+    grid-column: 1;
+    grid-row: 1 / span 2;
+  }
+}
