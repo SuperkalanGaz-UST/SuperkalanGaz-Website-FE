@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Carousel, CarouselContent, CarouselItem, type CarouselApi } from '../../../components/ui/carousel';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../../../components/ui/tooltip';
 import styles from './screen.module.css';
+import typography from '../../../components/FranchiseReports.module.css';
 
 /** Trimmed Service Request row (SRD module, GET /service-requests) — only the
  * fields this dashboard's KPIs and "Recent Orders" table need. */
@@ -246,7 +247,7 @@ export default function Dashboard({ onViewOrders }: DashboardProps = {}) {
                         <div className="flex items-center gap-2 whitespace-nowrap overflow-hidden">
                             <span>{csatLoading ? '\u2026' : String(csat?.average_stars ?? '\u2014')}</span>
                             {!csatLoading && csat?.average_stars != null && (
-                                <span className="text-xs font-normal text-gray-400">out of 5</span>
+                                <span className={`${typography.ownerMetricDescription} text-gray-400`}>out of 5</span>
                             )}
                         </div>
                     )}

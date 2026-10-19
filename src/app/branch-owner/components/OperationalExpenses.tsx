@@ -18,6 +18,7 @@ import {
 } from '../../lib/expenses';
 import { Header } from './Header';
 import { KPICard } from './KPICard';
+import typography from '../../components/FranchiseReports.module.css';
 import { Select } from './Select';
 import { Fuel, Wrench, Zap, Package, Building2, Users } from 'lucide-react';
 import styles from './OperationalExpenses.module.css';
@@ -229,9 +230,9 @@ export function OperationalExpenses() {
             <CardTooltip>
               <TooltipTrigger asChild>
                 <div className="flex flex-col rounded-2xl border border-[#007BC1] bg-[#007BC1] p-6 text-white shadow-sm">
-                  <p className={`${styles.totalCard} text-sm font-medium text-white/80`}>Total Expenses This Month</p>
-                  <p className="font-bold leading-none">{loading ? placeholder : formatPeso(currentTotal)}</p>
-                  {!loading && <p className={`${styles.monthCaption} text-white/80`}>{monthCaption}</p>}
+                  <p className={`${styles.totalCard} ${typography.ownerMetricTitle} text-white/80`}>Total Expenses This Month</p>
+                  <p className={typography.ownerMetricValue}>{loading ? placeholder : formatPeso(currentTotal)}</p>
+                  {!loading && <p className={`${styles.monthCaption} ${typography.ownerMetricDescription} text-white/80`}>{monthCaption}</p>}
                 </div>
               </TooltipTrigger>
               {!loading && (

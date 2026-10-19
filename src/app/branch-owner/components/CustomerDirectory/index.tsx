@@ -3,7 +3,7 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { RefreshCw, Search, UserRound, X, Coins, Boxes, Users } from 'lucide-react';
-import { KPICard } from '../../../components/KPICard';
+import { KPICard } from '../KPICard';
 import { Badge } from '../../../branch-manager/components/Badge';
 import { Progress } from '../../../branch-manager/components/Progress';
 import { Pagination } from '../../../components/Pagination';

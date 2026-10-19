@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Header } from './Header';
 import { KPICard } from './KPICard';
+import typography from '../../components/FranchiseReports.module.css';
 import { Star, MessageSquare, AlertCircle, RefreshCw } from 'lucide-react';
 import { apiFetch, fetchJson } from '../../lib/api';
 import { useBranch } from '../contexts/BranchContext';
@@ -132,7 +133,7 @@ export function CSATSatisfaction() {
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-3.5 relative flex flex-col h-full">
             <div className="flex items-start justify-between mb-2">
               <div className="flex items-start gap-1.5 pt-1.5">
-                <div className="text-sm font-medium text-gray-500">Ratings breakdown</div>
+                <div className={`${typography.ownerMetricTitle} text-gray-500`}>Ratings breakdown</div>
               </div>
             </div>
             

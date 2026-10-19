@@ -144,13 +144,30 @@
 }
 
 .metricHeading { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; }
-.metricTitle { color: #64748b; font-size: 13px; font-weight: 500; line-height: 1.5; }
+.metricTitle { color: #64748b; }
+.metricTitle, .ownerMetricTitle, :global(.bm-root) .managerMetricTitle { font-size: 13px; font-weight: 500; line-height: 1.5; }
 .metricIcon { display: flex; flex-shrink: 0; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 10px; color: #007bc1; background: #edf6fc; }
-.metricValue { color: #0f172a; font-size: 32px; line-height: 1.1; font-weight: 600; letter-spacing: -0.025em; overflow-wrap: anywhere; }
-.metricDescription { margin-top: 4px; font-size: 12px; color: #94a3b8; line-height: 1.5; }
+.metricValue { overflow-wrap: anywhere; }
+.metricValue, .ownerMetricValue, .managerMetricValue { font-family: 'Inter', 'Poppins', sans-serif; font-size: 32px; line-height: 1.1; font-weight: 600; letter-spacing: -0.02em; }
+.metricValue, .ownerMetricValue { font-variant-numeric: tabular-nums; color: #0f172a; }
+.metricDescription { margin-top: 4px; color: #94a3b8; }
+.metricDescription, .ownerMetricDescription, :global(.bm-root) .managerMetricDescription { font-size: 12px; line-height: 1.5; }
+
+/* Font-only equivalents for the existing Branch Owner cards. */
+.ownerMetricTitle, .ownerMetricDescription, :global(.bm-root) .managerMetricTitle, :global(.bm-root) .managerMetricDescription { font-family: 'Poppins', sans-serif; }
+.ownerMetricTitle, .ownerMetricDescription, :global(.bm-root) .managerMetricTitle, :global(.bm-root) .managerMetricDescription { letter-spacing: normal; }
+.ownerMetricDescription, :global(.bm-root) .managerMetricDescription { font-weight: 400; }
+/* A one-line label plus this inset fills the unchanged 32px icon row.
+   Wrapped labels extend the row, keeping the last line 6px above the value. */
+:global(.bm-root) .managerKpiHeader { margin-bottom: 0; }
+:global(.bm-root) .managerKpiLabelWrap { padding-top: 12.5px; }
+:global(.bm-root) .managerKpiValueGap { margin-top: 6px; }
+/* Move only the text visually; preserve the icon row and card flow dimensions. */
+.ownerKpiTextShift,
+:global(.bm-root) .managerKpiLabelWrap,
+:global(.bm-root) .managerKpiValueGap { transform: translateY(-4px); }
 .metricPrimary { background: #007bc1; border-color: #007bc1; }
 .metricPrimary .metricTitle, .metricPrimary .metricDescription { color: rgb(255 255 255 / 80%); }
-.metricPrimary .metricValue { color: white; }
 .metricPrimary .metricIcon { color: white; background: rgb(255 255 255 / 15%); }
 
 .panel { min-width: 0; overflow: hidden; border: 1px solid #e5eaf0; border-radius: 16px; background: white; box-shadow: 0 2px 4px rgb(15 23 42 / 2%); }
@@ -216,7 +233,7 @@
   .metric { padding: 14px 16px; gap: 8px; }
   .metricHeading { align-items: flex-start; }
   .metricIcon { width: 28px; height: 28px; border-radius: 8px; }
-  .metricValue { font-size: 28px; }
+  .metricValue, .ownerMetricValue, .managerMetricValue { font-size: 28px; }
   .panelHeader { padding: 18px 16px; }
   .panelControls { padding: 0 16px 16px; }
   .panelControls > *, .toolbar > .search { flex-basis: 100%; }
