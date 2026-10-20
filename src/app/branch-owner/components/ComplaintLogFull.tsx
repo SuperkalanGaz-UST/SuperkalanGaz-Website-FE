@@ -25,7 +25,8 @@ export function ComplaintLogFull({ onBack }: { onBack: () => void }) {
     error: queryError,
   } = useQuery({
     queryKey: ['csat-ratings-low', selectedBranchId],
-    queryFn: () => fetchJson<{ ratings: RatingRow[] }>('/csat/ratings?resolution=all&maxStars=3'),
+    queryFn: () => fetchJson<{ ratings: RatingRow[] }>(`/csat/ratings?resolution=all&maxStars=3&branchId=${encodeURIComponent(selectedBranchId!)}`),
+    enabled: !!selectedBranchId,
     staleTime: 30_000,
   });
   const ratings = data?.ratings ?? [];

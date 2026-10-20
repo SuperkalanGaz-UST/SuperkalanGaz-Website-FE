@@ -26,14 +26,6 @@ import { ExpensesLogFull } from './components/ExpensesLogFull';
 import CustomerDirectory from './components/CustomerDirectory';
 import { BranchProvider, useBranch } from './contexts/BranchContext';
 
-export type Branch = string;
-
-interface BranchOwnerAppProps {
-  /** Protected UUID scope plus display labels from the authenticated session. */
-  branchIds: string[];
-  branches: Branch[];
-}
-
 function BranchContentTransition({ children }: { children: ReactNode }) {
   const { isBranchSwitching } = useBranch();
 
@@ -50,16 +42,11 @@ function BranchContentTransition({ children }: { children: ReactNode }) {
   );
 }
 
-export function BranchOwnerApp({ branchIds, branches }: BranchOwnerAppProps) {
+export function BranchOwnerApp() {
   const [activeScreen, setActiveScreen] = useScreenNavigation('branch-owner');
 
   return (
-    <BranchProvider
-      initialBranches={branchIds.flatMap((id, index) => {
-        const name = branches[index];
-        return name ? [{ id, name, geofence: null }] : [];
-      })}
-    >
+    <BranchProvider>
       <div className="flex h-screen bg-gray-50">
         <Sidebar activeScreen={activeScreen} onNavigate={setActiveScreen} />
 

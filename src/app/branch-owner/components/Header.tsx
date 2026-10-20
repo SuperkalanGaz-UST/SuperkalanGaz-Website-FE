@@ -16,6 +16,9 @@ function BranchBadge() {
     selectedBranchId,
     setSelectedBranchId,
     availableBranchOptions,
+    assignedBranchesLoading,
+    assignedBranchesError,
+    refreshAssignedBranches,
   } = useBranch();
   const [showDropdown, setShowDropdown] = useState(false);
   const [selectionAnimating, setSelectionAnimating] = useState(false);
@@ -36,9 +39,21 @@ function BranchBadge() {
   }, [isSingleBranch]);
 
   if (availableBranchOptions.length === 0) {
+    if (assignedBranchesError) {
+      return (
+        <button
+          type="button"
+          onClick={() => void refreshAssignedBranches()}
+          title={assignedBranchesError}
+          className="flex items-center whitespace-nowrap rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-bold text-amber-700"
+        >
+          Branch unavailable · Retry
+        </button>
+      );
+    }
     return (
       <div className="flex items-center whitespace-nowrap rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-bold text-amber-700">
-        No active branch
+        {assignedBranchesLoading ? 'Loading branch…' : 'No active branch'}
       </div>
     );
   }

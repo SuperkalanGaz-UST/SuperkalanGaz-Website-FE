@@ -25,7 +25,8 @@ export function CustomerRatingsFull({ onBack }: { onBack: () => void }) {
     error: queryError,
   } = useQuery({
     queryKey: ['csat-ratings', selectedBranchId],
-    queryFn: () => fetchJson<{ ratings: RatingRow[] }>('/csat/ratings?resolution=all'),
+    queryFn: () => fetchJson<{ ratings: RatingRow[] }>(`/csat/ratings?resolution=all&branchId=${encodeURIComponent(selectedBranchId!)}`),
+    enabled: !!selectedBranchId,
     staleTime: 30_000,
   });
   const ratings = data?.ratings ?? [];
