@@ -76,6 +76,95 @@ async function expectPath(page, path) {
   assert.equal(new URL(page.url()).pathname, path);
 }
 
+test('owner refresh waits for live branch assignment instead of displaying a stale claim label', { timeout: 60_000 }, async () => {
+  const browser = await chromium.launch({ headless: true });
+  const session = sessionFor('branch-owner');
+  session.user.app_metadata.branch_ids = [branches[0].id];
+  const staleBranchLabel = 'Previous Branch Label';
+  session.user.app_metadata.branches = [staleBranchLabel];
+  const assigned = [branches[0]];
+  const { context, apiRequests } = await createContext(browser, session);
+  let releaseAssignment;
+  try {
+    const page = await context.newPage();
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const assignmentHeld = new Promise(resolve => { releaseAssignment = resolve; });
+      let assignmentRequested;
+      const requested = new Promise(resolve => { assignmentRequested = resolve; });
+      await context.route(`${apiOrigin}/api/branches/assigned`, async route => {
+        assignmentRequested();
+        await assignmentHeld;
+        await route.fulfill({ json: { branches: assigned } });
+      });
+      apiRequests.length = 0;
+      if (attempt === 0) await page.goto(`${baseUrl}/branch-owner/customer-ratings`);
+      else await page.reload();
+      await requested;
+      await page.getByRole('button', { name: session.user.app_metadata.display_name, exact: true }).waitFor();
+      assert.equal(await page.getByText(staleBranchLabel, { exact: true }).count(), 0,
+        'A restored session must not display a stale branch label before live assignment resolves');
+      assert.equal(apiRequests.some(path => path.startsWith('/api/csat/')), false,
+        'Branch data must wait for the API-validated assignment');
+      releaseAssignment();
+      await page.getByText(assigned[0].name, { exact: true }).waitFor();
+      await context.unroute(`${apiOrigin}/api/branches/assigned`);
+    }
+  } finally {
+    releaseAssignment?.();
+    await context.close();
+    await browser.close();
+  }
+});
+
+test('owner CSAT requests use only the explicitly selected live branch UUID', { timeout: 60_000 }, async () => {
+  const browser = await chromium.launch({ headless: true });
+  const { context } = await createContext(browser, sessionFor('branch-owner'));
+  const requests = [];
+  try {
+    await context.route(`${apiOrigin}/api/csat/**`, route => {
+      requests.push(new URL(route.request().url()));
+      return route.fulfill({ json: { ratings: [], summary: null } });
+    });
+    const page = await context.newPage();
+    await page.goto(`${baseUrl}/branch-owner/csat`);
+    await page.getByRole('button', { name: 'Select branch', exact: true }).waitFor();
+    assert.equal(requests.length, 0, 'Multiple branches require an explicit selection');
+    await page.getByRole('button', { name: 'Select branch', exact: true }).click();
+    const loaded = page.waitForResponse(response => response.url().includes('/api/csat/ratings?'));
+    await page.getByRole('button', { name: 'Routing Branch B', exact: true }).click();
+    await loaded;
+    await page.getByRole('button', { name: 'View all', exact: true }).first().click();
+    await expectPath(page, '/branch-owner/customer-ratings');
+    await page.getByRole('button', { name: 'Back', exact: true }).click();
+    await expectPath(page, '/branch-owner/csat');
+    const complaintsLoaded = page.waitForResponse(response => response.url().includes('maxStars=3'));
+    await page.getByRole('button', { name: 'View all', exact: true }).last().click();
+    await complaintsLoaded;
+    assert.ok(requests.some(url => url.pathname.endsWith('/summary')));
+    assert.ok(requests.some(url => url.searchParams.get('maxStars') === '3'));
+    assert.ok(requests.every(url => url.searchParams.get('branchId') === branches[1].id),
+      'Summary, ratings and complaints must all carry the selected UUID');
+  } finally { await context.close(); await browser.close(); }
+});
+
+test('failed live assignment keeps owner branch data unavailable', { timeout: 60_000 }, async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    for (const status of [403, 503]) {
+      const { context, apiRequests } = await createContext(browser, sessionFor('branch-owner'));
+      try {
+        await context.route(`${apiOrigin}/api/branches/assigned`, route =>
+          route.fulfill({ status, json: { message: 'Branch assignment unavailable' } }));
+        const page = await context.newPage();
+        await page.goto(`${baseUrl}/branch-owner/customer-ratings`);
+        await page.getByRole('button', { name: 'Branch unavailable · Retry', exact: true }).waitFor();
+        assert.equal(apiRequests.some(path => path.startsWith('/api/csat/')), false);
+        assert.equal(await page.getByText('Routing Branch A', { exact: true }).count(), 0);
+      } finally { await context.close(); }
+    }
+  } finally { await browser.close(); }
+});
+
 test('staff URLs preserve navigation, refresh and role isolation for every staff persona', { timeout: 120_000 }, async () => {
   const browser = await chromium.launch({ headless: true });
   try {

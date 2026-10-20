@@ -70,7 +70,8 @@ export function CSATSatisfaction() {
     isLoading: summaryLoading,
   } = useQuery({
     queryKey: ['csat-summary', selectedBranchId],
-    queryFn: () => fetchJson<{ summary: SummaryRow }>('/csat/summary'),
+    queryFn: () => fetchJson<{ summary: SummaryRow }>(`/csat/summary?branchId=${encodeURIComponent(selectedBranchId!)}`),
+    enabled: !!selectedBranchId,
     staleTime: 30_000,
   });
   const summary = summaryData?.summary ?? null;
@@ -81,7 +82,8 @@ export function CSATSatisfaction() {
     error: ratingsError,
   } = useQuery({
     queryKey: ['csat-ratings', selectedBranchId],
-    queryFn: () => fetchJson<{ ratings: RatingRow[] }>('/csat/ratings?resolution=all'),
+    queryFn: () => fetchJson<{ ratings: RatingRow[] }>(`/csat/ratings?resolution=all&branchId=${encodeURIComponent(selectedBranchId!)}`),
+    enabled: !!selectedBranchId,
     staleTime: 30_000,
   });
   const ratings = ratingsData?.ratings ?? [];

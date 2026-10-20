@@ -236,11 +236,9 @@ export default function App({ children }: { children: ReactNode }) {
           {account.role === 'super-admin' && <SuperAdminApp />}
           {account.role === 'franchise-admin' && <FranchiseAdminApp />}
           {account.role === 'branch-owner' && (
-            // Remount when the branch set changes so BranchProvider re-initializes.
+            // Resolve assignments again when the user or protected branch scope changes.
             <BranchOwnerApp
-              key={`${account.branchIds.join('|')}::${account.branches.join('|')}`}
-              branchIds={account.branchIds}
-              branches={account.branches}
+              key={`${account.id}::${account.branchIds.join('|')}`}
             />
           )}
           {account.role === 'branch-manager' && <BranchManagerApp />}

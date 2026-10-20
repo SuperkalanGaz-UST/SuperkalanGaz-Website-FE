@@ -30,17 +30,16 @@ const BranchContext = createContext<BranchContextType | undefined>(undefined);
 
 interface BranchProviderProps {
   children: ReactNode;
-  initialBranches?: AssignedBranch[];
 }
 
-export function BranchProvider({ children, initialBranches = [] }: BranchProviderProps) {
-  const [selectedBranchId, setSelectedBranchIdState] = useState<string | null>(
-    initialBranches.length === 1 ? initialBranches[0].id : null,
-  );
+export function BranchProvider({ children }: BranchProviderProps) {
+  // Saved Auth labels can lag branch renames or ownership changes. Resolve both
+  // the label and selectable UUID through the API before loading branch data.
+  const [selectedBranchId, setSelectedBranchIdState] = useState<string | null>(null);
   const [isBranchSwitching, setIsBranchSwitching] = useState(false);
   const branchAnimationTimer = useRef<number | null>(null);
   const [availableBranchOptions, setAvailableBranchOptions] =
-    useState<AssignedBranch[]>(initialBranches);
+    useState<AssignedBranch[]>([]);
   const [assignedBranches, setAssignedBranches] = useState<AssignedBranch[] | null>(null);
   const [assignedBranchesLoading, setAssignedBranchesLoading] = useState(true);
   const [assignedBranchesError, setAssignedBranchesError] = useState<string | null>(null);
