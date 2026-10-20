@@ -3,400 +3,505 @@
 import { useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  Area,
-  AreaChart,
+  CartesianGrid,
+  Legend,
+  Line,
+  LineChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from 'recharts';
 import {
-  ExpenseApiRow,
-  EXPENSE_CATEGORIES,
-  ExpenseCategory,
-  fetchExpenses,
-} from '../../lib/expenses';
+  Building2,
+  Fuel,
+  LockKeyhole,
+  Package,
+  Wrench,
+  Zap,
+} from 'lucide-react';
+import { toast } from 'sonner';
+import { fetchExpenses } from '../../lib/expenses';
+import {
+  expenseMonth,
+  fetchSalaries,
+  formatExpensePeso as peso,
+  monthLabel,
+} from '../../lib/salary-expenses';
+import { useBranch } from '../contexts/BranchContext';
 import { Header } from './Header';
-import { KPICard } from './KPICard';
-import typography from '../../components/FranchiseReports.module.css';
-import { Select } from './Select';
-import { Fuel, Wrench, Zap, Package, Building2, Users } from 'lucide-react';
+import { SalaryExpenses } from './SalaryExpenses';
+import { SalaryEntryDialog } from './SalaryEntryDialog';
 import styles from './OperationalExpenses.module.css';
-import { Tooltip as CardTooltip, TooltipTrigger, TooltipContent } from '../../components/ui/tooltip';
-
-const TREND_CATEGORY_OPTIONS = [
-  { value: 'all', label: 'All Categories' },
-  ...EXPENSE_CATEGORIES.map((category) => ({ value: category, label: category })),
-];
-
-const CATEGORY_COLORS: Record<ExpenseCategory, string> = {
-  'Gasoline, Fuel & Oil': '#007BC1',
-  'Repairs & Maintenance': '#41A3E0',
-  Utilities: '#2E86C1',
-  Communication: '#76B4DD',
-  'Branch Supplies': '#AED6F1',
-  'Facility Costs': '#1a5f8a',
-  'Salary & Wages': '#2E86C1',
-};
-
-const CATEGORY_STYLES: Record<ExpenseCategory, string> = {
-  'Gasoline, Fuel & Oil': 'bg-blue-100 text-blue-900',
-  'Repairs & Maintenance': 'bg-sky-100 text-sky-800',
-  Utilities: 'bg-cyan-100 text-cyan-800',
-  Communication: 'bg-blue-50 text-blue-700',
-  'Branch Supplies': 'bg-indigo-100 text-indigo-800',
-  'Facility Costs': 'bg-slate-100 text-slate-800',
-  'Salary & Wages': 'bg-slate-100 text-slate-800',
-};
-
-interface MonthExpenses {
-  key: string;
-  label: string;
-  expenses: ExpenseApiRow[];
-}
-
-function monthDescriptor(date: Date, offset: number): { key: string; label: string } {
-  const value = new Date(date.getFullYear(), date.getMonth() + offset, 1);
-  return {
-    key: `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}`,
-    label: new Intl.DateTimeFormat('en-PH', { month: 'short' }).format(value),
-  };
-}
-
-function formatPeso(value: number): string {
-  return new Intl.NumberFormat('en-PH', {
-    style: 'currency',
-    currency: 'PHP',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 2,
-  }).format(value);
-}
-
-function formatDate(value: string): string {
-  const [year, month, day] = value.split('-').map(Number);
-  return new Intl.DateTimeFormat('en-PH', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  }).format(new Date(year, month - 1, day));
-}
-
-const axisProps = {
-  axisLine: false as const,
-  tickLine: false as const,
-  stroke: '#9ca3af',
-};
 
 export function OperationalExpenses() {
-  const queryClient = useQueryClient();
-
-  const descriptors = useMemo(() => Array.from({ length: 6 }, (_, index) => monthDescriptor(new Date(), index - 5)), []);
-
-  const {
-    data: monthsData,
-    isLoading: loading,
-    error: queryError,
-  } = useQuery({
-    queryKey: ['expenses-6-months', descriptors.map(d => d.key)],
-    queryFn: async () => {
-      return await Promise.all(
-        descriptors.map(async (month) => ({ ...month, expenses: await fetchExpenses(month.key) })),
-      );
-    },
-    staleTime: 30_000,
-  });
-
-  const months = useMemo(() => monthsData ?? [], [monthsData]);
-  const error = queryError ? 
-    (queryError.message === 'Caller has no active branch' 
-      ? 'No active branch is assigned to this account. Contact your Franchise Administrator.' 
-      : (queryError.message || 'Failed to load expenses')) 
-    : null;
-
-  const currentExpenses = useMemo(() => months.at(-1)?.expenses ?? [], [months]);
-  const currentTotal = currentExpenses.reduce((sum, expense) => sum + Number(expense.amount), 0);
-
-  const categoryData = useMemo(
-    () => EXPENSE_CATEGORIES.map((category) => ({
-      category,
-      amount: currentExpenses
-        .filter((expense) => expense.category === category)
-        .reduce((sum, expense) => sum + Number(expense.amount), 0),
-      color: CATEGORY_COLORS[category],
-    })),
-    [currentExpenses],
-  );
-
-  const [trendGranularity, setTrendGranularity] = useState<'month' | 'week' | 'day'>('month');
-  const [trendCategory, setTrendCategory] = useState<'all' | ExpenseCategory>('all');
-
-  const monthlyTrendData = useMemo(
-    () => months.map((month) => ({
-      label: month.label,
-      amount: month.expenses
-        .filter((expense) => trendCategory === 'all' || expense.category === trendCategory)
-        .reduce((sum, expense) => sum + Number(expense.amount), 0),
-    })),
-    [months, trendCategory],
-  );
-
-  // Weekly (ISO, Monday-start) buckets across the full 6-month window already
-  // in memory — no new fetch, same re-derive-from-what-we-have approach as Day.
-  const weeklyTrendData = useMemo(() => {
-    const byWeek = new Map<string, { weekStart: Date; amount: number }>();
-    for (const month of months) {
-      for (const expense of month.expenses) {
-        if (trendCategory !== 'all' && expense.category !== trendCategory) continue;
-        const [year, monthNum, day] = expense.expense_date.split('-').map(Number);
-        const date = new Date(year, monthNum - 1, day);
-        const isoWeekday = date.getDay() === 0 ? 7 : date.getDay();
-        const weekStart = new Date(date);
-        weekStart.setDate(date.getDate() - (isoWeekday - 1));
-        const key = `${weekStart.getFullYear()}-${String(weekStart.getMonth() + 1).padStart(2, '0')}-${String(weekStart.getDate()).padStart(2, '0')}`;
-        const existing = byWeek.get(key) ?? { weekStart, amount: 0 };
-        existing.amount += Number(expense.amount);
-        byWeek.set(key, existing);
-      }
-    }
-    return [...byWeek.values()]
-      .sort((a, b) => a.weekStart.getTime() - b.weekStart.getTime())
-      .map((entry) => ({
-        label: new Intl.DateTimeFormat('en-PH', { month: 'short', day: 'numeric' }).format(entry.weekStart),
-        amount: entry.amount,
-      }));
-  }, [months, trendCategory]);
-
-  // "Zoomed in" view: always the current (latest fetched) month's day-by-day
-  // totals — mirrors the Order Volume chart's Hour view always meaning today.
-  const dailyTrendData = useMemo(() => {
-    const currentMonth = months.at(-1);
-    if (!currentMonth) return [];
-    const [year, month] = currentMonth.key.split('-').map(Number);
-    const daysInMonth = new Date(year, month, 0).getDate();
-    const byDay = new Map<string, number>();
-    for (const expense of currentMonth.expenses) {
-      if (trendCategory !== 'all' && expense.category !== trendCategory) continue;
-      byDay.set(expense.expense_date, (byDay.get(expense.expense_date) ?? 0) + Number(expense.amount));
-    }
-    return Array.from({ length: daysInMonth }, (_, index) => {
-      const day = index + 1;
-      const dateKey = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-      return { label: String(day), amount: byDay.get(dateKey) ?? 0 };
-    });
-  }, [months, trendCategory]);
-
-  const trendData = trendGranularity === 'month' ? monthlyTrendData
-    : trendGranularity === 'week' ? weeklyTrendData
-    : dailyTrendData;
-  const trendSubtitle = [
-    trendGranularity === 'month' ? 'Last six months'
-      : trendGranularity === 'week' ? 'Weekly totals over the last six months'
-      : `Daily breakdown for ${months.at(-1)?.label ?? 'this month'}`,
-    trendCategory === 'all' ? null : trendCategory,
-  ].filter(Boolean).join(' — ');
-
-  const categoryTotal = (category: ExpenseCategory) =>
-    categoryData.find((entry) => entry.category === category)?.amount ?? 0;
-
-  const utilitiesAndCommunication = categoryTotal('Utilities') + categoryTotal('Communication');
-  const monthCaption = new Intl.DateTimeFormat('en-PH', { month: 'long', year: 'numeric' })
-    .format(new Date(`${descriptors.at(-1)!.key}-01T00:00:00`));
-  const recentExpenses = currentExpenses.slice(0, 6);
-  const placeholder = loading ? '—' : '';
-
-  const pctOfTotal = (amount: number) =>
-    currentTotal > 0 ? `${((amount / currentTotal) * 100).toFixed(1)}% of this month's total` : 'No expenses recorded yet';
-
+  const branch = useBranch();
   return (
     <div className="flex-1 overflow-y-auto">
       <Header title="Operational Expenses" />
+      {branch.assignedBranchesLoading ? (
+        <p className={styles.empty}>Validating assigned branches…</p>
+      ) : branch.assignedBranchesError ? (
+        <div role="alert" className={styles.error}>
+          {branch.assignedBranchesError}
+          <button
+            type="button"
+            onClick={() => void branch.refreshAssignedBranches()}
+          >
+            Retry branches
+          </button>
+        </div>
+      ) : !branch.selectedBranchId ? (
+        <p className={styles.empty}>
+          Select an authorized branch to view its expenses.
+        </p>
+      ) : (
+        <ExpenseWorkspace
+          key={branch.selectedBranchId}
+          branchId={branch.selectedBranchId}
+        />
+      )}
+    </div>
+  );
+}
 
-      <div className="space-y-6 p-8">
-        {error && (
-          <div className="flex items-center justify-between gap-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700" role="alert">
-            <span>{error}</span>
-            <button
-              type="button"
-              onClick={() => void queryClient.invalidateQueries({ queryKey: ['expenses-6-months'] })}
-              className="shrink-0 rounded-md border border-red-300 bg-white px-3 py-1.5 font-medium text-red-700 transition-colors hover:bg-red-100"
-            >
-              Retry
-            </button>
-          </div>
-        )}
+function ExpenseWorkspace({ branchId }: { branchId: string }) {
+  const client = useQueryClient();
+  const [month, setMonth] = useState(() => expenseMonth());
+  const [tab, setTab] = useState<'overview' | 'salary'>('overview');
+  const [recording, setRecording] = useState(false);
+  const [granularity, setGranularity] = useState<'day' | 'week' | 'month'>(
+    'month',
+  );
+  const descriptors = useMemo(
+    () => Array.from({ length: 6 }, (_, i) => expenseMonth(i - 5, month)),
+    [month],
+  );
+  const monthOptions = [
+    ...new Set([
+      month,
+      ...Array.from({ length: 12 }, (_, i) => expenseMonth(-i)),
+    ]),
+  ]
+    .sort()
+    .reverse();
+  const query = useQuery({
+    queryKey: ['owner-expenses', branchId, month],
+    queryFn: () =>
+      Promise.all(
+        descriptors.map(async (key) => {
+          const [expenses, salaries] = await Promise.all([
+            fetchExpenses(key, branchId),
+            fetchSalaries(key, branchId),
+          ]);
+          return { key, expenses, salaries };
+        }),
+      ),
+    staleTime: 30_000,
+  });
+  const months = useMemo(() => query.data ?? [], [query.data]);
+  const current = months.at(-1);
+  const expenses = current?.expenses ?? [];
+  const salaries = current?.salaries ?? [];
+  const operational = expenses.filter(
+    (row) => row.category !== 'Salary & Wages',
+  );
+  const legacy = expenses.filter((row) => row.category === 'Salary & Wages');
+  const legacyTotal = legacy.reduce((sum, row) => sum + Number(row.amount), 0);
+  const operatingTotal = operational.reduce(
+    (sum, row) => sum + Number(row.amount),
+    0,
+  );
+  const regular =
+    salaries.reduce((sum, row) => sum + row.regularPay, 0) + legacyTotal;
+  const overtime = salaries.reduce((sum, row) => sum + row.overtimePay, 0);
+  const loading = query.isPending;
+  const value = (n: number) => (loading ? '—' : peso(n));
+  const categories = [
+    { title: 'Fuel & Oil', icon: Fuel, categories: ['Gasoline, Fuel & Oil'] },
+    { title: 'Repairs', icon: Wrench, categories: ['Repairs & Maintenance'] },
+    {
+      title: 'Utilities & Comms',
+      icon: Zap,
+      categories: ['Utilities', 'Communication'],
+    },
+    {
+      title: 'Branch Supplies',
+      icon: Package,
+      categories: ['Branch Supplies'],
+    },
+    {
+      title: 'Facility Costs',
+      icon: Building2,
+      categories: ['Facility Costs'],
+    },
+  ];
+  const trend = useMemo(() => {
+    const buckets = new Map<
+      string,
+      { label: string; operating: number; salary: number }
+    >();
+    const bucketKey = (date: string) => {
+      if (granularity === 'month') return date.slice(0, 7);
+      if (granularity === 'day') return date;
+      const d = new Date(`${date}T00:00:00Z`);
+      d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));
+      return d.toISOString().slice(0, 10);
+    };
+    const ensure = (date: string) => {
+      const key = bucketKey(date);
+      if (!buckets.has(key))
+        buckets.set(key, {
+          label:
+            granularity === 'month'
+              ? monthLabel(key, true)
+              : new Intl.DateTimeFormat('en-PH', {
+                  timeZone: 'UTC',
+                  month: 'short',
+                  day: 'numeric',
+                }).format(new Date(`${key}T00:00:00Z`)),
+          operating: 0,
+          salary: 0,
+        });
+      return buckets.get(key)!;
+    };
+    if (granularity === 'month')
+      descriptors.forEach((key) => ensure(`${key}-01`));
+    if (granularity === 'day') {
+      const [year, m] = month.split('-').map(Number);
+      for (
+        let day = 1;
+        day <= new Date(Date.UTC(year, m, 0)).getUTCDate();
+        day++
+      )
+        ensure(`${month}-${String(day).padStart(2, '0')}`);
+    }
+    for (const period of months) {
+      if (granularity === 'day' && period.key !== month) continue;
+      for (const row of period.expenses)
+        ensure(row.expense_date)[
+          row.category === 'Salary & Wages' ? 'salary' : 'operating'
+        ] += Number(row.amount);
+      for (const row of period.salaries)
+        ensure(row.periodEnd).salary += row.total;
+    }
+    return [...buckets.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([, entry]) => entry);
+  }, [months, descriptors, granularity, month]);
 
-        {!error && (
-          <div className={`${styles.kpiGrid} gap-4`}>
-            <CardTooltip>
-              <TooltipTrigger asChild>
-                <div className="flex flex-col rounded-2xl border border-[#007BC1] bg-[#007BC1] p-6 text-white shadow-sm">
-                  <p className={`${styles.totalCard} ${typography.ownerMetricTitle} text-white/80`}>Total Expenses This Month</p>
-                  <p className={typography.ownerMetricValue}>{loading ? placeholder : formatPeso(currentTotal)}</p>
-                  {!loading && <p className={`${styles.monthCaption} ${typography.ownerMetricDescription} text-white/80`}>{monthCaption}</p>}
-                </div>
-              </TooltipTrigger>
-              {!loading && (
-                <TooltipContent side="top" className="max-w-[240px] text-left leading-relaxed">
-                  <span>{currentExpenses.length} transactions recorded this month</span>
-                </TooltipContent>
-              )}
-            </CardTooltip>
-            <KPICard
-              title="Fuel & Oil"
-              value={loading ? placeholder : formatPeso(categoryTotal('Gasoline, Fuel & Oil'))}
-              icon={<Fuel className="w-4 h-4 text-[#007BC1]" />}
-              accentColor="#007BC1"
-              titleClassName="min-h-[40px]"
-              tooltip={loading ? undefined : <span>{pctOfTotal(categoryTotal('Gasoline, Fuel & Oil'))}</span>}
-            />
-            <KPICard
-              title="Repairs"
-              value={loading ? placeholder : formatPeso(categoryTotal('Repairs & Maintenance'))}
-              icon={<Wrench className="w-4 h-4 text-[#007BC1]" />}
-              accentColor="#007BC1"
-              titleClassName="min-h-[40px]"
-              tooltip={loading ? undefined : <span>{pctOfTotal(categoryTotal('Repairs & Maintenance'))}</span>}
-            />
-            <KPICard
-              title="Utilities & Comms"
-              value={loading ? placeholder : formatPeso(utilitiesAndCommunication)}
-              icon={<Zap className="w-4 h-4 text-[#2E86C1]" />}
-              accentColor="#2E86C1"
-              titleClassName="min-h-[40px]"
-              tooltip={loading ? undefined : <span>{pctOfTotal(utilitiesAndCommunication)}</span>}
-            />
-            <KPICard
-              title="Branch Supplies"
-              value={loading ? placeholder : formatPeso(categoryTotal('Branch Supplies'))}
-              icon={<Package className="w-4 h-4 text-[#2E86C1]" />}
-              accentColor="#2E86C1"
-              titleClassName="min-h-[40px]"
-              tooltip={loading ? undefined : <span>{pctOfTotal(categoryTotal('Branch Supplies'))}</span>}
-            />
-            <KPICard
-              title="Facility Costs"
-              value={loading ? placeholder : formatPeso(categoryTotal('Facility Costs'))}
-              icon={<Building2 className="w-4 h-4 text-[#2E86C1]" />}
-              accentColor="#2E86C1"
-              titleClassName="min-h-[40px]"
-              tooltip={loading ? undefined : <span>{pctOfTotal(categoryTotal('Facility Costs'))}</span>}
-            />
-            <KPICard
-              title="Salary & Wages"
-              value={loading ? placeholder : formatPeso(categoryTotal('Salary & Wages'))}
-              icon={<Users className="w-4 h-4 text-[#2E86C1]" />}
-              accentColor="#2E86C1"
-              titleClassName="min-h-[40px]"
-              tooltip={loading ? undefined : <span>{pctOfTotal(categoryTotal('Salary & Wages'))}</span>}
-            />
-          </div>
-        )}
-
-        {!error && (
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-            <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <h3 className="font-semibold text-gray-900">Total Expense Trend</h3>
-                <p className="mt-1 text-xs text-gray-500">{trendSubtitle}</p>
+  return (
+    <div className={styles.workspace}>
+      <div className={styles.toolbar}>
+        <div className={styles.tabs} role="tablist" aria-label="Expense views">
+          <button
+            id="expense-overview-tab"
+            role="tab"
+            aria-controls="expense-overview-panel"
+            aria-selected={tab === 'overview'}
+            type="button"
+            onClick={() => setTab('overview')}
+          >
+            Overview
+          </button>
+          <button
+            id="expense-salary-tab"
+            role="tab"
+            aria-controls="expense-salary-panel"
+            aria-selected={tab === 'salary'}
+            type="button"
+            onClick={() => setTab('salary')}
+          >
+            <LockKeyhole size={17} /> Salaries & Overtime
+          </button>
+        </div>
+        <label className={styles.monthPicker}>
+          <span className="sr-only">Expense month</span>
+          <select
+            aria-label="Expense month"
+            value={month}
+            onChange={(event) => {
+              setMonth(event.target.value);
+              setRecording(false);
+            }}
+          >
+            {monthOptions.map((key) => (
+              <option key={key} value={key}>
+                {monthLabel(key)}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+      {query.isError ? (
+        <div className={styles.error} role="alert">
+          <p>{query.error.message || 'Expenses are unavailable.'}</p>
+          <p>
+            Totals and recording are unavailable until the required expense data
+            loads.
+          </p>
+          <button type="button" onClick={() => void query.refetch()}>
+            Retry loading expenses
+          </button>
+        </div>
+      ) : tab === 'salary' ? (
+        <div
+          id="expense-salary-panel"
+          role="tabpanel"
+          aria-labelledby="expense-salary-tab"
+          className={styles.tabPanel}
+        >
+          <SalaryExpenses
+            salaries={salaries}
+            legacy={legacy}
+            loading={loading}
+            onRecord={() => setRecording(true)}
+          />
+        </div>
+      ) : (
+        <div
+          id="expense-overview-panel"
+          role="tabpanel"
+          aria-labelledby="expense-overview-tab"
+          className={styles.tabPanel}
+        >
+          <div className={styles.overviewMetrics}>
+            {[
+              {
+                title: 'Total this month',
+                amount: operatingTotal + regular + overtime,
+                note: 'Operating expenses + salaries + overtime',
+              },
+              {
+                title: 'Operating expenses',
+                amount: operatingTotal,
+                note: 'Recorded by the branch',
+              },
+              { title: 'Salaries', amount: regular, private: true },
+              { title: 'Overtime pay', amount: overtime, private: true },
+            ].map((metric) => (
+              <div key={metric.title} className={styles.metric}>
+                <p>
+                  {metric.title}
+                  {metric.private && (
+                    <LockKeyhole aria-label="Owner only" size={16} />
+                  )}
+                </p>
+                <strong>{value(metric.amount)}</strong>
+                {metric.note && <small>{metric.note}</small>}
               </div>
-              <div className="flex flex-wrap items-center gap-3">
-                <Select
-                  value={trendCategory}
-                  onChange={(value) => setTrendCategory(value as 'all' | ExpenseCategory)}
-                  options={TREND_CATEGORY_OPTIONS}
-                  className="w-48 !py-1 !text-sm"
-                />
-                <div className="flex rounded-lg border border-gray-200 p-0.5">
-                  {(['day', 'week', 'month'] as const).map((granularity) => (
+            ))}
+          </div>
+          <div className={styles.overviewMiddle}>
+            <section className={styles.panel} aria-label="Expense trend">
+              <div className={styles.panelHeading}>
+                <div>
+                  <h3>Expense trend</h3>
+                  <p>
+                    {granularity === 'day'
+                      ? monthLabel(month)
+                      : 'Last six months'}
+                  </p>
+                </div>
+                <div className={styles.segments}>
+                  {(['day', 'week', 'month'] as const).map((g) => (
                     <button
-                      key={granularity}
+                      key={g}
                       type="button"
-                      onClick={() => setTrendGranularity(granularity)}
-                      style={{ fontSize: '14px' }}
-                      className={`px-1.5 py-0.5 rounded-md capitalize transition-colors ${
-                        trendGranularity === granularity ? 'bg-[#007BC1] text-white' : 'text-gray-600 hover:text-gray-900'
-                      }`}
+                      aria-pressed={granularity === g}
+                      onClick={() => setGranularity(g)}
                     >
-                      {granularity}
+                      {g}
                     </button>
                   ))}
                 </div>
               </div>
-            </div>
-            <ResponsiveContainer width="100%" height={280}>
-              <AreaChart data={trendData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="expensesTrendFill" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#007BC1" stopOpacity={0.25} />
-                    <stop offset="100%" stopColor="#007BC1" stopOpacity={0.02} />
-                  </linearGradient>
-                </defs>
-                <XAxis dataKey="label" {...axisProps} style={{ fontSize: '11px' }} tick={{ dy: 4 }} />
-                <YAxis {...axisProps} style={{ fontSize: '11px' }} tickFormatter={(value) => `₱${Math.round(Number(value) / 1000)}k`} width={52} />
-                <Tooltip formatter={(value) => [formatPeso(Number(value)), 'Expenses']} />
-                <Area
-                  type="monotone"
-                  dataKey="amount"
-                  stroke="#007BC1"
-                  strokeWidth={2}
-                  fill="url(#expensesTrendFill)"
-                  dot={false}
-                  activeDot={{ r: 4 }}
-                />
-              </AreaChart>
-            </ResponsiveContainer>
+              <div className={styles.chart}>
+                {loading ? (
+                  <p className={styles.empty}>Loading trend…</p>
+                ) : (
+                  <ResponsiveContainer width="100%" height={300}>
+                    <LineChart
+                      data={trend}
+                      margin={{ top: 12, right: 20, left: 4, bottom: 8 }}
+                    >
+                      <CartesianGrid
+                        strokeDasharray="3 5"
+                        vertical={false}
+                        stroke="#e7edf3"
+                      />
+                      <XAxis
+                        dataKey="label"
+                        axisLine={false}
+                        tickLine={false}
+                        tick={{ fontSize: 12 }}
+                      />
+                      <YAxis
+                        width={68}
+                        axisLine={false}
+                        tickLine={false}
+                        tick={{ fontSize: 12 }}
+                        tickFormatter={(n: number) =>
+                          n >= 1000
+                            ? `₱${Number((n / 1000).toFixed(1))}k`
+                            : `₱${n}`
+                        }
+                      />
+                      <Tooltip formatter={(n) => peso(Number(n))} />
+                      <Legend
+                        iconType="circle"
+                        wrapperStyle={{ paddingTop: 16, fontSize: 13 }}
+                      />
+                      <Line
+                        isAnimationActive={false}
+                        name="Operating expenses"
+                        dataKey="operating"
+                        stroke="#007bc1"
+                        strokeWidth={2}
+                        dot={{ r: 3 }}
+                      />
+                      <Line
+                        isAnimationActive={false}
+                        name="Salaries & overtime"
+                        dataKey="salary"
+                        stroke="#152a53"
+                        strokeWidth={2}
+                        dot={{ r: 3 }}
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                )}
+              </div>
+            </section>
+            <section className={styles.panel} aria-label="Salary overview">
+              <div className={styles.panelHeading}>
+                <h3>
+                  <LockKeyhole size={19} /> Salaries & overtime
+                </h3>
+                <span className={styles.ownerBadge}>Owner only</span>
+              </div>
+              <p className={styles.muted}>Included in your monthly OPEX</p>
+              <dl className={styles.salarySummary}>
+                <div>
+                  <dt>Salaries</dt>
+                  <dd>{value(regular)}</dd>
+                </div>
+                <div>
+                  <dt>Overtime pay</dt>
+                  <dd>{value(overtime)}</dd>
+                </div>
+                <div>
+                  <dt>Total</dt>
+                  <dd>{value(regular + overtime)}</dd>
+                </div>
+              </dl>
+              <button
+                type="button"
+                className={styles.textButton}
+                onClick={() => setTab('salary')}
+              >
+                View salary entries →
+              </button>
+              <p className={styles.footnote}>
+                Visible only to the Branch Owner.
+              </p>
+            </section>
           </div>
-        )}
-
-        {!error && (
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-            <div className="mb-6 flex items-center justify-between">
+          <section className={styles.panel}>
+            <div className={styles.panelHeading}>
               <div>
-                <h3 className="font-semibold text-gray-900">Expenses Log</h3>
-                <p className="mt-1 text-xs text-gray-500">Current month · database records</p>
+                <h3>Operating expense breakdown</h3>
+                <p>{monthLabel(month)}</p>
+              </div>
+            </div>
+            <div className={styles.categoryGrid}>
+              {categories.map(({ title, icon: Icon, categories: types }) => (
+                <div key={title}>
+                  <Icon size={22} />
+                  <div>
+                    <p>{title}</p>
+                    <strong>
+                      {value(
+                        operational
+                          .filter((row) => types.includes(row.category))
+                          .reduce((sum, row) => sum + Number(row.amount), 0),
+                      )}
+                    </strong>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+          <section className={styles.panel}>
+            <div className={styles.panelHeading}>
+              <div>
+                <h3>Expenses log</h3>
+                <p>{monthLabel(month)} · operational expense records</p>
               </div>
               <button
                 type="button"
-                onClick={() => window.dispatchEvent(new CustomEvent('navigate', { detail: 'expenses-log-full' }))}
-                className="text-xs font-medium text-[#007BC1] transition-colors hover:text-[#005a8f]"
+                className={styles.textButton}
+                onClick={() =>
+                  window.dispatchEvent(
+                    new CustomEvent('navigate', {
+                      detail: 'expenses-log-full',
+                    }),
+                  )
+                }
               >
-                View all
+                View all entries →
               </button>
             </div>
-
-            <div className="overflow-x-auto">
-              <table className="w-full">
+            <div className={styles.tableScroll}>
+              <table className={styles.salaryTable}>
                 <thead>
-                  <tr className="border-b border-gray-200">
-                    <th className="pb-3 pr-4 text-left text-xs font-semibold text-gray-700">Date</th>
-                    <th className="pb-3 pr-4 text-left text-xs font-semibold text-gray-700">Reference no.</th>
-                    <th className="pb-3 pr-4 text-left text-xs font-semibold text-gray-700">Category</th>
-                    <th className="pb-3 pr-4 text-left text-xs font-semibold text-gray-700">Description</th>
-                    <th className="pb-3 pr-4 text-right text-xs font-semibold text-gray-700">Amount</th>
-                    <th className="pb-3 text-left text-xs font-semibold text-gray-700">Recorded by</th>
+                  <tr>
+                    <th>Date</th>
+                    <th>Category</th>
+                    <th>Description</th>
+                    <th>Amount</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {loading ? (
-                    <tr><td colSpan={6} className="py-10 text-center text-sm text-gray-400">Loading expenses…</td></tr>
-                  ) : recentExpenses.length === 0 ? (
-                    <tr><td colSpan={6} className="py-10 text-center text-sm text-gray-400">No expenses have been recorded this month.</td></tr>
-                  ) : recentExpenses.map((expense, index) => (
-                    <tr key={expense.id} className={`border-b border-gray-100 ${index % 2 === 1 ? 'bg-gray-50' : ''}`}>
-                      <td className="whitespace-nowrap py-3 pr-4 text-[13px] text-gray-900">{formatDate(expense.expense_date)}</td>
-                      <td className="whitespace-nowrap py-3 pr-4 font-mono text-[13px] text-gray-900">{expense.reference_no ?? '—'}</td>
-                      <td className="whitespace-nowrap py-3 pr-4"><span className={`inline-block rounded-full px-2.5 py-0.5 text-[11px] font-medium ${CATEGORY_STYLES[expense.category]}`}>{expense.category}</span></td>
-                      <td className="max-w-[260px] truncate py-3 pr-4 text-[13px] text-gray-700">{expense.description}</td>
-                      <td className="whitespace-nowrap py-3 pr-4 text-right text-[13px] font-medium text-gray-900">{formatPeso(Number(expense.amount))}</td>
-                      <td className="whitespace-nowrap py-3 text-[13px] text-gray-600">Branch Manager</td>
+                  {loading || operational.length === 0 ? (
+                    <tr>
+                      <td colSpan={4} className={styles.empty}>
+                        {loading
+                          ? 'Loading expenses…'
+                          : 'No operational expenses recorded for this month.'}
+                      </td>
                     </tr>
-                  ))}
+                  ) : (
+                    operational.slice(0, 6).map((row) => (
+                      <tr key={row.id}>
+                        <td>{row.expense_date}</td>
+                        <td>{row.category}</td>
+                        <td>{row.description}</td>
+                        <td>{peso(Number(row.amount))}</td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>
-          </div>
-        )}
-      </div>
+          </section>
+        </div>
+      )}
+      {recording && !query.isError && (
+        <SalaryEntryDialog
+          branchId={branchId}
+          month={month}
+          onClose={() => setRecording(false)}
+          onSaved={(recordedMonth) => {
+            setRecording(false);
+            setMonth(recordedMonth);
+            void client.invalidateQueries({
+              queryKey: ['owner-expenses', branchId],
+            });
+            toast.success('Salary expense recorded.');
+          }}
+        />
+      )}
     </div>
   );
 }

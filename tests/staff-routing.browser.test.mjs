@@ -154,7 +154,7 @@ test('branch selection and compact sidebar survive client navigation; detail eve
     const { context } = await createContext(browser, sessionFor('branch-owner'));
     const page = await context.newPage();
     await page.goto(`${baseUrl}/branch-owner/settings`);
-    await page.getByRole('button', { name: 'Routing Branch A', exact: true }).click();
+    await page.getByRole('button', { name: 'Select branch', exact: true }).click();
     await page.getByRole('button', { name: 'Routing Branch B', exact: true }).click();
     await page.getByRole('button', { name: 'Minimize sidebar', exact: true }).click();
     await page.locator('aside').getByRole('link', { name: 'Dashboard', exact: true }).click();

@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 import {
   ExpenseApiRow,
-  EXPENSE_CATEGORIES,
+  OPERATIONAL_EXPENSE_CATEGORIES,
   ExpenseCategory,
   fetchExpenses,
   saveExpense,
@@ -374,7 +374,7 @@ export default function MonthlyExpenses() {
                 onChange={(event) => setCategoryFilter(event.target.value as 'all' | ExpenseCategory)}
               >
                 <option value="all">All categories</option>
-                {EXPENSE_CATEGORIES.map((category) => <option key={category} value={category}>{category}</option>)}
+                {OPERATIONAL_EXPENSE_CATEGORIES.map((category) => <option key={category} value={category}>{category}</option>)}
               </select>
             </label>
             <span className={styles.resultCount}>{filteredExpenses.length} {filteredExpenses.length === 1 ? 'entry' : 'entries'}</span>
@@ -468,7 +468,7 @@ export default function MonthlyExpenses() {
                   aria-describedby="expense-category-error"
                 >
                   <option value="">Select a category</option>
-                  {EXPENSE_CATEGORIES.map((category) => <option key={category} value={category}>{category}</option>)}
+                  {OPERATIONAL_EXPENSE_CATEGORIES.map((category) => <option key={category} value={category}>{category}</option>)}
                 </select>
                 {errors.category && <p id="expense-category-error" className={styles.error}>{errors.category}</p>}
               </div>

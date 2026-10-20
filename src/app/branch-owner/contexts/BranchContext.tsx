@@ -35,7 +35,7 @@ interface BranchProviderProps {
 
 export function BranchProvider({ children, initialBranches = [] }: BranchProviderProps) {
   const [selectedBranchId, setSelectedBranchIdState] = useState<string | null>(
-    initialBranches[0]?.id || null,
+    initialBranches.length === 1 ? initialBranches[0].id : null,
   );
   const [isBranchSwitching, setIsBranchSwitching] = useState(false);
   const branchAnimationTimer = useRef<number | null>(null);
@@ -47,8 +47,7 @@ export function BranchProvider({ children, initialBranches = [] }: BranchProvide
 
   const selectedBranch =
     availableBranchOptions.find((branch) => branch.id === selectedBranchId)?.name ??
-    availableBranchOptions[0]?.name ??
-    '';
+    'Select branch';
   const availableBranches = availableBranchOptions.map((branch) => branch.name);
 
   const setSelectedBranchId = useCallback((branchId: string) => {
@@ -91,7 +90,7 @@ export function BranchProvider({ children, initialBranches = [] }: BranchProvide
       setSelectedBranchIdState((current) =>
         current && resolved.some((branch) => branch.id === current)
           ? current
-          : resolved[0]?.id ?? null,
+          : resolved.length === 1 ? resolved[0].id : null,
       );
     } catch {
       setAssignedBranches(null);
