@@ -238,7 +238,6 @@ export function PriceConfiguration() {
     <div className="flex-1 overflow-y-auto bg-gray-50">
       <Header
         title="LPG Pricing"
-        description="Select a region and propose updated cylinder prices."
       />
       <main className="mx-auto w-full max-w-[1440px] px-4 pb-8 sm:px-8">
         <form

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, Search } from 'lucide-react';
 import { Header } from './Header';
 import { Pagination } from './Pagination';
+import { useBranch } from '../contexts/BranchContext';
 import {
   ExpenseApiRow,
   EXPENSE_CATEGORIES,
@@ -20,6 +21,7 @@ const CATEGORY_STYLES: Record<ExpenseCategory, string> = {
   Communication: 'bg-cyan-100 text-cyan-800',
   'Branch Supplies': 'bg-violet-100 text-violet-800',
   'Facility Costs': 'bg-rose-100 text-rose-800',
+  'Salary & Wages': 'bg-rose-100 text-rose-800',
 };
 
 interface MonthOption {
@@ -54,6 +56,7 @@ function formatPeso(value: number): string {
 }
 
 export function ExpensesLogFull({ onBack }: { onBack?: () => void }) {
+  const { selectedBranchId, assignedBranchesLoading, assignedBranchesError } = useBranch();
   const [monthOptions] = useState<MonthOption[]>(() =>
     Array.from({ length: 12 }, (_, index) => monthOption(new Date(), -index)),
   );
@@ -68,8 +71,14 @@ export function ExpensesLogFull({ onBack }: { onBack?: () => void }) {
   useEffect(() => {
     let active = true;
     setLoading(true);
+    setExpenses([]);
     setError(null);
-    fetchExpenses(selectedMonth)
+    if (!selectedBranchId || assignedBranchesLoading || assignedBranchesError) {
+      setLoading(assignedBranchesLoading);
+      setError(assignedBranchesError ?? (assignedBranchesLoading ? null : 'Select an authorized branch to view expenses.'));
+      return;
+    }
+    fetchExpenses(selectedMonth, selectedBranchId)
       .then((rows) => { if (active) setExpenses(rows); })
       .catch((loadError: unknown) => {
         if (!active) return;
@@ -78,11 +87,12 @@ export function ExpensesLogFull({ onBack }: { onBack?: () => void }) {
       })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [selectedMonth]);
+  }, [selectedMonth, selectedBranchId, assignedBranchesLoading, assignedBranchesError]);
 
   const filteredExpenses = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
     return expenses.filter((expense) => {
+      if (expense.branch_id !== selectedBranchId) return false;
       const matchesCategory = category === 'all' || expense.category === category;
       const matchesSearch = !query || [
         expense.reference_no ?? '',
@@ -91,7 +101,7 @@ export function ExpensesLogFull({ onBack }: { onBack?: () => void }) {
       ].some((value) => value.toLowerCase().includes(query));
       return matchesCategory && matchesSearch;
     });
-  }, [category, expenses, searchQuery]);
+  }, [category, expenses, searchQuery, selectedBranchId]);
 
   const totalPages = Math.max(1, Math.ceil(filteredExpenses.length / ITEMS_PER_PAGE));
   const pageData = filteredExpenses.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);

@@ -22,12 +22,24 @@ export function Providers({ children }: { children: ReactNode }) {
   const [authReady, setAuthReady] = useState(false);
 
   useEffect(() => {
+    let identity: string | null = null;
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      const nextIdentity = session
+        ? `${session.user.id}:${String(session.user.app_metadata.role)}`
+        : null;
+      // Compensation must not remain cached for another user or role on a shared browser.
+      if (event === 'SIGNED_OUT' || (identity !== null && identity !== nextIdentity)) {
+        queryClient.clear();
+      }
+      identity = nextIdentity;
+    });
     // Wait for Supabase to restore the session from storage before rendering the app.
     // This prevents useQuery calls from firing prematurely before auth is fully ready.
     void supabase.auth.getSession().then(() => {
       setAuthReady(true);
     });
-  }, []);
+    return () => subscription.unsubscribe();
+  }, [queryClient]);
 
   if (!authReady) {
     return (

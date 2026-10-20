@@ -59,7 +59,7 @@ export function ReorderLogFull({ onBack }: { onBack: () => void }) {
 
   return (
     <div className="flex-1 overflow-y-auto">
-      <div style={{ position: 'static' }} className="pt-4">
+      <div style={{ position: 'static' }}>
         <Header title="Reorder Request Log" />
       </div>
 

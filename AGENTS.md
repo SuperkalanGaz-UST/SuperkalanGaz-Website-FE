@@ -193,7 +193,7 @@ Hard constraints:
 
 ## 8. Module & Domain Rules `[api] [web] [mobile]`
 
-**5 confirmed modules. There is no Supply Chain module.**
+**5 confirmed modules, plus the approved salary/overtime expense extension in §11. There is no Supply Chain module.**
 
 1. **Customer Information Management (CIM)** — profiles, addresses, purchase history.
 2. **Service Request & Dispatch (SRD)** — digital order creation, Delivery Rider offer/assignment,
@@ -280,9 +280,17 @@ Management as practices this system implements. Vocabulary: "Service Request" (o
 
 Do not write code for, scaffold, or suggest:
 - Live corporate **ERP** integration for supply-chain replenishment.
-- **HR / payroll**, employee records, **BIR / tax** reporting, or **accounting**.
+- General **HR / payroll**, employee records, **BIR / tax** reporting, or **accounting**,
+  except the salary/overtime expense extension in workspace [AGENTS.md §11](../AGENTS.md#11-prohibited--out-of-scope-all).
 - Additional ITIL practices beyond the four in §9.
-- Any feature outside the 5 modules in §8.
+- Any feature outside the 5 modules in §8 and that approved expense extension.
+
+**Client-approved exception (2026-10-20):** Follow the workspace §11 salary/overtime
+expense extension. The Branch Owner may use a Salaries & Overtime tab under Running Costs
+and see compensation in OPEX for the selected authorized branch. Other roles, including
+Branch Manager, receive neither this tab nor compensation data or compensation-inclusive
+aggregates. Enforce access through NestJS as well as the UI. Scope/design approval does not
+establish an implementation or release; reconcile Jira acceptance criteria before implementing.
 
 **In scope (do not confuse with the above):** low-stock alerts and reorder *logging* —
 configurable thresholds against a **mock JSON supply endpoint**. Only the *live ERP

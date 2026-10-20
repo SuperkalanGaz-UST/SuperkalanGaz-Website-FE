@@ -1,43 +1,22 @@
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
+import { ReportEmpty } from './FranchiseReportUi';
+import styles from './FranchiseReports.module.css';
 
-const data = [
-  { name: 'Delivered', value: 94, count: 1634 },
-  { name: 'Cancelled', value: 3, count: 55 },
-  { name: 'Failed', value: 3, count: 53 },
-];
+const COLORS: Record<string, string> = {
+  Delivered: '#10b981', Cancelled: '#ef4444', Pending: '#f59e0b',
+  Dispatched: '#76B4DD', 'En Route': '#007BC1', 'Under Review': '#9ca3af',
+};
 
-const COLORS = ['#10b981', '#f59e0b', '#ef4444'];
-
-export function OrdersByStatusChart() {
-  return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-      <h3 className="font-semibold text-gray-900 mb-4">Orders by Status — All Branches</h3>
-      <ResponsiveContainer width="100%" height={250}>
-        <PieChart>
-          <Pie
-            data={data}
-            cx="50%"
-            cy="50%"
-            innerRadius={60}
-            outerRadius={90}
-            paddingAngle={2}
-            dataKey="value"
-          >
-            {data.map((entry, index) => (
-              <Cell key={`cell-${index}`} fill={COLORS[index]} />
-            ))}
-          </Pie>
-          <Tooltip formatter={(value, name, props) => [`${props.payload.count} orders (${value}%)`, name]} />
-        </PieChart>
-      </ResponsiveContainer>
-      <div className="flex justify-center gap-6 mt-4">
-        {data.map((entry, index) => (
-          <div key={entry.name} className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full" style={{ backgroundColor: COLORS[index] }}></div>
-            <span className="text-xs text-gray-600">{entry.name}: {entry.value}%</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
+export function OrdersByStatusChart({ data }: { data: { name: string; count: number }[] }) {
+  return <div className={styles.panel}>
+    <div className={styles.panelHeader}><div><h3 className={styles.panelTitle}>Orders by status</h3><p className={styles.panelSubtitle}>Current month across the selected branches</p></div></div>
+    {!data.length ? <ReportEmpty title="No order activity yet" hint="The status breakdown will appear once orders are recorded." /> : <>
+      <div className={styles.chartBody}><ResponsiveContainer width="100%" height={215}>
+        <PieChart><Pie data={data} innerRadius={60} outerRadius={85} paddingAngle={3} dataKey="count" stroke="none">
+          {data.map(entry => <Cell key={entry.name} fill={COLORS[entry.name] ?? '#9ca3af'} />)}
+        </Pie><Tooltip contentStyle={{ border: '1px solid #e5eaf0', borderRadius: 10, fontSize: 12 }} /></PieChart>
+      </ResponsiveContainer></div>
+      <div className={styles.legend}>{data.map(entry => <span key={entry.name} className={styles.legendItem}><span className={styles.legendDot} style={{ backgroundColor: COLORS[entry.name] ?? '#9ca3af' }} />{entry.name}<strong className="font-medium text-gray-700">{entry.count}</strong></span>)}</div>
+    </>}
+  </div>;
 }

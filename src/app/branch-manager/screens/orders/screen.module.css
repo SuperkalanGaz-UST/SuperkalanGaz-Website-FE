@@ -162,9 +162,18 @@
     .toolbarControls > button { align-self: flex-start; }
 }
 
-.customerDropdown { position: absolute; top: 100%; left: 0; right: 0; margin-top: 0.25rem; background-color: var(--card); border: 1px solid rgba(0,0,0,0.1); border-radius: 0.375rem; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); z-index: 50; max-height: 250px; overflow-y: auto; padding: 0.25rem; }
-.customerDropdownItem { display: flex; align-items: center; justify-content: space-between; padding: 0.5rem 0.75rem; border-radius: 0.25rem; cursor: pointer; transition: background-color 0.2s; }
-.customerDropdownItem:hover { background-color: rgba(0,0,0,0.05); }
+.customerDropdown { position: absolute; top: 100%; left: 0; right: 0; margin-top: 0.25rem; background-color: var(--card); border: 1px solid rgba(0,0,0,0.1); border-radius: 0.375rem; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); z-index: 50; min-width: 0; padding: 6px; box-sizing: border-box; }
+.customerDropdownResults { max-height: 240px; overflow-y: auto; overscroll-behavior: contain; padding-right: 4px; min-width: 0; }
+.customerDropdownItem { display: flex; flex-direction: column; gap: 2px; width: 100%; min-width: 0; box-sizing: border-box; text-align: left; padding: 10px 12px; border-radius: 8px; cursor: pointer; transition: background-color 0.2s; }
+.customerDropdownItem:hover, .customerDropdownItem:focus-visible, .customerDropdownItem[data-active="true"] { background-color: rgba(0, 116, 188, 0.05); }
+.customerDropdownName, .customerDropdownMeta { display: block; width: 100%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.customerDropdownName { font-size: 15px; font-weight: 500; color: var(--foreground); }
+.customerDropdownMeta { font-size: 13px; color: var(--muted-foreground); }
+.customerDropdownDivider { height: 1px; background-color: var(--border); margin: 6px 0; }
+.customerDropdownCreate { width: 100%; min-width: 0; min-height: 36px; box-sizing: border-box; }
+.customerDropdownCreate:hover { filter: brightness(0.95); }
+.customerDropdownCreate > svg { flex-shrink: 0; }
+.customerDropdownCreateLabel { min-width: 0; }
 .customerChip { display: flex; align-items: center; justify-content: space-between; height: 2.5rem; padding: 0 0.6rem; background-color: rgba(0, 116, 188, 0.05); border: 1px solid rgba(0, 116, 188, 0.2); border-radius: 0.375rem; box-sizing: border-box; width: 100%; }
 
 .customerChipClose { padding: 0.125rem; border-radius: 50%; color: var(--muted-foreground); cursor: pointer; transition: all 0.2s; background: none; border: none; display: flex; align-items: center; justify-content: center; }

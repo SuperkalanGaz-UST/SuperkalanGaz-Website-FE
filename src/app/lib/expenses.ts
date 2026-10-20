@@ -7,9 +7,11 @@ export const EXPENSE_CATEGORIES = [
   'Communication',
   'Branch Supplies',
   'Facility Costs',
+  'Salary & Wages',
 ] as const;
 
 export type ExpenseCategory = (typeof EXPENSE_CATEGORIES)[number];
+export const OPERATIONAL_EXPENSE_CATEGORIES = EXPENSE_CATEGORIES.filter((category) => category !== 'Salary & Wages');
 
 export interface ExpenseApiRow {
   id: string;
@@ -34,8 +36,10 @@ export interface ExpensePayload {
   receiptName: string | null;
 }
 
-export async function fetchExpenses(month: string): Promise<ExpenseApiRow[]> {
-  const response = await apiFetch(`/expenses?month=${encodeURIComponent(month)}`);
+export async function fetchExpenses(month: string, branchId?: string): Promise<ExpenseApiRow[]> {
+  const query = new URLSearchParams({ month });
+  if (branchId) query.set('branchId', branchId);
+  const response = await apiFetch(`/expenses?${query}`, { signal: AbortSignal.timeout(10_000) });
   const data: unknown = await response.json();
   if (!response.ok) throw new Error(apiErrorMessage(data, 'Failed to load expenses'));
   return (data as { expenses: ExpenseApiRow[] }).expenses;

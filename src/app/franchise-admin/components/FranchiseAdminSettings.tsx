@@ -200,7 +200,6 @@ export function FranchiseAdminSettings() {
     <div className="flex-1 overflow-y-auto bg-[#F8FAFC]">
       <Header
         title="Account settings"
-        description="Manage your personal details and account security."
       />
 
       <main className="px-8 pb-10">

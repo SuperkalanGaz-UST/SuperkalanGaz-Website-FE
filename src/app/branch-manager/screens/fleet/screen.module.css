@@ -4,10 +4,11 @@
 .pageDescription { font-size: 0.9rem; color: var(--muted-foreground); }
 .statsGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 1rem; }
 .statCard { background-color: var(--card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 1.25rem; box-shadow: var(--shadow); }
-.statHeader { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem; }
-.statLabel { font-size: 0.8rem; font-weight: 500; color: var(--muted-foreground); text-transform: uppercase; letter-spacing: 0.05em; }
+.statHeader { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+.statLabel { composes: ownerMetricTitle from '../../../components/FranchiseReports.module.css'; color: var(--muted-foreground); text-transform: uppercase; margin-top: 0.5px; }
 .statIcon { color: var(--muted-foreground); }
-.statValue { font-size: 2rem; font-weight: 700; color: var(--foreground); line-height: 1; }
+.statValue { composes: managerMetricValue from '../../../components/FranchiseReports.module.css'; color: var(--foreground); }
+.statLabel, .statValue { transform: translateY(-4px); }
 .mainLayout { display: grid; grid-template-columns: 1fr 300px; gap: 1.5rem; height: 480px; }
 @media (max-width: 900px) { .mainLayout { grid-template-columns: 1fr; height: auto; } }
 .mapPanel { background-color: var(--card); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow); overflow: hidden; display: flex; flex-direction: column; }

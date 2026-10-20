@@ -1,6 +1,7 @@
 import React, { ReactNode } from 'react';
 import { ArrowUpRight, ArrowDownRight } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../../components/ui/tooltip';
+import typography from '../../components/FranchiseReports.module.css';
 
 export interface KPITrend {
   /** e.g. "+10.2% from yesterday" */
@@ -33,9 +34,9 @@ interface KPICardProps {
 export function KPICard({ title, value, subtitle, icon, alert, accentColor = '#007BC1', trend, titleClassName = '', tooltip }: KPICardProps) {
   const card = (
     <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-3.5 relative flex flex-col h-full">
-      <div className="flex items-start justify-between mb-1">
-        <div className="flex items-start gap-1.5 pt-1.5">
-          <div className={`text-sm font-medium text-gray-500 ${titleClassName}`}>{title}</div>
+      <div className="flex items-start justify-between mb-0">
+        <div className={`${typography.ownerKpiTextShift} flex items-start gap-1.5 pt-[12.5px]`}>
+          <div className={`${typography.ownerMetricTitle} text-gray-500 ${titleClassName}`}>{title}</div>
         </div>
         {icon && (
           <div className="w-8 h-8 rounded-[8px] border border-gray-100 flex items-center justify-center shadow-sm text-[#007BC1]">
@@ -44,11 +45,11 @@ export function KPICard({ title, value, subtitle, icon, alert, accentColor = '#0
         )}
       </div>
 
-      <div className={`text-3xl font-bold mt-2 leading-none ${alert ? 'text-[#CC1903]' : 'text-gray-900'}`}>
+      <div className={`${typography.ownerMetricValue} ${typography.ownerKpiTextShift} mt-1.5`}>
         {value}
       </div>
 
-      {subtitle && <div className="text-xs text-gray-500 mt-1">{subtitle}</div>}
+      {subtitle && <div className={`${typography.ownerMetricDescription} text-gray-500 mt-1`}>{subtitle}</div>}
 
       {trend && (
         <div className="flex items-center gap-2 mt-auto pt-2">
@@ -65,7 +66,7 @@ export function KPICard({ title, value, subtitle, icon, alert, accentColor = '#0
               const [, percent, textPart] = match;
               return (
                 <>
-                  <span className="text-xs text-gray-400 font-medium">{textPart}</span>
+                  <span className={`${typography.ownerMetricDescription} text-gray-400`}>{textPart}</span>
                   <div className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded-md text-[11px] font-semibold ${pillBg} ${pillText}`}>
                     {percent}
                     <IconComponent className="w-3 h-3" />
@@ -74,7 +75,7 @@ export function KPICard({ title, value, subtitle, icon, alert, accentColor = '#0
               );
             } else {
               return (
-                <span className="text-xs text-gray-400 font-medium">{trend.text}</span>
+                <span className={`${typography.ownerMetricDescription} text-gray-400`}>{trend.text}</span>
               );
             }
           })()}

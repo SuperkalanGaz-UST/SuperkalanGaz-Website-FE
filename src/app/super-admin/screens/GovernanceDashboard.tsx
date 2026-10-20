@@ -23,6 +23,7 @@ import {
   StatusChip,
 } from '../components/GovernanceUi';
 import { SuperAdminHeader } from '../components/SuperAdminHeader';
+import typography from '../../components/FranchiseReports.module.css';
 
 function activityLabel(action: string): string {
   return action === 'governance-request-submitted' ? 'Request Submitted' : humanize(action);
@@ -68,7 +69,7 @@ export function GovernanceDashboard({ onNavigate }: { onNavigate: (screen: strin
                     <div className="flex items-start justify-between gap-4">
                       <div>
                         <p className="text-xs font-medium uppercase tracking-wide text-gray-500">{String(label)}</p>
-                        <p className="mt-3 text-4xl font-semibold tracking-tight text-slate-950">
+                        <p className={`${typography.ownerMetricValue} mt-3`}>
                           {value ?? '—'}
                         </p>
                       </div>

@@ -273,6 +273,8 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
     const [highlightedCustomerIndex, setHighlightedCustomerIndex] = useState(-1);
     const customerDropdownRef = React.useRef<HTMLDivElement>(null);
     const customerOptionsRef = React.useRef<HTMLDivElement>(null);
+    const sortedCustomerResults = [...(customerResults ?? [])]
+        .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
 
     useEffect(() => setHighlightedCustomerIndex(-1), [customerResults, customerSearchLoading, customerSearchError]);
 
@@ -1107,7 +1109,7 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                                                         onFocus={() => setShowCustomerDropdown(true)}
                                                         onBlur={() => form.validateField('customerName')}
                                                         onKeyDown={e => {
-                                                            const results = !customerSearchLoading && !customerSearchError && customerSearch.trim().length >= 2 ? customerResults ?? [] : [];
+                                                            const results = !customerSearchLoading && !customerSearchError && customerSearch.trim().length >= 2 ? sortedCustomerResults : [];
                                                             if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
                                                                 e.preventDefault();
                                                                 setShowCustomerDropdown(true);
@@ -1128,7 +1130,7 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                                                 )}
                                                 {showCustomerDropdown && !selectedCustomer && (
                                                     <div className={styles.customerDropdown}>
-                                                        <div ref={customerOptionsRef} style={{ maxHeight: '200px', overflowY: 'auto' }}>
+                                                        <div ref={customerOptionsRef} className={!customerSearchLoading && !customerSearchError && customerSearch.trim().length >= 2 && sortedCustomerResults.length > 0 ? styles.customerDropdownResults : undefined}>
                                                         {customerSearch.trim().length > 0 && customerSearch.trim().length < 2 ? (
                                                             <div style={{ padding: '0.5rem', fontSize: '0.8125rem', color: 'var(--muted-foreground)' }}>Type at least 2 characters to search.</div>
                                                         ) : customerSearchLoading ? (
@@ -1139,14 +1141,12 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                                                             <div style={{ padding: '0.5rem', fontSize: '0.8125rem', color: '#dc2626' }}>{customerSearchError}</div>
                                                         ) : customerResults && customerResults.length > 0 ? (
                                                             <>
-                                                                {customerResults.map((c, index) => (
-                                                                    <div key={c.id} data-customer-option className={styles.customerDropdownItem} style={highlightedCustomerIndex === index ? { backgroundColor: 'rgba(0,0,0,0.05)' } : undefined} onMouseDown={() => selectCustomer(c)}>
-                                                                        <div className={styles.customerChipInfo}>
-                                                                            <span className={styles.boldText}>{c.name}</span>
-                                                                            <span style={{ fontSize: '0.7rem', color: 'var(--muted-foreground)' }}>
-                                                                                {c.contact_number} &middot; {formatLastOrderDate(c.last_order_date)}
-                                                                            </span>
-                                                                        </div>
+                                                                {sortedCustomerResults.map((c, index) => (
+                                                                    <div key={c.id} data-customer-option className={styles.customerDropdownItem} data-active={highlightedCustomerIndex === index} onMouseDown={() => selectCustomer(c)}>
+                                                                        <span className={styles.customerDropdownName}>{c.name}</span>
+                                                                        <span className={styles.customerDropdownMeta}>
+                                                                            {c.contact_number}{c.last_order_date && !Number.isNaN(new Date(c.last_order_date).getTime()) ? ` · ${formatLastOrderDate(c.last_order_date)}` : ''}
+                                                                        </span>
                                                                     </div>
                                                                 ))}
                                                             </>
@@ -1164,16 +1164,20 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                                                             </div>
                                                         ) : null}
                                                         </div>
+                                                        {!customerSearchLoading && !customerSearchError && customerSearch.trim().length >= 2 && sortedCustomerResults.length > 0 && (
+                                                            <div className={styles.customerDropdownDivider} />
+                                                        )}
                                                         <Button
                                                             type="button"
                                                             variant="primary"
                                                             size="sm"
                                                             data-customer-option
-                                                            style={{ marginTop: '0.25rem', gap: '0.35rem', outline: highlightedCustomerIndex === (!customerSearchLoading && !customerSearchError && customerSearch.trim().length >= 2 ? customerResults?.length ?? 0 : 0) ? '2px solid currentColor' : undefined }}
+                                                            className={styles.customerDropdownCreate}
+                                                            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: '8px 12px', gap: '8px', outline: highlightedCustomerIndex === (!customerSearchLoading && !customerSearchError && customerSearch.trim().length >= 2 ? customerResults?.length ?? 0 : 0) ? '2px solid currentColor' : undefined }}
                                                             onMouseDown={(e: React.MouseEvent) => { e.preventDefault(); setShowCustomerDropdown(false); openCreateCustomer(); }}
                                                         >
                                                             <Plus size={14} />
-                                                            Create new customer
+                                                            <span className={styles.customerDropdownCreateLabel}>Create new customer</span>
                                                         </Button>
                                                     </div>
                                                 )}

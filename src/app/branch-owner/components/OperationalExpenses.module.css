@@ -1,0 +1,578 @@
+.workspace {
+  max-width: 1680px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 0 32px 40px;
+  color: #111c30;
+}
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 20px;
+  margin-bottom: 32px;
+  border-bottom: 1px solid #e2e8f0;
+}
+.tabs {
+  display: flex;
+  gap: 32px;
+}
+.tabs button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 22px 0;
+  border-bottom: 3px solid transparent;
+  font-size: 16px;
+  font-weight: 600;
+  color: #64748b;
+}
+.tabs button[aria-selected='true'] {
+  color: #007bc1;
+  border-bottom-color: #007bc1;
+}
+.monthPicker select {
+  min-height: 44px;
+  border: 1px solid #dce4ee;
+  background: white;
+  border-radius: 10px;
+  padding: 8px 14px;
+  font-size: 14px;
+}
+.tabPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+.sectionHeading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+.headingWithBadge {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-items: center;
+}
+.sectionHeading h2 {
+  font-size: 28px;
+  line-height: 1.3;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+}
+.sectionHeading p,
+.panelHeading p,
+.muted {
+  margin-top: 8px;
+  color: #70809a;
+  font-size: 14px;
+}
+.ownerBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 500;
+  background: #edf6fd;
+  color: #186297;
+  border: 1px solid #dfecf6;
+  padding: 5px 10px;
+  border-radius: 20px;
+}
+.salaryMetrics,
+.overviewMetrics {
+  display: grid;
+  gap: 20px;
+}
+.salaryMetrics {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.overviewMetrics {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+.metric {
+  min-width: 0;
+  border: 1px solid #e2e8ef;
+  border-radius: 16px;
+  background: white;
+  padding: 25px 24px;
+}
+.metric p {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  color: #6c7990;
+  font-size: 15px;
+}
+.metric strong {
+  display: block;
+  font-size: clamp(25px, 2.4vw, 36px);
+  font-weight: 700;
+  line-height: 1.3;
+  margin-top: 16px;
+  letter-spacing: -0.7px;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.metric small {
+  display: block;
+  font-size: 12px;
+  color: #7c8aa0;
+  margin-top: 7px;
+}
+.panel {
+  min-width: 0;
+  border: 1px solid #e2e8ef;
+  border-radius: 16px;
+  background: white;
+  padding: 28px;
+}
+.panelHeading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 20px;
+  margin-bottom: 24px;
+}
+.panelHeading h3 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 20px;
+  line-height: 1.4;
+  font-weight: 650;
+  letter-spacing: -0.3px;
+}
+.search {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid #d9e2ee;
+  border-radius: 9px;
+  min-width: 220px;
+  width: 320px;
+  max-width: 100%;
+  padding: 11px 14px;
+  color: #8090a7;
+}
+.search input {
+  min-width: 0;
+  width: 100%;
+  outline: none;
+  font-size: 14px;
+  color: #172339;
+}
+.tableScroll {
+  overflow-x: auto;
+  max-width: 100%;
+}
+.salaryTable {
+  width: 100%;
+  min-width: 760px;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+.salaryTable th {
+  padding: 17px 18px;
+  font-size: 13px;
+  color: #6c7d96;
+  background: #f5f8fb;
+  font-weight: 600;
+  white-space: nowrap;
+  text-align: right;
+}
+.salaryTable td {
+  padding: 25px 18px;
+  border-bottom: 1px solid #edf1f6;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.salaryTable td:first-child,
+.salaryTable th:first-child {
+  text-align: left;
+}
+.salaryTable td:first-child {
+  white-space: normal;
+  min-width: 200px;
+}
+.salaryTable small {
+  display: block;
+  margin-top: 7px;
+  color: #7a89a0;
+  font-size: 12px;
+}
+.salaryTable strong {
+  font-weight: 600;
+}
+.salaryTable tfoot td {
+  font-weight: 650;
+  background: #f6f9fc;
+  border-bottom: 0;
+}
+.salaryTable .empty,
+.empty {
+  padding: 44px 24px;
+  text-align: center;
+  color: #7a89a0;
+  font-size: 14px;
+  white-space: normal;
+}
+.footnote {
+  color: #8290a5;
+  font-size: 12px;
+  margin-top: 16px;
+}
+.primaryButton,
+.secondaryButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  min-height: 44px;
+  padding: 12px 22px;
+  border-radius: 9px;
+  font-size: 14px;
+  font-weight: 600;
+}
+.primaryButton {
+  background: #007bc1;
+  color: white;
+  border: 1px solid #007bc1;
+}
+.primaryButton:hover {
+  background: #0065a0;
+}
+.secondaryButton {
+  background: white;
+  color: #526480;
+  border: 1px solid #d7e0eb;
+}
+.primaryButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.textButton {
+  color: #007bc1;
+  font-size: 14px;
+  font-weight: 500;
+  text-align: left;
+}
+.overviewMiddle {
+  display: grid;
+  grid-template-columns: minmax(0, 1.7fr) minmax(300px, 1fr);
+  gap: 24px;
+}
+.chart {
+  min-width: 0;
+}
+.segments {
+  display: flex;
+  padding: 3px;
+  border: 1px solid #dce4ee;
+  border-radius: 9px;
+}
+.segments button {
+  padding: 6px 9px;
+  text-transform: capitalize;
+  font-size: 12px;
+  border-radius: 6px;
+  color: #63758f;
+}
+.segments button[aria-pressed='true'] {
+  background: #007bc1;
+  color: white;
+}
+.salarySummary {
+  margin: 26px 0 20px;
+}
+.salarySummary > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 18px 0;
+  border-bottom: 1px solid #edf1f6;
+  font-size: 15px;
+}
+.salarySummary dd {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.salarySummary > div:last-child {
+  font-weight: 650;
+  border-bottom: 0;
+}
+.categoryGrid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 24px;
+}
+.categoryGrid > div {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  min-width: 0;
+}
+.categoryGrid svg {
+  color: #007bc1;
+  flex-shrink: 0;
+}
+.categoryGrid p {
+  font-size: 12px;
+  color: #6a7b95;
+}
+.categoryGrid strong {
+  display: block;
+  font-size: 19px;
+  margin-top: 8px;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+.error {
+  margin: 24px 0;
+  border: 1px solid #fecaca;
+  border-radius: 10px;
+  padding: 20px;
+  background: #fff7f7;
+  color: #b42332;
+  font-size: 14px;
+}
+.error button {
+  margin: 8px 0 0 12px;
+  text-decoration: underline;
+  font-weight: 600;
+}
+.salaryDialog {
+  width: calc(100vw - 40px) !important;
+  max-width: 1050px !important;
+  padding: 0 !important;
+  gap: 0 !important;
+  border-radius: 18px !important;
+  background: white;
+  max-height: calc(100dvh - 48px);
+  overflow-y: auto;
+  color: #172339;
+}
+.dialogHeading {
+  padding: 30px 36px 24px;
+  border-bottom: 1px solid #edf1f6;
+}
+.dialogHeading h2 {
+  font-size: 25px;
+  line-height: 1.3;
+}
+.dialogHeading p {
+  margin-top: 10px;
+  font-size: 14px;
+  color: #71819a;
+}
+.formFields {
+  padding: 30px 36px;
+  min-width: 0;
+}
+.identityRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) repeat(2, minmax(0, 1fr));
+  gap: 22px;
+}
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-size: 13px;
+  font-weight: 550;
+  min-width: 0;
+  color: #526480;
+}
+.field input,
+.field select {
+  width: 100%;
+  min-width: 0;
+  min-height: 48px;
+  border: 1px solid #d9e2ee;
+  border-radius: 9px;
+  padding: 11px 12px;
+  font-size: 15px;
+  font-weight: 400;
+  color: #172339;
+  background: white;
+}
+.field input:focus,
+.field select:focus {
+  outline: 2px solid #87c5eb;
+  outline-offset: 2px;
+}
+.paySections {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 40px;
+  margin: 32px 0 26px;
+  padding-top: 28px;
+  border-top: 1px solid #edf1f6;
+}
+.paySections h3 {
+  font-size: 18px;
+  font-weight: 650;
+  margin-bottom: 18px;
+}
+.twoFields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+.payCalculation {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  background: #f4f8fc;
+  border-radius: 8px;
+  padding: 15px;
+  margin-top: 28px;
+  font-size: 12px;
+  color: #71819a;
+}
+.payCalculation output {
+  font-size: 18px;
+  font-weight: 650;
+  color: #14213b;
+  white-space: nowrap;
+}
+.rateHint {
+  margin-top: 8px;
+  font-size: 11px;
+  color: #71819a;
+}
+.rateHint + .payCalculation {
+  margin-top: 7px;
+}
+.calculatedTotal {
+  background: #edf7ff;
+  border-radius: 10px;
+  padding: 20px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  color: #007bc1;
+}
+.calculatedTotal strong {
+  font-size: 17px;
+}
+.calculatedTotal p {
+  margin-top: 6px;
+  font-size: 12px;
+  color: #71819a;
+}
+.calculatedTotal output {
+  font-weight: 700;
+  font-size: 29px;
+  font-variant-numeric: tabular-nums;
+}
+.dialogFooter {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 24px;
+  margin-top: 28px;
+  padding-top: 24px;
+  border-top: 1px solid #edf1f6;
+}
+.dialogFooter p {
+  max-width: 330px;
+  font-size: 12px;
+  color: #71819a;
+}
+.dialogFooter > div {
+  display: flex;
+  gap: 12px;
+}
+@media (max-width: 1150px) {
+  .overviewMetrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .overviewMiddle {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .categoryGrid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+@media (max-width: 700px) {
+  .workspace {
+    padding: 0 16px 24px;
+  }
+  .toolbar {
+    gap: 8px;
+    padding-bottom: 16px;
+  }
+  .tabs {
+    gap: 20px;
+  }
+  .tabs button {
+    font-size: 13px;
+    padding: 16px 0;
+  }
+  .sectionHeading h2 {
+    font-size: 24px;
+  }
+  .salaryMetrics {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .overviewMetrics {
+    gap: 12px;
+  }
+  .metric {
+    padding: 20px;
+  }
+  .metric p {
+    font-size: 13px;
+  }
+  .metric strong {
+    font-size: 25px;
+  }
+  .panel {
+    padding: 20px;
+  }
+  .categoryGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .salaryDialog {
+    width: calc(100vw - 24px) !important;
+  }
+  .dialogHeading,
+  .formFields {
+    padding: 24px;
+  }
+  .dialogHeading h2 {
+    font-size: 22px;
+  }
+  .identityRow,
+  .paySections {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .paySections {
+    gap: 28px;
+  }
+  .dialogFooter {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .dialogFooter > div {
+    justify-content: flex-end;
+  }
+  .calculatedTotal {
+    padding: 18px;
+  }
+  .calculatedTotal output {
+    font-size: 25px;
+  }
+}

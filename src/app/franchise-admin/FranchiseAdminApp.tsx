@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { useScreenNavigation } from '../hooks/useScreenNavigation';
 import { Sidebar } from '../components/Sidebar';
 import { Dashboard } from '../components/Dashboard';
@@ -24,6 +25,11 @@ import { StaffAccountReviews } from './components/StaffAccountReviews';
 
 export function FranchiseAdminApp() {
   const [activeScreen, setActiveScreen] = useScreenNavigation('franchise-admin');
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
+  const viewCustomer = (id: string) => {
+    setSelectedCustomerId(id);
+    setActiveScreen('customer-detail');
+  };
 
   // Keep sidebar highlight on 'customers' when viewing customer detail
   const sidebarActive = activeScreen === 'customer-detail' ? 'customers' : activeScreen;
@@ -34,9 +40,9 @@ export function FranchiseAdminApp() {
 
       <div className="flex-1 flex flex-col overflow-hidden">
         {activeScreen === 'dashboard' && <Dashboard />}
-        {activeScreen === 'order-analytics' && <OrderAnalytics />}
-        {activeScreen === 'customers' && <CustomerList onViewCustomer={() => setActiveScreen('customer-detail')} />}
-        {activeScreen === 'customer-detail' && <CustomerDetail onBack={() => setActiveScreen('customers')} />}
+        {activeScreen === 'order-analytics' && <OrderAnalytics onViewCustomer={viewCustomer} />}
+        {activeScreen === 'customers' && <CustomerList onViewCustomer={viewCustomer} />}
+        {activeScreen === 'customer-detail' && <CustomerDetail customerId={selectedCustomerId} onBack={() => setActiveScreen('customers')} />}
         {activeScreen === 'csat' && <CSATSatisfaction />}
         {activeScreen === 'loyalty' && <LoyaltyProgram />}
         {activeScreen === 'supply-chain' && <SupplyChain />}
