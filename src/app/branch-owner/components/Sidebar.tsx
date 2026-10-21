@@ -11,6 +11,7 @@ import {
   Gift,
   Boxes,
   Bike,
+  Wrench,
   FileText,
   UserRound,
   Users,
@@ -49,6 +50,7 @@ const NAV_ENTRIES: SidebarNavEntry[] = [
     children: [
       { icon: Boxes, label: 'Inventory', id: 'inventory' },
       { icon: Bike, label: 'Fleet', id: 'fleet-overview' },
+      { icon: Wrench, label: 'Vehicles', id: 'vehicles' },
     ],
   },
   { icon: Users, label: 'User Management', id: 'user-management' },

@@ -179,7 +179,6 @@ export default function FleetPage() {
                 <div className={styles.statCard}><div className={styles.statHeader}><span className={styles.statLabel}>Total Riders</span><Truck className={styles.statIcon} size={20} /></div><div className={styles.statValue}>{riders.length}</div></div>
                 <div className={styles.statCard}><div className={styles.statHeader}><span className={styles.statLabel}>Active Now</span><Navigation className={styles.statIcon} style={{ color: "var(--success)" }} size={20} /></div><div className={styles.statValue}>{activeRiders}</div></div>
                 <div className={styles.statCard}><div className={styles.statHeader}><span className={styles.statLabel}>Outside Geofence</span><ShieldAlert className={styles.statIcon} style={{ color: "var(--warning)" }} size={20} /></div><div className={styles.statValue}>{outsideRiders}</div></div>
-                <div className={styles.statCard}><div className={styles.statHeader}><span className={styles.statLabel}>Past Curfew</span><Clock className={styles.statIcon} style={{ color: "var(--muted-foreground)" }} size={20} /></div><div className={styles.statValue}>0</div></div>
             </div>
 
             <div className={styles.mainLayout}>

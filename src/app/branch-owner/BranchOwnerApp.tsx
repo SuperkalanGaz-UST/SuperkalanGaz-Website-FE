@@ -11,6 +11,7 @@ import { CSATSatisfaction } from './components/CSATSatisfaction';
 import { LoyaltyProgram } from './components/LoyaltyProgram';
 import { Inventory } from './components/Inventory';
 import { ReportGeneration } from './components/ReportGeneration';
+import { VehicleOverview } from './components/VehicleOverview';
 import { FleetOverview } from './components/FleetOverview';
 import { UserManagement } from './components/UserManagement';
 import { BranchSettings } from './components/BranchSettings';
@@ -61,6 +62,7 @@ export function BranchOwnerApp() {
           {activeScreen === 'inventory' && <Inventory />}
           {activeScreen === 'reports' && <ReportGeneration />}
           {activeScreen === 'fleet-overview' && <FleetOverview />}
+          {activeScreen === 'vehicles' && <VehicleOverview />}
           {activeScreen === 'user-management' && <UserManagement />}
           {activeScreen === 'settings' && <BranchSettings />}
 

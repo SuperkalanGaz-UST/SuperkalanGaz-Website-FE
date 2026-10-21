@@ -40,6 +40,7 @@ const SCREEN_PATHS: Record<Role, Readonly<Record<string, string>>> = {
     inventory: 'inventory',
     reports: 'reports',
     'fleet-overview': 'fleet',
+    vehicles: 'vehicles',
     'user-management': 'user-management',
     settings: 'settings',
     'sales-full': 'sales',

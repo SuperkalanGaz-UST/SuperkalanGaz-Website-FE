@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import dynamic from 'next/dynamic';
 import { Header } from './Header';
 import { KPICard } from './KPICard';
-import { Users, Navigation, AlertTriangle, Clock, Loader2 } from 'lucide-react';
+import { Users, Navigation, AlertTriangle, Loader2 } from 'lucide-react';
 import { useBranch } from '../contexts/BranchContext';
 import type {
   FleetRider,
@@ -184,7 +184,7 @@ export function FleetOverview() {
 
         {activeTab === 'overview' ? (
           <>
-        <div className="grid grid-cols-4 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           <KPICard
             title="Total Delivery Riders"
             value={String(riders.length)}
@@ -203,13 +203,6 @@ export function FleetOverview() {
             subtitle="Awaiting vehicle telemetry"
             icon={<AlertTriangle className="w-5 h-5 text-orange-500" />}
             accentColor="#f59e0b"
-          />
-          <KPICard
-            title="Past Curfew"
-            value="—"
-            subtitle="Curfew data unavailable"
-            icon={<Clock className="w-5 h-5 text-red-600" />}
-            accentColor="#ef4444"
           />
         </div>
 

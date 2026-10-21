@@ -25,6 +25,11 @@ interface VehicleRow {
     gps_provisioning_status: "unconfigured" | "pending" | "provisioned" | "failed";
     gps_provisioning_error: string | null;
     gps_provisioned_at: string | null;
+    gps_mileage?: {
+        status: 'waiting' | 'synced' | 'unavailable' | 'counter-reset' | 'stale' | 'disabled';
+        position_at: string | null;
+        synced_at: string | null;
+    } | null;
     current_odometer_km: number;
     last_pms_odometer_km: number;
     km_since_last_pms: number;
@@ -112,8 +117,12 @@ export default function VehicleManagementPage() {
         error: vehiclesQueryError,
     } = useQuery({
         queryKey: ['vehicles'],
-        queryFn: () => fetchJson<{ vehicles: VehicleRow[] }>('/vehicles'),
-        staleTime: 30_000,
+        queryFn: () => fetchJson<{ vehicles: VehicleRow[]; gps_refresh_interval_ms?: number }>('/vehicles'),
+        staleTime: 300_000,
+        // The API shares a durable cooldown across tabs/instances. Pause the
+        // browser refresh in hidden tabs; Traccar retains cumulative distance.
+        refetchInterval: (query) => Math.max(60_000, query.state.data?.gps_refresh_interval_ms ?? 300_000),
+        refetchIntervalInBackground: false,
     });
     const vehicles = vehiclesData?.vehicles ?? [];
     const error = vehiclesQueryError ? vehiclesQueryError.message : null;
@@ -464,6 +473,25 @@ export default function VehicleManagementPage() {
                                         </Badge>
                                     </div>
                                 </div>
+
+                                {vehicle.gps_provisioning_status === 'provisioned' && (
+                                    <p className={styles.gpsMileageNote} role="status">
+                                        {vehicle.gps_mileage?.status === 'synced'
+                                            ? 'GPS mileage updates automatically while this screen is open.'
+                                            : vehicle.gps_mileage?.status === 'disabled'
+                                                ? 'Automatic GPS mileage is disabled. Use Update Odo to record a reading.'
+                                                : vehicle.gps_mileage?.status === 'unavailable'
+                                                    ? 'GPS mileage unavailable. Showing the last saved odometer; retrying automatically.'
+                                                    : vehicle.gps_mileage?.status === 'stale'
+                                                        ? 'No recent GPS reading. Showing the last saved odometer.'
+                                                        : vehicle.gps_mileage?.status === 'counter-reset'
+                                                            ? 'GPS distance counter reset. Odometer preserved; tracking resumes from the new baseline.'
+                                                            : 'Waiting for a new GPS distance reading. Odometer is preserved.'}
+                                        {vehicle.gps_mileage?.position_at && (
+                                            <span> Last GPS reading: {new Date(vehicle.gps_mileage.position_at).toLocaleString()}.</span>
+                                        )}
+                                    </p>
+                                )}
 
                                 <div className={styles.metricsRow}>
                                     <div className={styles.metricBox}>
