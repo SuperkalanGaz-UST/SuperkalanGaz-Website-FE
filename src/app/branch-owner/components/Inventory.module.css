@@ -1,0 +1,123 @@
+.page { min-width: 0; }
+.workspace {
+  width: 100%;
+  max-width: 1600px;
+  min-width: 0;
+  margin: 0 auto;
+  container: owner-inventory / inline-size;
+  font-family: 'Poppins', Arial, sans-serif;
+  color: #111827;
+}
+.metrics { gap: 16px; margin-bottom: 24px; }
+.partialNote { margin: -10px 0 20px; color: #6b7280; font-size: 12px; line-height: 1.6; }
+.metric { min-width: 0; border-radius: 12px; padding: 20px; }
+.metric p { line-height: 1.5; overflow-wrap: anywhere; }
+.metric p:first-child { font-size: 13px; }
+.metric p:nth-child(2) { font-size: 28px; font-variant-numeric: tabular-nums; }
+.metric > p:last-child { font-size: 12px; }
+.list { min-width: 0; border: 1px solid #e5e7eb; border-radius: 12px; }
+.listHeader { flex-wrap: wrap; gap: 16px; padding: 22px 32px; }
+.listHeader > div:first-child { min-width: 0; }
+.listHeader h2 { font-size: 17px; }
+.listHeader p { max-width: 520px; font-size: 12px; line-height: 1.7; }
+.filters { display: flex; flex-wrap: wrap; max-width: 100%; gap: 3px; }
+.filters button {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  gap: 7px;
+  min-height: 38px;
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 500;
+}
+.columnHead {
+  display: none;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr) 130px;
+  column-gap: 48px;
+  align-items: center;
+  padding: 12px 32px;
+}
+.columnHead span:last-child { text-align: left; }
+.columnHead span:nth-child(2) {
+  position: relative;
+  left: -64px;
+  width: min(100%, 460px);
+  margin-inline: 0;
+}
+.inventoryRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr) 130px;
+  grid-template-areas: 'item stock status';
+  align-items: center;
+  min-width: 0;
+  column-gap: 48px;
+  padding: 20px 32px;
+}
+.identity { grid-area: item; min-width: 0; gap: 14px; }
+.identity > div:last-child { min-width: 0; }
+.identity p { overflow-wrap: anywhere; }
+.identity p:first-child { font-size: 13px; font-weight: 600; line-height: 1.5; }
+.identity p:last-child { font-size: 12px; line-height: 1.6; }
+.image { width: 64px; height: 64px; flex: 0 0 64px; border-radius: 10px; }
+.stockLevel { grid-area: stock; min-width: 0; width: 100%; }
+.stockLevel {
+  position: relative;
+  left: -64px;
+  width: min(100%, 460px);
+  margin-inline: 0;
+}
+.stockLevel > div:first-child { flex-wrap: wrap; gap: 4px 12px; font-size: 12px; }
+.capacity { margin-top: 7px; color: #6b7280; font-size: 11px; }
+.status { grid-area: status; text-align: left; }
+.status > span { font-size: 11px; font-weight: 500; white-space: nowrap; }
+.state { padding: 40px 24px; text-align: center; font-size: 13px; line-height: 1.7; }
+
+/* Keep this screen's shared header controls below its title on narrow windows. */
+@media (max-width: 700px) {
+  .page > div:first-child { flex-wrap: wrap; align-items: flex-start; padding: 24px 20px 16px; }
+  .page > div:first-child > div:first-child { flex-basis: 100%; }
+  .page > div:first-child > div:last-child { width: 100%; align-items: flex-start; }
+}
+
+@container owner-inventory (min-width: 720px) {
+  .columnHead,
+  .inventoryRow {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr) 130px;
+    column-gap: 48px;
+    padding-left: 32px;
+    padding-right: 32px;
+  }
+  .columnHead { display: grid; font-size: 10px; }
+  .inventoryRow > * { min-width: 0; }
+}
+@container owner-inventory (max-width: 719px) {
+  .metrics { grid-template-columns: minmax(0, 1fr); }
+  .listHeader { flex-direction: column; align-items: stretch; padding-left: 20px; padding-right: 20px; }
+  .filters { align-self: flex-start; }
+  .inventoryRow {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: 'item' 'stock' 'status';
+    column-gap: 0;
+    gap: 16px;
+    padding-left: 20px;
+    padding-right: 20px;
+  }
+  .columnHead span:nth-child(2),
+  .stockLevel {
+    left: 0;
+    width: 100%;
+  }
+  .status { justify-self: start; text-align: left; }
+}
+@container owner-inventory (max-width: 399px) {
+  .metric { padding: 18px; }
+  .listHeader,
+  .inventoryRow { padding: 18px 16px; }
+  .inventoryRow { gap: 14px; }
+  .image { width: 64px; height: 64px; flex-basis: 64px; }
+  .identity { gap: 12px; }
+  .identity p:first-child { font-size: 12px; }
+  .filters { width: 100%; align-self: stretch; }
+  .filters button { flex: 1; padding: 8px; }
+}

@@ -14,7 +14,7 @@ export function LoyaltyProgram() {
       </div>
 
       <div className="p-8">
-        <LoyaltyTrackDashboard branchId={selectedBranchId} />
+        <LoyaltyTrackDashboard branchId={selectedBranchId} branchOwnerView />
       </div>
     </div>
   );

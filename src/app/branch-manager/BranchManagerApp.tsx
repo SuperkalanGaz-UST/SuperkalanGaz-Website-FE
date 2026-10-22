@@ -61,11 +61,6 @@ export function BranchManagerApp() {
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         <AppHeader
           title={SCREEN_TITLES[activeScreen] ?? 'Overview'}
-          description={
-            activeScreen === 'settings'
-              ? 'Manage your personal details and account security.'
-              : undefined
-          }
           badge={
             branch ? (
               <div className="flex items-center px-3 py-1 rounded-full border border-gray-200 bg-white text-[#007BC1] text-xs font-bold whitespace-nowrap">
