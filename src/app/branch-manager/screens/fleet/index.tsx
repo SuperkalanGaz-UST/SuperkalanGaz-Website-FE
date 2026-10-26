@@ -9,20 +9,22 @@ import styles from "./screen.module.css";
 import { fetchJson } from "../../../lib/api";
 import {
     assignedBranchesFrom,
-    type BranchGeofence,
 } from "../../../lib/branchGeofence";
 import { useAccount } from "../../../contexts/AccountContext";
+import { DeliveryRiderLocations } from '../orders/DeliveryRiderLocations';
+import type { DispatchRider } from '../../../lib/deliveryRiderLocation';
 
 /** Rider status as returned by the NestJS Fleet API. */
 type ApiRiderStatus = 'Available' | 'On Delivery' | 'Maintenance Due' | 'Offline';
 
-interface ApiRiderRow {
+interface ApiRiderRow extends DispatchRider {
     id: string;
     branch_id: string;
     name: string;
     plate: string;
     status: ApiRiderStatus;
     created_at: string;
+    updated_at: string;
 }
 
 interface SRRow {
@@ -42,11 +44,6 @@ interface FleetRider {
     status: FleetRiderStatus;
     currentOrder: string | null;
     lastUpdated: string;
-}
-
-interface PositionedFleetRider extends FleetRider {
-    lat: number;
-    lng: number;
 }
 
 const FleetMap = dynamic(() => import("./FleetMap"), { ssr: false, loading: () => <div style={{ height: "100%", background: "var(--muted)", borderRadius: "var(--radius-lg)" }} /> });
@@ -79,39 +76,10 @@ const formatStatusText = (status: FleetRiderStatus) => {
     }
 };
 
-/**
- * Temporary display positions derived from the branch geofence.
- * Replaced by Traccar GPS coordinates when hardware integration is enabled.
- */
-function positionFleetRiders(
-    riders: FleetRider[],
-    geofence: BranchGeofence,
-): PositionedFleetRider[] {
-    const [latTotal, lngTotal] = geofence.points.reduce(
-        ([lat, lng], point) => [lat + point[0], lng + point[1]],
-        [0, 0],
-    );
-    const center: [number, number] = [
-        latTotal / geofence.points.length,
-        lngTotal / geofence.points.length,
-    ];
-
-    return riders.map((rider, index) => {
-        const vertex = geofence.points[index % geofence.points.length];
-        const factor = rider.status === 'outside-geofence' ? 1.18 : 0.22 + (index % 3) * 0.08;
-        return {
-            ...rider,
-            lat: center[0] + (vertex[0] - center[0]) * factor,
-            lng: center[1] + (vertex[1] - center[1]) * factor,
-        };
-    });
-}
-
 export default function FleetPage() {
     const account = useAccount();
     const branchName = account.branches[0];
     const [selectedRiderId, setSelectedRiderId] = useState<string | null>(null);
-    const [mapCenter, setMapCenter] = useState<[number, number] | null>(null);
     const { data: geofenceData, error: geofenceQueryError, isLoading: geofenceLoading } = useQuery({
         queryKey: ['assigned-branches'],
         queryFn: () => fetchJson<unknown>('/branches/assigned'),
@@ -125,9 +93,12 @@ export default function FleetPage() {
 
     const geofenceError = geofenceQueryError ? geofenceQueryError.message : (geofenceData && !geofence ? 'The signed-in account has no active assigned branch.' : null);
 
-    const { data: ridersData, error: ridersQueryError, isLoading: ridersLoading } = useQuery({
-        queryKey: ['riders'],
-        queryFn: () => fetchJson<{ riders: ApiRiderRow[] }>('/riders'),
+    const { data: ridersData, error: ridersQueryError, isLoading: ridersLoading, isFetching: ridersRefreshing, refetch: refreshRiders } = useQuery({
+        queryKey: ['dispatch-riders'],
+        queryFn: ({ signal }) => fetchJson<{ riders: ApiRiderRow[] }>('/riders', { signal }),
+        staleTime: 0,
+        refetchInterval: 15_000,
+        retry: false,
     });
 
     const { data: srData } = useQuery({
@@ -154,38 +125,30 @@ export default function FleetPage() {
             plateNumber: r.plate,
             status: toFleetStatus(r.status),
             currentOrder: activeOrders.get(r.id) ?? null,
-            lastUpdated: formatRelativeTime(r.created_at),
+            lastUpdated: formatRelativeTime(r.updated_at),
         }));
     }, [ridersData, srData]);
 
-    const positionedRiders = useMemo(
-        () => geofence ? positionFleetRiders(riders, geofence) : [],
-        [geofence, riders],
-    );
-
     const handleRiderClick = (rider: FleetRider) => {
         setSelectedRiderId(rider.id);
-        const positionedRider = positionedRiders.find((candidate) => candidate.id === rider.id);
-        if (positionedRider) setMapCenter([positionedRider.lat, positionedRider.lng]);
     };
 
     const activeRiders = riders.filter(r => r.status === "active").length;
-    const outsideRiders = riders.filter(r => r.status === "outside-geofence").length;
     const outsideRider = riders.find(r => r.status === "outside-geofence");
 
     return (
         <div className={styles.pageWrapper}>
             <div className={styles.statsGrid}>
-                <div className={styles.statCard}><div className={styles.statHeader}><span className={styles.statLabel}>Total Riders</span><Truck className={styles.statIcon} size={20} /></div><div className={styles.statValue}>{riders.length}</div></div>
+                <div className={styles.statCard}><div className={styles.statHeader}><span className={styles.statLabel}>Delivery Riders</span><Truck className={styles.statIcon} size={20} /></div><div className={styles.statValue}>{riders.length}</div></div>
                 <div className={styles.statCard}><div className={styles.statHeader}><span className={styles.statLabel}>Active Now</span><Navigation className={styles.statIcon} style={{ color: "var(--success)" }} size={20} /></div><div className={styles.statValue}>{activeRiders}</div></div>
-                <div className={styles.statCard}><div className={styles.statHeader}><span className={styles.statLabel}>Outside Geofence</span><ShieldAlert className={styles.statIcon} style={{ color: "var(--warning)" }} size={20} /></div><div className={styles.statValue}>{outsideRiders}</div></div>
+                <div className={styles.statCard}><div className={styles.statHeader}><span className={styles.statLabel}>Vehicle Geofence</span><ShieldAlert className={styles.statIcon} style={{ color: "var(--warning)" }} size={20} /></div><div className={styles.riderOrderPlaceholder}>Position unavailable</div></div>
             </div>
 
             <div className={styles.mainLayout}>
                 <div className={styles.mapPanel}>
                     <div className={styles.panelHeader}>
-                        <h2 className={styles.panelTitle}>Live GPS Tracking</h2>
-                        <Badge variant="outline" className={styles.liveIndicator}><span className={styles.pulseDot}></span>Live Updates</Badge>
+                        <h2 className={styles.panelTitle}>Vehicle GPS coverage</h2>
+                        <Badge variant="outline">SinoTrack ST-901 / Traccar</Badge>
                     </div>
                     <div className={styles.mapContainer}>
                         {geofenceLoading ? (
@@ -193,11 +156,12 @@ export default function FleetPage() {
                         ) : geofenceError ? (
                             <div className={`${styles.mapState} ${styles.mapStateError}`}>{geofenceError}</div>
                         ) : geofence ? (
-                            <FleetMap riders={positionedRiders} geofence={geofence} mapCenter={mapCenter} />
+                            <FleetMap riders={[]} geofence={geofence} mapCenter={null} />
                         ) : (
                             <div className={styles.mapState}>No geofence has been assigned to {branchName}.</div>
                         )}
                     </div>
+                    <p style={{ padding: '0.75rem 1.25rem', fontSize: '0.75rem', color: 'var(--muted-foreground)' }}>Vehicle positions unavailable. This map shows the branch boundary only. Delivery Rider phone locations appear separately below.</p>
                 </div>
 
                 <div className={styles.listPanel}>
@@ -225,7 +189,7 @@ export default function FleetPage() {
                                         ) : (
                                             <span className={styles.riderOrderPlaceholder}>No active order</span>
                                         )}
-                                        <span className={styles.riderTime}><Clock size={14} />{rider.lastUpdated}</span>
+                                        <span className={styles.riderTime}><Clock size={14} />Roster updated {rider.lastUpdated}</span>
                                     </div>
                                     {rider.status === "outside-geofence" && (
                                         <div className={styles.riderAlert}><AlertCircle size={14} />Outside designated geofence</div>
@@ -236,6 +200,14 @@ export default function FleetPage() {
                     </div>
                 </div>
             </div>
+
+            <DeliveryRiderLocations
+                riders={ridersData?.riders ?? []}
+                loading={ridersLoading}
+                refreshing={ridersRefreshing}
+                error={ridersError}
+                onRefresh={() => { void refreshRiders(); }}
+            />
 
             <div className={styles.bottomLayout}>
                 <div className={styles.alertsPanel}>
@@ -258,7 +230,7 @@ export default function FleetPage() {
                                     </div>
                                 </div>
                             ) : (
-                                <div className={styles.allClear}>No active critical alerts.</div>
+                                <div className={styles.allClear}>Vehicle geofence status is unavailable until hardware positions are received.</div>
                             )}
                         </div>
                     </div>
@@ -292,6 +264,7 @@ export default function FleetPage() {
 /** ISO timestamp → relative "X ago" string for the fleet roster. */
 function formatRelativeTime(iso: string): string {
     const diff = Date.now() - new Date(iso).getTime();
+    if (!Number.isFinite(diff)) return 'Unavailable';
     const minutes = Math.floor(diff / 60_000);
     if (minutes < 1) return 'Just now';
     if (minutes < 60) return `${minutes} min ago`;

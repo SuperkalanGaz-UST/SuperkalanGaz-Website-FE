@@ -124,12 +124,13 @@ export default function VehicleManagementPage() {
         refetchInterval: (query) => Math.max(60_000, query.state.data?.gps_refresh_interval_ms ?? 300_000),
         refetchIntervalInBackground: false,
     });
-    const vehicles = vehiclesData?.vehicles ?? [];
+    // Older API releases may still include inactive (soft-archived) records.
+    const vehicles = (vehiclesData?.vehicles ?? []).filter(vehicle => vehicle.status !== 'inactive');
     const error = vehiclesQueryError ? vehiclesQueryError.message : null;
 
     const [registrationOpen, setRegistrationOpen] = useState(false);
     const [plateNumber, setPlateNumber] = useState("");
-    const [initialOdometerKm, setInitialOdometerKm] = useState("0");
+    const [initialOdometerKm, setInitialOdometerKm] = useState("");
     const [assignedRiderId, setAssignedRiderId] = useState("");
     const [riders, setRiders] = useState<RiderRow[]>([]);
     const [ridersLoading, setRidersLoading] = useState(false);
@@ -190,7 +191,7 @@ export default function VehicleManagementPage() {
         if (registering) return;
         setRegistrationOpen(false);
         setPlateNumber("");
-        setInitialOdometerKm("0");
+        setInitialOdometerKm("");
         setAssignedRiderId("");
         setRegistrationError(null);
     };
@@ -220,7 +221,7 @@ export default function VehicleManagementPage() {
             setRegistrationError('Enter a valid plate number using letters, numbers, spaces, or hyphens.');
             return;
         }
-        if (!Number.isInteger(odometerKm) || odometerKm < 0) {
+        if (!initialOdometerKm.trim() || !Number.isInteger(odometerKm) || odometerKm < 0) {
             setRegistrationError('Enter a valid non-negative odometer reading.');
             return;
         }
@@ -244,7 +245,7 @@ export default function VehicleManagementPage() {
             toast.success(`${created.plate_number} was registered.`);
             setRegistrationOpen(false);
             setPlateNumber("");
-            setInitialOdometerKm("0");
+            setInitialOdometerKm("");
             setAssignedRiderId("");
             setGpsPromptVehicle(created);
         } catch (err) {
@@ -652,12 +653,14 @@ export default function VehicleManagementPage() {
                                     <Input
                                         id="vehicle-odometer"
                                         type="number"
+                                        required
+                                        placeholder="Enter the actual odometer reading"
                                         value={initialOdometerKm}
                                         onChange={(event) => setInitialOdometerKm(event.target.value)}
                                         min={0}
                                         step={1}
                                     />
-                                    <div className={styles.fieldHint}>This becomes the starting PMS baseline.</div>
+                                    <div className={styles.fieldHint}>Enter the vehicle’s actual reading. This becomes the starting PMS baseline.</div>
                                 </div>
                                 <div>
                                     <label className={styles.fieldLabel} htmlFor="vehicle-rider">Assign Delivery Rider (optional)</label>

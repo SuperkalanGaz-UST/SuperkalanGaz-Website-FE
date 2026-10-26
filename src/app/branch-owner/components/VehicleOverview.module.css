@@ -1,4 +1,4 @@
-.main { flex: 1; min-width: 0; overflow-y: auto; padding: 2rem; color: #172033; }
+.main { flex: 1; min-width: 0; overflow-y: auto; color: #172033; }
 .toolbar { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; margin-bottom: 1.75rem; }
 .toolbar h2 { font-size: 1.1rem; font-weight: 600; margin-bottom: .35rem; }
 .toolbar p { font-size: .9rem; color: #71829b; }
@@ -40,7 +40,6 @@
 .history button, .empty button { color: #007bc1; padding: .4rem .7rem; border-radius: .5rem; }
 .empty { padding: 2rem; text-align: center; color: #71829b; }
 @media (max-width: 700px) {
-  .main { padding: 1rem; }
   .toolbar { flex-direction: column; }
   .stats { grid-template-columns: 1fr; gap: .75rem; }
 }

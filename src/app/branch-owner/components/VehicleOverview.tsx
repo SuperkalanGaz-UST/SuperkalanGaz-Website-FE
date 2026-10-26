@@ -3,7 +3,6 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { AlertTriangle, Eye, History, ShieldCheck, Truck } from 'lucide-react';
-import { Header } from './Header';
 import { useBranch } from '../contexts/BranchContext';
 import { fetchJson } from '../../lib/api';
 import { gpsRegistrationBadge } from '../../branch-manager/screens/vehicles/traccar-setup';
@@ -104,7 +103,8 @@ export function VehicleOverview() {
     refetchInterval: 300_000,
     refetchIntervalInBackground: false,
   });
-  const vehicles = data?.vehicles ?? [];
+  // Older API releases may still include inactive (soft-archived) records.
+  const vehicles = (data?.vehicles ?? []).filter(vehicle => vehicle.status !== 'inactive');
   const ready = !!selectedBranchId && !!data && !error;
   const stats = [
     { label: 'Total Fleet', value: vehicles.length, icon: Truck },
@@ -113,9 +113,7 @@ export function VehicleOverview() {
   ];
 
   return (
-    <>
-      <Header title="Vehicle Management" />
-      <main className={styles.main}>
+      <section className={styles.main} aria-label="Vehicles">
         <div className={styles.toolbar}>
           <div><h2>Branch Vehicle Roster</h2><p>View delivery vehicles and their recorded PMS mileage. Vehicle updates are managed by your Branch Manager.</p></div>
           <span className={styles.viewOnly}><Eye size={16} />View-only</span>
@@ -132,7 +130,6 @@ export function VehicleOverview() {
               : isLoading ? <p className={styles.empty}>Loading vehicles…</p>
                 : !vehicles.length ? <p className={styles.empty}>No vehicles on this branch&apos;s roster yet.</p>
                   : <section className={styles.grid} aria-label="Branch vehicles">{vehicles.map(vehicle => <VehicleCard key={`${selectedBranchId}:${vehicle.id}`} vehicle={vehicle} branchId={selectedBranchId} />)}</section>}
-      </main>
-    </>
+      </section>
   );
 }

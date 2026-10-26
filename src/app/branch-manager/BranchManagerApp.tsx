@@ -13,6 +13,7 @@ import Rewards from './screens/rewards';
 import Csat from './screens/csat';
 import Fleet from './screens/fleet';
 import Vehicles from './screens/vehicles';
+import { FleetTabs } from '../components/FleetTabs';
 import Analytics from './screens/analytics';
 import MonthlyExpenses from './screens/monthly-expenses';
 import BranchManagerAccountSettings from './screens/settings';
@@ -27,7 +28,7 @@ const SCREEN_TITLES: Record<string, string> = {
   rewards: 'Reward Redemptions',
   csat: 'Customer Feedback',
   fleet: 'Fleet Management',
-  vehicles: 'Vehicle Management',
+  vehicles: 'Fleet Management',
   analytics: 'Branch Performance',
   expenses: 'Monthly Expenses',
   settings: 'Account settings',
@@ -56,7 +57,7 @@ export function BranchManagerApp() {
 
   return (
     <div className="bm-root" style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
-      <BMSidebar activeScreen={activeScreen} onNavigate={handleNavigate} />
+      <BMSidebar activeScreen={activeScreen === 'vehicles' ? 'fleet' : activeScreen} onNavigate={handleNavigate} />
 
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         <AppHeader
@@ -77,8 +78,14 @@ export function BranchManagerApp() {
           {activeScreen === 'customers' && <Customers onViewOrders={viewCustomerOrders} />}
           {activeScreen === 'rewards' && <Rewards />}
           {activeScreen === 'csat' && <Csat />}
-          {activeScreen === 'fleet' && <Fleet />}
-          {activeScreen === 'vehicles' && <Vehicles />}
+          {(activeScreen === 'fleet' || activeScreen === 'vehicles') && (
+            <FleetTabs
+              activeTab={activeScreen === 'vehicles' ? 'vehicles' : 'overview'}
+              onTabChange={tab => handleNavigate(tab === 'vehicles' ? 'vehicles' : 'fleet')}
+            >
+              {activeScreen === 'vehicles' ? <Vehicles /> : <Fleet />}
+            </FleetTabs>
+          )}
           {activeScreen === 'analytics' && <Analytics />}
           {activeScreen === 'expenses' && <MonthlyExpenses />}
           {activeScreen === 'settings' && <BranchManagerAccountSettings />}
