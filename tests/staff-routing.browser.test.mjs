@@ -54,6 +54,7 @@ async function createContext(browser, session, { signedOut = false } = {}) {
     }
     if (url.origin !== apiOrigin) return route.abort();
     apiRequests.push(url.pathname);
+    if (url.pathname === '/api/auth/staff/sign-in') return route.fulfill({ json: { access_token: session.access_token, refresh_token: session.refresh_token } });
     if (url.pathname === '/api/branches/assigned') return route.fulfill({ json: { branches } });
     if (url.pathname === '/api/governance/dashboard') return route.fulfill({ json: {
       metrics: { pendingApprovals: 0, adminAccountRequests: 0, priceChanges30Days: 0, branchOwnerChanges: 0 },
@@ -226,7 +227,7 @@ test('password recovery stays in its password form before any dashboard redirect
     const page = await context.newPage();
     await page.goto(baseUrl);
     await page.getByRole('button', { name: 'Forgot password?', exact: true }).click();
-    await page.getByLabel('Username or email', { exact: true }).fill(session.user.email);
+    await page.getByLabel('Email address', { exact: true }).fill(session.user.email);
     await page.getByRole('button', { name: 'Send reset code', exact: true }).click();
     await page.getByLabel('Password reset code', { exact: true }).fill('123456');
     await page.getByRole('button', { name: 'Verify code', exact: true }).click();

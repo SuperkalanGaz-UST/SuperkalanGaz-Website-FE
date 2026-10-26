@@ -1,12 +1,14 @@
 'use client';
 
-import { FormEvent, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Check, Eye, EyeOff, KeyRound, LockKeyhole, ShieldCheck, UserRound } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAccount, useUpdateAccount } from '../../../contexts/AccountContext';
-import { apiErrorMessage, apiFetch } from '../../../lib/api';
-import { ROLE_LABELS } from '../../../lib/auth';
+import { apiErrorMessage, apiFetch, fetchJson } from '../../../lib/api';
+import { ROLE_LABELS, refreshProfileSession } from '../../../lib/auth';
 import { formatPhMobileNational, toE164PhMobile } from '../../../lib/phMobile';
+import { UsernameField, usernameValidationError } from '../../../components/UsernameField';
 
 interface ProfileResponse {
   user: {
@@ -21,12 +23,14 @@ interface ProfileResponse {
 }
 
 interface ProfileForm {
+  username: string;
   fullName: string;
   email: string;
   mobile: string;
 }
 
 interface ProfileErrors {
+  username?: string;
   fullName?: string;
   email?: string;
   mobile?: string;
@@ -51,6 +55,12 @@ export function BranchOwnerAccountSettings() {
   const account = useAccount();
   const updateAccount = useUpdateAccount();
   const fallbackName = account.displayName || account.username;
+  const queryClient = useQueryClient();
+  const { data: profileData, isLoading: loading, error: loadError, refetch } = useQuery({
+    queryKey: ['users-me'],
+    queryFn: () => fetchJson<ProfileResponse>('/users/me'),
+    staleTime: 30_000,
+  });
 
   const [profile, setProfile] = useState<ProfileResponse['user']>(() => ({
     id: account.id,
@@ -62,11 +72,13 @@ export function BranchOwnerAccountSettings() {
     status: account.status,
   }));
   const [form, setForm] = useState<ProfileForm>({
+    username: account.username,
     fullName: fallbackName,
     email: account.email,
     mobile: formatPhMobileNational(account.phone ?? ''),
   });
   const [savedForm, setSavedForm] = useState<ProfileForm>({
+    username: account.username,
     fullName: fallbackName,
     email: account.email,
     mobile: formatPhMobileNational(account.phone ?? ''),
@@ -82,6 +94,7 @@ export function BranchOwnerAccountSettings() {
 
   const applyProfile = (user: ProfileResponse['user']) => {
     const nextForm: ProfileForm = {
+      username: user.username ?? '',
       fullName: user.display_name || user.username || fallbackName,
       email: user.email ?? '',
       mobile: formatPhMobileNational(user.phone ?? ''),
@@ -93,8 +106,14 @@ export function BranchOwnerAccountSettings() {
 
   const profileInitials = useMemo(() => initials(form.fullName), [form.fullName]);
 
+  useEffect(() => {
+    if (profileData?.user) applyProfile(profileData.user);
+    // Only a fetched profile should reset an in-progress edit.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profileData]);
+
   const validateProfile = (): ProfileErrors => {
-    const next: ProfileErrors = {};
+    const next: ProfileErrors = { username: usernameValidationError(form.username) };
     if (!form.fullName.trim()) next.fullName = 'Full name is required';
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) {
       next.email = 'Enter a valid email address';
@@ -107,15 +126,17 @@ export function BranchOwnerAccountSettings() {
 
   const handleProfileSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (loading || loadError) return;
     const nextErrors = validateProfile();
     setErrors(nextErrors);
-    if (Object.keys(nextErrors).length > 0) return;
+    if (Object.values(nextErrors).some(Boolean)) return;
 
     setSaving(true);
     try {
       const response = await apiFetch('/users/me', {
         method: 'PATCH',
         body: JSON.stringify({
+          username: form.username.trim().toLowerCase(),
           name: form.fullName.trim(),
           email: form.email.trim(),
           phone: form.mobile.trim() ? toE164PhMobile(form.mobile) : null,
@@ -123,17 +144,22 @@ export function BranchOwnerAccountSettings() {
       });
       const data = (await response.json().catch(() => null)) as ProfileResponse | null;
       if (!response.ok || !data?.user) {
-        toast.error(apiErrorMessage(data, 'Could not save your account details.'));
+        const message = apiErrorMessage(data, 'Could not save your account details.');
+        if (response.status === 409) setErrors((current) => ({ ...current, username: message }));
+        toast.error(message);
         return;
       }
 
       applyProfile(data.user);
       updateAccount({
+        username: data.user.username ?? '',
         displayName: data.user.display_name || form.fullName.trim(),
         email: data.user.email ?? form.email.trim(),
         phone: data.user.phone,
         status: data.user.status,
       });
+      queryClient.setQueryData(['users-me'], data);
+      await refreshProfileSession();
       toast.success('Account details updated.');
     } catch {
       toast.error('Could not reach the server.');
@@ -180,106 +206,122 @@ export function BranchOwnerAccountSettings() {
   return (
     <div id="account-settings-panel" role="tabpanel" className="mx-auto grid max-w-7xl gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(360px,0.85fr)]">
       <form onSubmit={handleProfileSubmit} noValidate className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <h2 className="text-lg font-semibold text-gray-900">Profile information</h2>
-            <p className="mt-1 text-sm text-gray-500">Manage the details linked to your account.</p>
+        {loading && <p role="status" className="mb-4 text-sm text-gray-500">Loading your account details…</p>}
+        {loadError && (
+          <div role="alert" className="mb-4 text-sm text-red-600">
+            <p>Could not load your account details.</p>
+            <button type="button" onClick={() => void refetch()} className="mt-2 text-[#007BC1] underline">Try again</button>
           </div>
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-green-50 px-3 py-1 text-xs font-medium text-green-700">
-            <span className="h-1.5 w-1.5 rounded-full bg-green-500" aria-hidden="true" />
-            {profile.status}
-          </span>
-        </div>
+        )}
+        <fieldset disabled={loading || !!loadError || saving} className="min-w-0">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900">Profile information</h2>
+              <p className="mt-1 text-sm text-gray-500">Manage the details linked to your account.</p>
+            </div>
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-green-50 px-3 py-1 text-xs font-medium text-green-700">
+              <span className="h-1.5 w-1.5 rounded-full bg-green-500" aria-hidden="true" />
+              {profile.status}
+            </span>
+          </div>
 
-        <div className="mt-6 flex items-center gap-4 rounded-xl bg-[#F4FAFE] p-4">
-          <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-[#DDF1FC] text-xl font-semibold text-[#007BC1]">
-            {profileInitials}
+          <div className="mt-6 flex items-center gap-4 rounded-xl bg-[#F4FAFE] p-4">
+            <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-[#DDF1FC] text-xl font-semibold text-[#007BC1]">
+              {profileInitials}
+            </div>
+            <div className="min-w-0">
+              <p className="truncate text-base font-semibold text-gray-900">{form.fullName}</p>
+              <p className="mt-0.5 text-sm text-gray-500">{ROLE_LABELS[account.role]}</p>
+            </div>
           </div>
-          <div className="min-w-0">
-            <p className="truncate text-base font-semibold text-gray-900">{form.fullName}</p>
-            <p className="mt-0.5 text-sm text-gray-500">{ROLE_LABELS[account.role]}</p>
-          </div>
-        </div>
 
-        <div className="mt-6 grid gap-5 md:grid-cols-2">
-          <label className="block text-sm font-medium text-gray-700 md:col-span-2">
-            Full name
-            <input
-              value={form.fullName}
-              onChange={(event) => setForm((current) => ({ ...current, fullName: event.target.value }))}
+          <div className="mt-6 grid gap-5 md:grid-cols-2">
+            <UsernameField
+              value={form.username}
+              onChange={(username) => setForm((current) => ({ ...current, username }))}
+              error={errors.username}
               className={fieldClassName}
-              aria-invalid={!!errors.fullName}
             />
-            {errors.fullName && <span className="mt-1.5 block text-xs text-red-600">{errors.fullName}</span>}
-          </label>
 
-          <label className="block text-sm font-medium text-gray-700">
-            Email address
-            <input
-              type="email"
-              value={form.email}
-              onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))}
-              className={fieldClassName}
-              aria-invalid={!!errors.email}
-            />
-            {errors.email && <span className="mt-1.5 block text-xs text-red-600">{errors.email}</span>}
-          </label>
-
-          <label className="block text-sm font-medium text-gray-700">
-            Mobile number
-            <span className="mt-2 flex h-11 overflow-hidden rounded-lg border border-gray-300 bg-white transition focus-within:border-[#007BC1] focus-within:ring-2 focus-within:ring-[#007BC1]/15">
-              <span className="flex shrink-0 items-center border-r border-gray-300 bg-gray-50 px-3.5 text-sm text-gray-700" aria-hidden="true">
-                +63
-              </span>
+            <label className="block text-sm font-medium text-gray-700 md:col-span-2">
+              Full name
               <input
-                inputMode="numeric"
-                value={form.mobile}
-                onChange={(event) => setForm((current) => ({
-                  ...current,
-                  mobile: formatPhMobileNational(event.target.value),
-                }))}
-                placeholder="9XX XXX XXXX"
-                className="min-w-0 flex-1 bg-transparent px-3.5 text-sm text-gray-900 outline-none"
-                aria-label="Philippine mobile subscriber number"
-                aria-invalid={!!errors.mobile}
+                value={form.fullName}
+                onChange={(event) => setForm((current) => ({ ...current, fullName: event.target.value }))}
+                className={fieldClassName}
+                aria-invalid={!!errors.fullName}
               />
-            </span>
-            {errors.mobile ? (
-              <span className="mt-1.5 block text-xs text-red-600">{errors.mobile}</span>
-            ) : (
-              <span className="mt-1.5 block text-xs font-normal text-gray-500">Used for account recovery and security alerts.</span>
-            )}
-          </label>
+              {errors.fullName && <span className="mt-1.5 block text-xs text-red-600">{errors.fullName}</span>}
+            </label>
 
-          <label className="block text-sm font-medium text-gray-700 md:col-span-2">
-            Role
-            <span className="relative block">
-              <input value={ROLE_LABELS[account.role]} disabled className={`${fieldClassName} pr-10`} />
-              <LockKeyhole className="absolute bottom-3.5 right-3.5 h-4 w-4 text-gray-400" aria-hidden="true" />
-            </span>
-          </label>
-        </div>
+            <label className="block text-sm font-medium text-gray-700">
+              Email address
+              <input
+                type="email"
+                value={form.email}
+                onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))}
+                className={fieldClassName}
+                aria-invalid={!!errors.email}
+              />
+              {errors.email && <span className="mt-1.5 block text-xs text-red-600">{errors.email}</span>}
+            </label>
 
-        <div className="mt-6 flex flex-wrap items-center gap-3 border-t border-gray-100 pt-5">
-          <button
-            type="submit"
-            disabled={saving}
-            className="h-10 rounded-lg bg-[#007BC1] px-5 text-sm font-medium text-white transition hover:bg-[#0068A4] disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {saving ? 'Saving…' : 'Save profile'}
-          </button>
-          <button
-            type="button"
-            disabled={saving}
-            onClick={() => {
-              setForm(savedForm);
-              setErrors({});
-            }}
-            className="h-10 px-2 text-sm font-medium text-[#007BC1] transition hover:text-[#005A8E] disabled:opacity-50"
-          >
-            Discard changes
-          </button>
-        </div>
+            <label className="block text-sm font-medium text-gray-700">
+              Mobile number
+              <span className="mt-2 flex h-11 overflow-hidden rounded-lg border border-gray-300 bg-white transition focus-within:border-[#007BC1] focus-within:ring-2 focus-within:ring-[#007BC1]/15">
+                <span className="flex shrink-0 items-center border-r border-gray-300 bg-gray-50 px-3.5 text-sm text-gray-700" aria-hidden="true">
+                  +63
+                </span>
+                <input
+                  inputMode="numeric"
+                  value={form.mobile}
+                  onChange={(event) => setForm((current) => ({
+                    ...current,
+                    mobile: formatPhMobileNational(event.target.value),
+                  }))}
+                  placeholder="9XX XXX XXXX"
+                  className="min-w-0 flex-1 bg-transparent px-3.5 text-sm text-gray-900 outline-none"
+                  aria-label="Philippine mobile subscriber number"
+                  aria-invalid={!!errors.mobile}
+                />
+              </span>
+              {errors.mobile ? (
+                <span className="mt-1.5 block text-xs text-red-600">{errors.mobile}</span>
+              ) : (
+                <span className="mt-1.5 block text-xs font-normal text-gray-500">Used for account recovery and security alerts.</span>
+              )}
+            </label>
+
+            <label className="block text-sm font-medium text-gray-700 md:col-span-2">
+              Role
+              <span className="relative block">
+                <input value={ROLE_LABELS[account.role]} disabled className={`${fieldClassName} pr-10`} />
+                <LockKeyhole className="absolute bottom-3.5 right-3.5 h-4 w-4 text-gray-400" aria-hidden="true" />
+              </span>
+            </label>
+          </div>
+
+          <div className="mt-6 flex flex-wrap items-center gap-3 border-t border-gray-100 pt-5">
+            <button
+              type="submit"
+              disabled={saving}
+              className="h-10 rounded-lg bg-[#007BC1] px-5 text-sm font-medium text-white transition hover:bg-[#0068A4] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {saving ? 'Saving…' : 'Save profile'}
+            </button>
+            <button
+              type="button"
+              disabled={saving}
+              onClick={() => {
+                setForm(savedForm);
+                setErrors({});
+              }}
+              className="h-10 px-2 text-sm font-medium text-[#007BC1] transition hover:text-[#005A8E] disabled:opacity-50"
+            >
+              Discard changes
+            </button>
+          </div>
+        </fieldset>
       </form>
 
       <div className="space-y-6">

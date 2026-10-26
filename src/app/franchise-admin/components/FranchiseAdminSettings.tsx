@@ -7,8 +7,9 @@ import { toast } from 'sonner';
 import { Header } from '../../components/Header';
 import { useAccount, useUpdateAccount } from '../../contexts/AccountContext';
 import { apiErrorMessage, apiFetch, fetchJson } from '../../lib/api';
-import { ROLE_LABELS } from '../../lib/auth';
+import { ROLE_LABELS, refreshProfileSession } from '../../lib/auth';
 import { formatPhMobileNational, toE164PhMobile } from '../../lib/phMobile';
+import { UsernameField, usernameValidationError } from '../../components/UsernameField';
 
 interface ProfileResponse {
   user: {
@@ -23,6 +24,7 @@ interface ProfileResponse {
 }
 
 interface ProfileForm {
+  username: string;
   firstName: string;
   lastName: string;
   email: string;
@@ -30,6 +32,7 @@ interface ProfileForm {
 }
 
 interface FormErrors {
+  username?: string;
   firstName?: string;
   lastName?: string;
   email?: string;
@@ -59,6 +62,7 @@ export function FranchiseAdminSettings() {
 
   const [profile, setProfile] = useState<ProfileResponse['user'] | null>(null);
   const [form, setForm] = useState<ProfileForm>(() => ({
+    username: account.username,
     ...splitDisplayName(fallbackName),
     email: '',
     mobile: '',
@@ -77,6 +81,7 @@ export function FranchiseAdminSettings() {
 
   const applyProfile = useCallback((user: ProfileResponse['user']) => {
     const nextForm: ProfileForm = {
+      username: user.username ?? '',
       ...splitDisplayName(user.display_name || user.username || fallbackName),
       email: user.email ?? '',
       mobile: formatPhMobileNational(user.phone ?? ''),
@@ -104,7 +109,7 @@ export function FranchiseAdminSettings() {
   );
 
   const validateProfile = (): FormErrors => {
-    const next: FormErrors = {};
+    const next: FormErrors = { username: usernameValidationError(form.username) };
     if (!form.firstName.trim()) next.firstName = 'First name is required';
     if (!form.lastName.trim()) next.lastName = 'Last name is required';
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) {
@@ -120,7 +125,7 @@ export function FranchiseAdminSettings() {
     event.preventDefault();
     const nextErrors = validateProfile();
     setErrors(nextErrors);
-    if (Object.keys(nextErrors).length > 0) return;
+    if (Object.values(nextErrors).some(Boolean)) return;
 
     const fullName = `${form.firstName.trim()} ${form.lastName.trim()}`;
     const canonicalPhone = form.mobile.trim() ? toE164PhMobile(form.mobile) : null;
@@ -129,6 +134,7 @@ export function FranchiseAdminSettings() {
       const response = await apiFetch('/users/me', {
         method: 'PATCH',
         body: JSON.stringify({
+          username: form.username.trim().toLowerCase(),
           name: fullName,
           email: form.email.trim(),
           phone: canonicalPhone,
@@ -136,13 +142,22 @@ export function FranchiseAdminSettings() {
       });
       const data = (await response.json().catch(() => null)) as ProfileResponse | null;
       if (!response.ok || !data?.user) {
-        toast.error(apiErrorMessage(data, 'Could not save your account details.'));
+        const message = apiErrorMessage(data, 'Could not save your account details.');
+        if (response.status === 409) setErrors((current) => ({ ...current, username: message }));
+        toast.error(message);
         return;
       }
 
       applyProfile(data.user);
-      updateAccount({ displayName: data.user.display_name || fullName });
-      void queryClient.invalidateQueries({ queryKey: ['users-me'] });
+      updateAccount({
+        username: data.user.username ?? '',
+        displayName: data.user.display_name || fullName,
+        email: data.user.email ?? form.email.trim(),
+        phone: data.user.phone,
+        status: data.user.status,
+      });
+      queryClient.setQueryData(['users-me'], data);
+      await refreshProfileSession();
       toast.success('Account details updated.');
     } catch {
       toast.error('Could not reach the server.');
@@ -245,6 +260,13 @@ export function FranchiseAdminSettings() {
                   </h2>
 
                   <div className="mt-6 grid gap-x-8 gap-y-6 md:grid-cols-2">
+                    <UsernameField
+                      value={form.username}
+                      onChange={(username) => setForm((current) => ({ ...current, username }))}
+                      error={errors.username}
+                      className={`${fieldClassName} mt-2`}
+                    />
+
                     <label className="block text-sm font-medium text-gray-700">
                       First name
                       <input

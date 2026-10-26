@@ -4,14 +4,12 @@
  * Users live entirely in Supabase (auth.users); the CRM claims (role + branch scope)
  * ride in each user's `app_metadata`, which is service-role-only so it can't be
  * self-edited — the same claims the API reads from the JWT. There is no public.profiles
- * table, and we never touch PostgREST (AGENTS.md §4). Supabase Auth is email-based, but
- * the UI logs in by username, so we map `<username>` -> `<username>@superkalan.com`. The
- * seeded staff personas already exist there; any
- * user created via User Management is stored the same way.
+ * table, and we never touch PostgREST (AGENTS.md §4). Supabase Auth is email-based;
+ * NestJS privately resolves protected usernames for password exchanges.
  */
 import { supabase } from './supabase/client';
 import type { User } from '@supabase/supabase-js';
-import { apiErrorMessage, apiFetch } from './api';
+import { apiErrorMessage, apiFetch, apiPublicFetch } from './api';
 
 export type Role = 'super-admin' | 'franchise-admin' | 'branch-owner' | 'branch-manager';
 
@@ -29,15 +27,6 @@ export interface Account {
   branches: Branch[];
   /** Authoritative protected UUID scope; branch names above are display-only. */
   branchIds: string[];
-}
-
-/** Email domain used to derive a login email from a username. */
-export const LOGIN_EMAIL_DOMAIN = 'superkalan.com';
-
-/** `admin` -> `admin@superkalan.com`; an input that already looks like an email is passed through. */
-export function usernameToEmail(username: string): string {
-  const u = username.trim();
-  return u.includes('@') ? u : `${u}@${LOGIN_EMAIL_DOMAIN}`;
 }
 
 export const ROLE_LABELS: Record<Role, string> = {
@@ -131,9 +120,10 @@ export function accountFromUser(user: User, usernameFallback?: string): SignInRe
  * user's `app_metadata` — no profiles table, no PostgREST read.
  */
 export async function signIn(username: string, password: string): Promise<SignInResult> {
-  const email = usernameToEmail(username);
-
-  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+  const identifier = username.trim();
+  const { data, error } = identifier.includes('@')
+    ? await supabase.auth.signInWithPassword({ email: identifier, password })
+    : await staffSession('/auth/staff/sign-in', { username: identifier, password });
   if (error || !data.user) {
     return { account: null, error: 'Invalid username or password' };
   }
@@ -148,17 +138,13 @@ export async function signIn(username: string, password: string): Promise<SignIn
 }
 
 /**
- * Sends Supabase's recovery OTP to the email behind the supplied username.
+ * Sends Supabase's recovery OTP to the supplied account email.
  * Supabase deliberately returns success for unknown accounts as well, so the
  * login page cannot be used to discover valid staff accounts.
  */
 export async function requestPasswordReset(username: string): Promise<AuthActionResult> {
-  const email = usernameToEmail(username);
-  const { error } = await supabase.auth.resetPasswordForEmail(email);
-
-  return {
-    error: error ? 'Could not send the reset code. Please try again later.' : null,
-  };
+  const { error } = await supabase.auth.resetPasswordForEmail(username.trim());
+  return { error: error ? 'Could not send the reset code. Please try again later.' : null };
 }
 
 /** Exchanges the emailed code for the temporary session used only for recovery. */
@@ -166,17 +152,37 @@ export async function verifyPasswordResetCode(
   username: string,
   token: string,
 ): Promise<AuthActionResult> {
-  const email = usernameToEmail(username);
   const { data, error } = await supabase.auth.verifyOtp({
-    email,
-    token,
-    type: 'recovery',
+    email: username.trim(), token, type: 'recovery',
   });
   return {
     error: error || !data.session
       ? 'This reset code is invalid or has expired. Request a new code.'
       : null,
   };
+}
+
+/** Store only the password-authorized session; the API never reveals account emails. */
+async function staffSession(path: string, body: Record<string, string>) {
+  try {
+    const response = await apiPublicFetch(path, {
+      method: 'POST', body: JSON.stringify(body), signal: AbortSignal.timeout(20_000),
+    });
+    const tokens: unknown = await response.json().catch(() => null);
+    if (!response.ok || !tokens || typeof tokens !== 'object' ||
+        !('access_token' in tokens) || typeof tokens.access_token !== 'string' ||
+        !('refresh_token' in tokens) || typeof tokens.refresh_token !== 'string') {
+      return { data: { user: null, session: null }, error: true };
+    }
+    return await supabase.auth.setSession({ access_token: tokens.access_token, refresh_token: tokens.refresh_token });
+  } catch {
+    return { data: { user: null, session: null }, error: true };
+  }
+}
+
+/** Pull newly saved protected display fields into the persisted Auth session. */
+export async function refreshProfileSession(): Promise<void> {
+  await supabase.auth.refreshSession();
 }
 
 /** Updates the password for the session created by a verified recovery code. */
