@@ -411,22 +411,22 @@ export function Login({
           </button>
           <h1 className="text-3xl font-bold text-gray-900">Forgot password?</h1>
           <p className="mt-3 mb-8 text-sm leading-6 text-gray-600">
-            Enter your username or account email and we’ll send you a 6-digit reset code.
+            Enter your account email and we’ll send you a 6-digit reset code.
           </p>
           <form onSubmit={handleForgotPassword}>
             <div className="mb-6">
               <label htmlFor="recovery-username" className="block text-sm font-normal text-gray-700 mb-2">
-                Username or email
+                Email address
               </label>
               <input
                 id="recovery-username"
-                type="text"
+                type="email"
                 value={recoveryUsername}
                 onChange={(e) => {
                   setRecoveryUsername(e.target.value);
                   if (error) setError('');
                 }}
-                autoComplete="username"
+                autoComplete="email"
                 autoFocus
                 required
                 className="w-full px-4 py-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-[#007BC1] focus:border-transparent outline-none text-sm transition-none"
