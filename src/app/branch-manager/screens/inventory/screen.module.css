@@ -1,19 +1,92 @@
 .pageTitle { font-size: 1.5rem; font-weight: 700; color: var(--foreground); margin-bottom: 0.25rem; }
 .pageSubtitle { font-size: 0.9rem; color: var(--muted-foreground); margin-bottom: 1.5rem; }
 
-.stockCardsGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
-.stockCard { background-color: var(--card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 1.25rem; box-shadow: var(--shadow); }
-.stockCardHeader { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.75rem; }
-.stockCardTitle { font-size: 0.9375rem; font-weight: 600; color: var(--foreground); }
+.stockSection { container: manager-stock / inline-size; min-width: 0; margin-bottom: 1.5rem; }
+.inventorySubtitle { margin: 0 0 1.25rem; color: var(--muted-foreground); font-size: 0.875rem; line-height: 1.6; }
+.stockSection .stockTabsRow { flex-direction: row; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem; margin-bottom: 1.25rem; padding-bottom: 0.5rem; }
+.stockTabs { flex-wrap: wrap; }
+.stockTab { display: inline-flex; align-items: center; gap: 0.4rem; min-height: 44px; }
+.stockTab:focus-visible, .stockPanel:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
+.tabCount { color: var(--muted-foreground); font-size: 0.75rem; font-weight: 400; font-variant-numeric: tabular-nums; }
+.criticalDot { width: 6px; height: 6px; flex-shrink: 0; border-radius: 50%; background: var(--error); }
+.stockPanel[hidden] { display: none; }
+.stockCardsGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 1fr)); grid-auto-rows: 1fr; gap: 1rem; }
+.stockCard { display: flex; flex-direction: column; min-width: 0; min-height: 228px; height: 100%; background-color: var(--card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 1.125rem; box-shadow: var(--shadow); }
+.stockCardHeader { display: flex; flex-direction: column; align-items: flex-start; justify-content: space-between; gap: 0.5rem; margin-bottom: 0.5rem; }
+.stockCardTitle { min-height: 2.75rem; font-size: 0.875rem; line-height: 1.5; font-weight: 600; color: var(--foreground); overflow-wrap: anywhere; }
 .stockCardValues { display: flex; align-items: baseline; gap: 0.15rem; }
 .stockCurrent { font-size: 1.75rem; font-weight: 700; color: var(--foreground); }
 .stockCapacity { font-size: 1rem; color: var(--muted-foreground); }
+.stockCardMeta { min-height: 1.25rem; margin-bottom: 0.75rem; font-size: 0.8rem; line-height: 1.5; }
 .gaugeContainer { margin-bottom: 0.75rem; }
-.stockCardFooter { display: flex; align-items: center; justify-content: space-between; }
+.stockCardFooter { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 28px; gap: 0.375rem; align-items: center; min-height: 3.25rem; margin-top: auto; }
 .thresholdLabel { font-size: 0.8rem; color: var(--muted-foreground); }
+.alertBadge { justify-self: start; white-space: nowrap; }
+
+/* Manager-specific action rows; the Owner keeps its separate viewing layout. */
+.summaryStrip { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.75rem; margin: 0 0 1.25rem; }
+.summaryTile { display: flex; align-items: center; gap: 0.75rem; min-width: 0; padding: 0.875rem 1rem; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-md); box-shadow: var(--shadow-sm); }
+.summaryIcon { display: flex; align-items: center; justify-content: center; flex-shrink: 0; width: 2.25rem; height: 2.25rem; border-radius: 0.625rem; background: var(--muted); }
+.summaryTile dt { font-size: 0.75rem; color: var(--muted-foreground); line-height: 1.5; }
+.summaryTile dd { margin: 0.15rem 0 0; font-size: 1.375rem; font-weight: 700; line-height: 1.3; font-variant-numeric: tabular-nums; }
+.stockList { display: flex; flex-direction: column; gap: 0.75rem; margin: 0; padding: 0; list-style: none; }
+.stockRow { position: relative; display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) 96px 112px 116px; grid-template-areas: 'identity stock targets status action'; align-items: center; gap: 1.25rem; min-width: 0; padding: 1rem 1.25rem; border: 1px solid var(--border); border-left: 4px solid var(--stock-accent); border-radius: var(--radius-md); background: var(--card); box-shadow: var(--shadow-sm); }
+.rowIdentity { grid-area: identity; display: flex; align-items: center; gap: 0.875rem; min-width: 0; }
+.rowIdentity > div { min-width: 0; }
+.rowIdentity h3 { margin: 0; font-size: 0.875rem; font-weight: 600; line-height: 1.5; overflow-wrap: anywhere; }
+.rowIdentity p { margin: 0.2rem 0 0; font-size: 0.75rem; color: var(--muted-foreground); line-height: 1.6; overflow-wrap: anywhere; }
+.itemPlaceholder { display: flex; align-items: center; justify-content: center; flex-shrink: 0; width: 46px; height: 46px; border: 1px solid var(--border); border-radius: 0.625rem; color: var(--muted-foreground); background: var(--background); }
+.itemImageSlot { display: flex; align-items: center; justify-content: center; flex: 0 0 64px; width: 64px; height: 64px; padding: 5px; overflow: hidden; border: 1px solid var(--border); border-radius: 0.75rem; background: var(--card); }
+.itemImage { display: block; width: 52px; height: 52px; object-fit: contain; }
+.neutralPlaceholder { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; color: var(--muted-foreground); background: var(--background); }
+.rowStock { grid-area: stock; min-width: 0; }
+.quantityLabel { display: flex; align-items: baseline; justify-content: space-between; gap: 0.5rem; margin-bottom: 0.5rem; font-size: 0.75rem; color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
+.quantityLabel strong { font-size: 1.125rem; font-weight: 650; color: var(--foreground); }
+.quantityLabel strong span { font-size: 0.75rem; font-weight: 400; color: var(--muted-foreground); }
+.rowTargets { grid-area: targets; display: flex; flex-direction: column; gap: 0.35rem; margin: 0; font-size: 0.75rem; font-variant-numeric: tabular-nums; }
+.rowTargets > div { display: flex; align-items: baseline; justify-content: space-between; gap: 0.75rem; }
+.rowTargets dt { color: var(--muted-foreground); }
+.rowTargets dd { margin: 0; font-weight: 600; }
+.rowStatus { grid-area: status; justify-self: end; white-space: nowrap; }
+.recordStockButton { grid-area: action; min-height: 40px; white-space: nowrap; color: var(--primary) !important; border-color: var(--border) !important; }
+.recordStockButton:hover { background: var(--muted) !important; }
+.recordStockButton:focus-visible, .intakeCard input:focus-visible { outline: 2px solid var(--primary) !important; outline-offset: 3px; }
+.intakeCard { scroll-margin-block: 1.5rem; }
+.selectedProduct { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; font-weight: 400; }
+.listState { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 0.75rem; padding: 2.5rem 1.25rem; font-size: 0.875rem; color: var(--muted-foreground); text-align: center; }
+
+@container manager-stock (max-width: 949px) {
+  .stockRow { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) auto; grid-template-areas: 'identity stock status' 'targets targets action'; gap: 1rem 1.25rem; }
+  .rowTargets { flex-direction: row; gap: 1.5rem; }
+  .rowTargets > div { gap: 0.5rem; }
+  .stockRow .recordStockButton { justify-self: end; }
+}
+@container manager-stock (max-width: 619px) {
+  .summaryStrip { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.625rem; }
+  .summaryTile { gap: 0.5rem; padding: 0.75rem; }
+  .summaryIcon { width: 1.75rem; height: 1.75rem; }
+  .stockRow { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: 'identity status' 'stock stock' 'targets targets' 'action action'; padding: 1rem; }
+  .stockRow .recordStockButton { width: 100%; justify-self: stretch; }
+  .rowTargets { justify-content: space-between; gap: 0.5rem; }
+  .stockTabsRow > button { width: 100%; margin-bottom: 0.5rem; }
+}
+
+@container manager-stock (min-width: 1000px) {
+  .stockCardsGrid { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+}
+@container manager-stock (max-width: 399px) {
+  .stockTabsRow .stockTabs { gap: 0; }
+  .stockTabs .stockTab { min-width: 0; flex: 1; padding: 0.25rem 0.5rem 0.75rem; font-size: 0.8rem; }
+  .stockTabs { width: 100%; }
+  .stockTabs .stockTab { flex-wrap: wrap; justify-content: center; text-align: center; }
+  .summaryIcon { display: none; }
+  .stockRow { grid-template-areas: 'identity identity' 'stock stock' 'targets targets' 'status status' 'action action'; }
+  .rowStatus { justify-self: start; }
+}
 
 
-.formsGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem; margin-bottom: 1.5rem; }
+.formsGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 1.5rem; margin-bottom: 1.5rem; }
+.rewardFormsGrid { grid-template-columns: minmax(0, 1fr); max-width: 680px; margin-inline: auto; }
 .card { background-color: var(--card); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow); overflow: hidden; margin-bottom: 0; }
 .cardHeader { padding: 1rem 1.25rem; border-bottom: 1px solid var(--border); }
 .cardTitle { font-size: 0.9375rem; font-weight: 600; }
@@ -32,6 +105,7 @@
 .boldText { font-weight: 600; }
 .mutedText { color: var(--muted-foreground); }
 .emptyState { text-align: center; padding: 2rem; color: var(--muted-foreground); }
+.stockCardsGrid > .emptyState { grid-column: 1 / -1; }
 
 /* Primary status-transition Button + kebab RowActionsMenu, side by side —
    never wrap the menu below the button (matches the Orders table). */
@@ -49,3 +123,82 @@
   outline-offset: 2px;
 }
 .stockCheckBtnSize { padding: 0.35rem 1rem !important; font-size: 0.8125rem !important; }
+
+/* Two presentation panels share the same mounted forms and stock category. */
+.inventoryWorkspace { container: manager-stock / inline-size; min-width: 0; }
+.inventoryWorkspace .stockTabsRow { flex-direction: row; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem; min-height: 53px; margin-bottom: 1.5rem; padding-bottom: 0.5rem; }
+.confirmStockSlot { display: flex; align-items: center; justify-content: flex-end; flex: 0 0 240px; height: 44px; }
+.confirmStockSlot > button { max-width: 100%; }
+.categoryToolbar { display: flex; justify-content: flex-end; margin-bottom: 1.25rem; }
+.inventoryWorkspace .currentInventoryCard { border-radius: 12px; }
+.categoryToggle { display: inline-flex; align-items: stretch; gap: 0.25rem; width: 300px; max-width: 100%; padding: 0.25rem; border: 1px solid var(--border); border-radius: 999px; background: var(--background); }
+.categoryToggle button { display: inline-flex; flex: 1; align-items: center; justify-content: center; gap: 0.375rem; min-height: 38px; padding: 0.5rem 0.875rem; border: 0; border-radius: 999px; background: transparent; color: var(--muted-foreground); font-size: 0.75rem; font-weight: 500; line-height: 1.5; cursor: pointer; }
+.categoryToggle button[aria-pressed='true'] { background: var(--primary); color: var(--primary-foreground); }
+.categoryToggle button:hover { box-shadow: inset 0 0 0 1px var(--primary); }
+.categoryCount { font-size: 0.6875rem; font-variant-numeric: tabular-nums; }
+.categoryToggle button:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
+.inventoryGroupStrip { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem; padding: 0.875rem 1.5rem; border-bottom: 1px solid var(--border); background: var(--background); color: var(--muted-foreground); font-size: 0.75rem; }
+.inventoryGroupStrip strong { color: var(--foreground); font-weight: 600; }
+.currentInventoryCard .inventoryTable { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 0.8125rem; }
+.currentInventoryCard .inventoryTable th { padding: 0.75rem 1.5rem; border-bottom: 1px solid var(--border); background: var(--background); color: var(--muted-foreground); font-size: 0.6875rem; font-weight: 500; text-align: left; text-transform: none; letter-spacing: normal; }
+.inventoryTable th:nth-child(1) { width: 30%; }
+.inventoryTable th:nth-child(2) { width: 43%; }
+.inventoryTable th:nth-child(3) { width: 13%; }
+.inventoryTable th:nth-child(4) { width: 14%; }
+.currentInventoryCard .inventoryTable td { padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--border); vertical-align: middle; }
+.inventoryTableRow { height: 112px; }
+.inventoryTable tbody tr:last-child td { border-bottom: 0; }
+.inventoryTableRow:hover { background: var(--background); }
+.inventoryTable .rowStock { display: flex; flex-direction: column; gap: 0.5rem; width: 100%; }
+.inventoryTable .quantityLabel { flex-wrap: wrap; row-gap: 0.25rem; margin-bottom: 0; line-height: 1.5; }
+.inventoryTable .quantityLabel strong { font-size: 0.875rem; }
+.capacityLabel { margin: 0; color: var(--muted-foreground); font-size: 0.6875rem; line-height: 1.5; }
+.inventoryStatusCell { white-space: nowrap; }
+.inventoryStatusCell > div { height: 28px; line-height: 20px; }
+.currentInventoryCard .inventoryTable th:last-child, .inventoryActionCell { text-align: center; }
+.inventoryActionCell .recordStockButton { width: 112px; }
+@container manager-stock (min-width: 1000px) {
+  .currentInventoryCard .inventoryTable th:nth-child(3),
+  .currentInventoryCard .inventoryTable td.inventoryStatusCell { padding-left: 3rem; padding-right: 0; }
+}
+.productSelectField { position: relative; min-width: 0; }
+.productSelect { display: block; width: 100%; min-width: 0; height: 2.5rem; appearance: none; padding: 0.5rem 3rem 0.5rem 0.75rem; border: 1px solid var(--border); border-radius: 0.375rem; background: var(--card); color: var(--foreground); font: inherit; font-size: 0.875rem; outline: none; box-shadow: none; transition: border-color 0.15s, box-shadow 0.15s; }
+.productSelect:focus { border-color: var(--primary); box-shadow: 0 0 0 2px rgb(0 116 188 / 16%); }
+.productSelectArrow { position: absolute; right: 16px; top: 50%; transform: translateY(-50%); color: var(--muted-foreground); pointer-events: none; }
+.productSelect:has(option[value='']:checked) { color: var(--muted-foreground); }
+/* Native popup styling is best-effort; the browser/OS controls its menu chrome. */
+.productSelect option { padding: 0.625rem 0.75rem; background: var(--card); color: var(--foreground); font: inherit; font-size: 0.875rem; line-height: 1.5; }
+.productSelect option:not(:disabled):hover { background: #f1f7fc; color: var(--foreground); }
+.productSelect option:checked { background: #eaf4fb; color: var(--primary); }
+
+@container manager-stock (max-width: 949px) {
+  .currentInventoryCard .inventoryTable th, .currentInventoryCard .inventoryTable td { padding-inline: 1rem; }
+}
+@container manager-stock (max-width: 899px) {
+  .inventoryTable, .inventoryTable tbody { display: block; }
+  .inventoryTable thead { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .inventoryTable .inventoryTableRow { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: 'item status' 'stock stock' 'action action'; align-items: center; height: auto; gap: 1rem; padding: 1.25rem; border-bottom: 1px solid var(--border); }
+  .currentInventoryCard .inventoryTable .inventoryTableRow td { display: block; min-width: 0; padding: 0; border: 0; }
+  .inventoryItemCell { grid-area: item; }
+  .inventoryStockCell { grid-area: stock; }
+  .inventoryStatusCell { grid-area: status; justify-self: end; }
+  .inventoryActionCell { grid-area: action; }
+  .inventoryActionCell .recordStockButton { width: 100%; }
+  .inventoryTable .inventoryTableRow:last-child { border-bottom: 0; }
+}
+@container manager-stock (max-width: 759px) {
+  .summaryStrip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@container manager-stock (max-width: 619px) {
+  .confirmStockSlot { flex-basis: 100%; min-width: 0; height: 52px; }
+  .confirmStockSlot > button { width: 100%; }
+}
+@container manager-stock (max-width: 399px) {
+  .summaryStrip { grid-template-columns: minmax(0, 1fr); }
+  .summaryIcon { display: flex; }
+  .inventoryGroupStrip { padding-inline: 1rem; }
+  .categoryToggle { width: 100%; border-radius: 0.875rem; }
+  .categoryToggle button { flex: 1; flex-wrap: wrap; min-width: 0; gap: 0.2rem; padding-inline: 0.5rem; border-radius: 0.625rem; }
+  .inventoryTable .inventoryTableRow { grid-template-areas: 'item item' 'stock stock' 'status status' 'action action'; padding: 1.25rem 1rem; }
+  .inventoryStatusCell { justify-self: start; }
+}

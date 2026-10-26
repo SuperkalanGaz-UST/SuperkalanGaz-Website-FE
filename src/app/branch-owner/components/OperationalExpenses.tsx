@@ -3,7 +3,6 @@
 import { useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  CartesianGrid,
   Legend,
   Line,
   LineChart,
@@ -14,9 +13,13 @@ import {
 } from 'recharts';
 import {
   Building2,
+  CalendarDays,
+  ChartNoAxesCombined,
+  Clock3,
   Fuel,
   LockKeyhole,
   Package,
+  Wallet,
   Wrench,
   Zap,
 } from 'lucide-react';
@@ -202,7 +205,7 @@ function ExpenseWorkspace({ branchId }: { branchId: string }) {
             type="button"
             onClick={() => setTab('overview')}
           >
-            Overview
+            <ChartNoAxesCombined size={16} aria-hidden="true" /> Overview
           </button>
           <button
             id="expense-salary-tab"
@@ -212,11 +215,12 @@ function ExpenseWorkspace({ branchId }: { branchId: string }) {
             type="button"
             onClick={() => setTab('salary')}
           >
-            <LockKeyhole size={17} /> Salaries & Overtime
+            <LockKeyhole size={16} aria-hidden="true" /> Salaries & Overtime
           </button>
         </div>
         <label className={styles.monthPicker}>
           <span className="sr-only">Expense month</span>
+          <CalendarDays size={16} aria-hidden="true" />
           <select
             aria-label="Expense month"
             value={month}
@@ -271,21 +275,37 @@ function ExpenseWorkspace({ branchId }: { branchId: string }) {
                 title: 'Total this month',
                 amount: operatingTotal + regular + overtime,
                 note: 'Operating expenses + salaries + overtime',
+                icon: Wallet,
+                featured: true,
               },
               {
                 title: 'Operating expenses',
                 amount: operatingTotal,
                 note: 'Recorded by the branch',
+                icon: Building2,
               },
-              { title: 'Salaries', amount: regular, private: true },
-              { title: 'Overtime pay', amount: overtime, private: true },
-            ].map((metric) => (
-              <div key={metric.title} className={styles.metric}>
+              {
+                title: 'Salaries',
+                amount: regular,
+                note: 'Owner only',
+                icon: LockKeyhole,
+              },
+              {
+                title: 'Overtime pay',
+                amount: overtime,
+                note: 'Owner only',
+                icon: Clock3,
+              },
+            ].map(({ icon: Icon, ...metric }) => (
+              <div
+                key={metric.title}
+                className={`${styles.metric} ${metric.featured ? styles.featuredMetric : ''}`}
+              >
                 <p>
                   {metric.title}
-                  {metric.private && (
-                    <LockKeyhole aria-label="Owner only" size={16} />
-                  )}
+                  <span className={styles.metricIcon}>
+                    <Icon size={17} aria-hidden="true" />
+                  </span>
                 </p>
                 <strong>{value(metric.amount)}</strong>
                 {metric.note && <small>{metric.note}</small>}
@@ -303,7 +323,11 @@ function ExpenseWorkspace({ branchId }: { branchId: string }) {
                       : 'Last six months'}
                   </p>
                 </div>
-                <div className={styles.segments}>
+                <div
+                  className={styles.segments}
+                  role="group"
+                  aria-label="Trend interval"
+                >
                   {(['day', 'week', 'month'] as const).map((g) => (
                     <button
                       key={g}
@@ -320,37 +344,48 @@ function ExpenseWorkspace({ branchId }: { branchId: string }) {
                 {loading ? (
                   <p className={styles.empty}>Loading trend…</p>
                 ) : (
-                  <ResponsiveContainer width="100%" height={300}>
+                  <ResponsiveContainer width="100%" height={240}>
                     <LineChart
                       data={trend}
-                      margin={{ top: 12, right: 20, left: 4, bottom: 8 }}
+                      margin={{ top: 12, right: 12, left: 0, bottom: 8 }}
                     >
-                      <CartesianGrid
-                        strokeDasharray="3 5"
-                        vertical={false}
-                        stroke="#e7edf3"
-                      />
                       <XAxis
                         dataKey="label"
                         axisLine={false}
                         tickLine={false}
-                        tick={{ fontSize: 12 }}
+                        tick={{ fontSize: 11, fill: '#6b7280' }}
+                        tickMargin={12}
+                        minTickGap={32}
                       />
                       <YAxis
-                        width={68}
+                        width={60}
                         axisLine={false}
                         tickLine={false}
-                        tick={{ fontSize: 12 }}
+                        tick={{ fontSize: 11, fill: '#6b7280' }}
+                        tickMargin={8}
                         tickFormatter={(n: number) =>
                           n >= 1000
                             ? `₱${Number((n / 1000).toFixed(1))}k`
                             : `₱${n}`
                         }
                       />
-                      <Tooltip formatter={(n) => peso(Number(n))} />
+                      <Tooltip
+                        formatter={(n) => peso(Number(n))}
+                        contentStyle={{
+                          border: '1px solid #e5e7eb',
+                          borderRadius: 10,
+                          fontSize: 12,
+                          boxShadow: '0 4px 16px rgb(17 24 39 / 6%)',
+                        }}
+                      />
                       <Legend
                         iconType="circle"
-                        wrapperStyle={{ paddingTop: 16, fontSize: 13 }}
+                        iconSize={7}
+                        wrapperStyle={{
+                          paddingTop: 20,
+                          fontSize: 12,
+                          color: '#4b5563',
+                        }}
                       />
                       <Line
                         isAnimationActive={false}
@@ -358,7 +393,9 @@ function ExpenseWorkspace({ branchId }: { branchId: string }) {
                         dataKey="operating"
                         stroke="#007bc1"
                         strokeWidth={2}
-                        dot={{ r: 3 }}
+                        type="monotone"
+                        dot={false}
+                        activeDot={{ r: 4 }}
                       />
                       <Line
                         isAnimationActive={false}
@@ -366,14 +403,19 @@ function ExpenseWorkspace({ branchId }: { branchId: string }) {
                         dataKey="salary"
                         stroke="#152a53"
                         strokeWidth={2}
-                        dot={{ r: 3 }}
+                        type="monotone"
+                        dot={false}
+                        activeDot={{ r: 4 }}
                       />
                     </LineChart>
                   </ResponsiveContainer>
                 )}
               </div>
             </section>
-            <section className={styles.panel} aria-label="Salary overview">
+            <section
+              className={`${styles.panel} ${styles.salaryOverview}`}
+              aria-label="Salary overview"
+            >
               <div className={styles.panelHeading}>
                 <h3>
                   <LockKeyhole size={19} /> Salaries & overtime
@@ -402,9 +444,6 @@ function ExpenseWorkspace({ branchId }: { branchId: string }) {
               >
                 View salary entries →
               </button>
-              <p className={styles.footnote}>
-                Visible only to the Branch Owner.
-              </p>
             </section>
           </div>
           <section className={styles.panel}>
@@ -417,7 +456,9 @@ function ExpenseWorkspace({ branchId }: { branchId: string }) {
             <div className={styles.categoryGrid}>
               {categories.map(({ title, icon: Icon, categories: types }) => (
                 <div key={title}>
-                  <Icon size={22} />
+                  <span className={styles.categoryIcon}>
+                    <Icon size={19} aria-hidden="true" />
+                  </span>
                   <div>
                     <p>{title}</p>
                     <strong>
@@ -453,7 +494,7 @@ function ExpenseWorkspace({ branchId }: { branchId: string }) {
               </button>
             </div>
             <div className={styles.tableScroll}>
-              <table className={styles.salaryTable}>
+              <table className={`${styles.salaryTable} ${styles.operatingTable}`}>
                 <thead>
                   <tr>
                     <th>Date</th>
@@ -474,8 +515,21 @@ function ExpenseWorkspace({ branchId }: { branchId: string }) {
                   ) : (
                     operational.slice(0, 6).map((row) => (
                       <tr key={row.id}>
-                        <td>{row.expense_date}</td>
-                        <td>{row.category}</td>
+                        <td>
+                          <time dateTime={row.expense_date}>
+                            {new Intl.DateTimeFormat('en-PH', {
+                              month: 'short',
+                              day: 'numeric',
+                              year: 'numeric',
+                              timeZone: 'UTC',
+                            }).format(new Date(`${row.expense_date}T00:00:00Z`))}
+                          </time>
+                        </td>
+                        <td>
+                          <span className={styles.categoryBadge}>
+                            {row.category}
+                          </span>
+                        </td>
                         <td>{row.description}</td>
                         <td>{peso(Number(row.amount))}</td>
                       </tr>

@@ -25,6 +25,11 @@ interface VehicleRow {
     gps_provisioning_status: "unconfigured" | "pending" | "provisioned" | "failed";
     gps_provisioning_error: string | null;
     gps_provisioned_at: string | null;
+    gps_mileage?: {
+        status: 'waiting' | 'synced' | 'unavailable' | 'counter-reset' | 'stale' | 'disabled';
+        position_at: string | null;
+        synced_at: string | null;
+    } | null;
     current_odometer_km: number;
     last_pms_odometer_km: number;
     km_since_last_pms: number;
@@ -112,15 +117,20 @@ export default function VehicleManagementPage() {
         error: vehiclesQueryError,
     } = useQuery({
         queryKey: ['vehicles'],
-        queryFn: () => fetchJson<{ vehicles: VehicleRow[] }>('/vehicles'),
-        staleTime: 30_000,
+        queryFn: () => fetchJson<{ vehicles: VehicleRow[]; gps_refresh_interval_ms?: number }>('/vehicles'),
+        staleTime: 300_000,
+        // The API shares a durable cooldown across tabs/instances. Pause the
+        // browser refresh in hidden tabs; Traccar retains cumulative distance.
+        refetchInterval: (query) => Math.max(60_000, query.state.data?.gps_refresh_interval_ms ?? 300_000),
+        refetchIntervalInBackground: false,
     });
-    const vehicles = vehiclesData?.vehicles ?? [];
+    // Older API releases may still include inactive (soft-archived) records.
+    const vehicles = (vehiclesData?.vehicles ?? []).filter(vehicle => vehicle.status !== 'inactive');
     const error = vehiclesQueryError ? vehiclesQueryError.message : null;
 
     const [registrationOpen, setRegistrationOpen] = useState(false);
     const [plateNumber, setPlateNumber] = useState("");
-    const [initialOdometerKm, setInitialOdometerKm] = useState("0");
+    const [initialOdometerKm, setInitialOdometerKm] = useState("");
     const [assignedRiderId, setAssignedRiderId] = useState("");
     const [riders, setRiders] = useState<RiderRow[]>([]);
     const [ridersLoading, setRidersLoading] = useState(false);
@@ -181,7 +191,7 @@ export default function VehicleManagementPage() {
         if (registering) return;
         setRegistrationOpen(false);
         setPlateNumber("");
-        setInitialOdometerKm("0");
+        setInitialOdometerKm("");
         setAssignedRiderId("");
         setRegistrationError(null);
     };
@@ -211,7 +221,7 @@ export default function VehicleManagementPage() {
             setRegistrationError('Enter a valid plate number using letters, numbers, spaces, or hyphens.');
             return;
         }
-        if (!Number.isInteger(odometerKm) || odometerKm < 0) {
+        if (!initialOdometerKm.trim() || !Number.isInteger(odometerKm) || odometerKm < 0) {
             setRegistrationError('Enter a valid non-negative odometer reading.');
             return;
         }
@@ -235,7 +245,7 @@ export default function VehicleManagementPage() {
             toast.success(`${created.plate_number} was registered.`);
             setRegistrationOpen(false);
             setPlateNumber("");
-            setInitialOdometerKm("0");
+            setInitialOdometerKm("");
             setAssignedRiderId("");
             setGpsPromptVehicle(created);
         } catch (err) {
@@ -465,6 +475,25 @@ export default function VehicleManagementPage() {
                                     </div>
                                 </div>
 
+                                {vehicle.gps_provisioning_status === 'provisioned' && (
+                                    <p className={styles.gpsMileageNote} role="status">
+                                        {vehicle.gps_mileage?.status === 'synced'
+                                            ? 'GPS mileage updates automatically while this screen is open.'
+                                            : vehicle.gps_mileage?.status === 'disabled'
+                                                ? 'Automatic GPS mileage is disabled. Use Update Odo to record a reading.'
+                                                : vehicle.gps_mileage?.status === 'unavailable'
+                                                    ? 'GPS mileage unavailable. Showing the last saved odometer; retrying automatically.'
+                                                    : vehicle.gps_mileage?.status === 'stale'
+                                                        ? 'No recent GPS reading. Showing the last saved odometer.'
+                                                        : vehicle.gps_mileage?.status === 'counter-reset'
+                                                            ? 'GPS distance counter reset. Odometer preserved; tracking resumes from the new baseline.'
+                                                            : 'Waiting for a new GPS distance reading. Odometer is preserved.'}
+                                        {vehicle.gps_mileage?.position_at && (
+                                            <span> Last GPS reading: {new Date(vehicle.gps_mileage.position_at).toLocaleString()}.</span>
+                                        )}
+                                    </p>
+                                )}
+
                                 <div className={styles.metricsRow}>
                                     <div className={styles.metricBox}>
                                         <div className={styles.metricLabel}>Current Odometer</div>
@@ -624,12 +653,14 @@ export default function VehicleManagementPage() {
                                     <Input
                                         id="vehicle-odometer"
                                         type="number"
+                                        required
+                                        placeholder="Enter the actual odometer reading"
                                         value={initialOdometerKm}
                                         onChange={(event) => setInitialOdometerKm(event.target.value)}
                                         min={0}
                                         step={1}
                                     />
-                                    <div className={styles.fieldHint}>This becomes the starting PMS baseline.</div>
+                                    <div className={styles.fieldHint}>Enter the vehicle’s actual reading. This becomes the starting PMS baseline.</div>
                                 </div>
                                 <div>
                                     <label className={styles.fieldLabel} htmlFor="vehicle-rider">Assign Delivery Rider (optional)</label>

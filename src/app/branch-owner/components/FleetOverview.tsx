@@ -3,14 +3,16 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import dynamic from 'next/dynamic';
 import { Header } from './Header';
 import { KPICard } from './KPICard';
-import { Users, Navigation, AlertTriangle, Clock, Loader2 } from 'lucide-react';
+import { Users, Navigation, AlertTriangle, Loader2 } from 'lucide-react';
 import { useBranch } from '../contexts/BranchContext';
 import type {
   FleetRider,
   PositionedFleetRider,
 } from '../../lib/fleetPresentationData';
-import { apiErrorMessage, apiFetch, fetchJson } from '../../lib/api';
+import { fetchJson } from '../../lib/api';
 import { DeliveryRiderAccess } from './DeliveryRiderAccess';
+import { VehicleOverview } from './VehicleOverview';
+import { FleetTabs, type FleetTab } from '../../components/FleetTabs';
 
 type ApiRiderStatus = 'Available' | 'On Delivery' | 'Maintenance Due' | 'Offline';
 
@@ -87,7 +89,10 @@ const BranchOwnerFleetMap = dynamic(
   { ssr: false },
 );
 
-export function FleetOverview() {
+export function FleetOverview({ vehiclesActive, onNavigate }: {
+  vehiclesActive: boolean;
+  onNavigate: (screen: string) => void;
+}) {
   const {
     selectedBranch,
     selectedBranchId,
@@ -96,7 +101,16 @@ export function FleetOverview() {
     assignedBranchesError,
     refreshAssignedBranches,
   } = useBranch();
-  const [activeTab, setActiveTab] = useState<'overview' | 'access'>('overview');
+  const [overviewTab, setOverviewTab] = useState<'overview' | 'access'>('overview');
+  const activeTab = vehiclesActive ? 'vehicles' : overviewTab;
+  const changeTab = (tab: FleetTab) => {
+    if (tab === 'vehicles') {
+      onNavigate('vehicles');
+    } else {
+      setOverviewTab(tab);
+      if (vehiclesActive) onNavigate('fleet-overview');
+    }
+  };
   const queryClient = useQueryClient();
 
   const {
@@ -106,7 +120,7 @@ export function FleetOverview() {
   } = useQuery({
     queryKey: ['riders', selectedBranchId],
     queryFn: () => fetchJson<{ riders: ApiRiderRow[] }>(`/riders?branchId=${encodeURIComponent(selectedBranchId!)}`),
-    enabled: !!selectedBranchId,
+    enabled: !!selectedBranchId && activeTab === 'overview',
     staleTime: 30_000,
   });
 
@@ -148,43 +162,11 @@ export function FleetOverview() {
         <Header title="Fleet" />
       </div>
 
-      <div className="p-8">
-        <div
-          className="mb-6 flex items-center gap-6 border-b border-gray-200"
-          role="tablist"
-          aria-label="Fleet sections"
-        >
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activeTab === 'overview'}
-            onClick={() => setActiveTab('overview')}
-            className={`border-b-2 px-1 pb-3 text-sm font-semibold transition-colors ${
-              activeTab === 'overview'
-                ? 'border-[#007BC1] text-[#007BC1]'
-                : 'border-transparent text-gray-500 hover:text-gray-800'
-            }`}
-          >
-            Fleet Overview
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activeTab === 'access'}
-            onClick={() => setActiveTab('access')}
-            className={`flex items-center gap-2 border-b-2 px-1 pb-3 text-sm font-semibold transition-colors ${
-              activeTab === 'access'
-                ? 'border-[#007BC1] text-[#007BC1]'
-                : 'border-transparent text-gray-500 hover:text-gray-800'
-            }`}
-          >
-            Delivery Rider Access
-          </button>
-        </div>
-
+      <div className="p-4 md:p-8">
+        <FleetTabs activeTab={activeTab} onTabChange={changeTab} showAccess>
         {activeTab === 'overview' ? (
           <>
-        <div className="grid grid-cols-4 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           <KPICard
             title="Total Delivery Riders"
             value={String(riders.length)}
@@ -203,13 +185,6 @@ export function FleetOverview() {
             subtitle="Awaiting vehicle telemetry"
             icon={<AlertTriangle className="w-5 h-5 text-orange-500" />}
             accentColor="#f59e0b"
-          />
-          <KPICard
-            title="Past Curfew"
-            value="—"
-            subtitle="Curfew data unavailable"
-            icon={<Clock className="w-5 h-5 text-red-600" />}
-            accentColor="#ef4444"
           />
         </div>
 
@@ -354,9 +329,12 @@ export function FleetOverview() {
           </div>
         </div>
           </>
+        ) : activeTab === 'vehicles' ? (
+          <VehicleOverview />
         ) : (
           <DeliveryRiderAccess />
         )}
+        </FleetTabs>
       </div>
     </div>
   );

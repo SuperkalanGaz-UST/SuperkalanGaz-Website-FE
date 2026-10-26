@@ -316,7 +316,14 @@ export function DeliveryRiderWebRegistration({
       <div className={styles.backdrop} aria-hidden="true" />
       <section className={styles.shell} aria-labelledby="invitation-title">
         <div className={styles.brandPanel}>
-          <Image src="/superkalan-gaz.png" alt="Superkalan Gaz" width={380} height={260} priority />
+          <Image
+            src="/superkalan-gaz.png"
+            alt="Superkalan Gaz"
+            width={600}
+            height={430}
+            priority
+            style={{ height: 'auto' }}
+          />
         </div>
         <div className={styles.formPanel}>{registrationContent()}</div>
       </section>

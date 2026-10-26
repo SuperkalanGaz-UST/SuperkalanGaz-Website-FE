@@ -48,7 +48,7 @@ export function BranchOwnerApp() {
   return (
     <BranchProvider>
       <div className="flex h-screen bg-gray-50">
-        <Sidebar activeScreen={activeScreen} onNavigate={setActiveScreen} />
+        <Sidebar activeScreen={activeScreen === 'vehicles' ? 'fleet-overview' : activeScreen} onNavigate={setActiveScreen} />
 
         <BranchContentTransition>
           {activeScreen === 'dashboard' && <Dashboard />}
@@ -60,7 +60,9 @@ export function BranchOwnerApp() {
           {activeScreen === 'loyalty' && <LoyaltyProgram />}
           {activeScreen === 'inventory' && <Inventory />}
           {activeScreen === 'reports' && <ReportGeneration />}
-          {activeScreen === 'fleet-overview' && <FleetOverview />}
+          {(activeScreen === 'fleet-overview' || activeScreen === 'vehicles') && (
+            <FleetOverview vehiclesActive={activeScreen === 'vehicles'} onNavigate={setActiveScreen} />
+          )}
           {activeScreen === 'user-management' && <UserManagement />}
           {activeScreen === 'settings' && <BranchSettings />}
 

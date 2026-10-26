@@ -1,0 +1,45 @@
+.main { flex: 1; min-width: 0; overflow-y: auto; color: #172033; }
+.toolbar { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; margin-bottom: 1.75rem; }
+.toolbar h2 { font-size: 1.1rem; font-weight: 600; margin-bottom: .35rem; }
+.toolbar p { font-size: .9rem; color: #71829b; }
+.viewOnly { display: inline-flex; align-items: center; gap: .45rem; flex-shrink: 0; background: #e8f3fa; border: 1px solid #cce5f4; border-radius: 999px; color: #007bc1; padding: .45rem .8rem; font-size: .8rem; font-weight: 600; }
+.stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1.25rem; margin-bottom: 1.5rem; }
+.stat, .vehicle { background: #fff; border: 1px solid #e6edf4; border-radius: 1.25rem; padding: 1.25rem; box-shadow: 0 8px 24px #17203304; min-width: 0; }
+.stat > div { display: flex; justify-content: space-between; gap: .5rem; color: #71829b; margin-bottom: .6rem; }
+.stat span { text-transform: uppercase; font-size: .8rem; letter-spacing: .04em; }
+.stat > strong { font-size: 2rem; line-height: 1; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 325px), 1fr)); gap: 1.25rem; }
+.vehicle { display: flex; flex-direction: column; gap: 1.4rem; }
+.cardHeader { display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: .75rem; }
+.cardHeader h3 { font-size: 1.1rem; font-weight: 600; }
+.plate { color: #71829b; font-size: .85rem; margin-top: .2rem; overflow-wrap: anywhere; }
+.badges { display: flex; flex-direction: column; align-items: flex-end; gap: .35rem; }
+.badges span { border-radius: 999px; padding: .3rem .7rem; font-size: .75rem; font-weight: 600; }
+.healthy { background: #ecf9f0; color: #16b94f; }
+.due { background: #ffedef; color: #ef123c; }
+.neutral { background: #f0f4f8; color: #71829b; }
+.metrics { display: grid; grid-template-columns: 1fr 1fr; gap: .8rem; }
+.metrics > div { min-width: 0; background: #f0f4f8; border-radius: .9rem; padding: .8rem; }
+.metrics span { display: block; text-transform: uppercase; color: #71829b; font-size: .72rem; margin-bottom: .45rem; }
+.metrics strong { font-size: 1.6rem; line-height: 1.2; overflow-wrap: anywhere; }
+.metrics small { font-size: .8rem; color: #71829b; font-weight: 500; }
+.dueText { color: #ef123c; }
+.progressLabel { display: flex; justify-content: space-between; gap: .5rem; font-size: .8rem; margin-bottom: .6rem; }
+.progressLabel span { color: #71829b; }
+.progress { background: #f0f0f0; border-radius: 999px; height: .5rem; overflow: hidden; }
+.progress > div { height: 100%; background: #007bc1; }
+.actions { margin-top: auto; padding-top: .7rem; border-top: 1px solid #e6edf4; }
+.actions > button { display: flex; align-items: center; justify-content: center; gap: .45rem; width: 100%; padding: .5rem; border-radius: .5rem; font-size: .85rem; }
+.main button { cursor: pointer; }
+.main button:hover { background: #e8f3fa; }
+.main button:focus-visible { outline: 2px solid #007bc1; outline-offset: 2px; }
+.history { margin-top: .6rem; background: #f0f4f8; border-radius: .7rem; padding: .75rem; max-height: 200px; overflow: auto; font-size: .75rem; }
+.history table { width: 100%; border-collapse: collapse; }
+.history th { color: #71829b; font-weight: 500; text-align: left; }
+.history td, .history th { padding: .25rem; }
+.history button, .empty button { color: #007bc1; padding: .4rem .7rem; border-radius: .5rem; }
+.empty { padding: 2rem; text-align: center; color: #71829b; }
+@media (max-width: 700px) {
+  .toolbar { flex-direction: column; }
+  .stats { grid-template-columns: 1fr; gap: .75rem; }
+}

@@ -37,6 +37,8 @@ import { Input } from '../../components/Input';
 import { Pagination } from '../../../components/Pagination';
 import { apiFetch, apiErrorMessage, fetchJson } from '../../../lib/api';
 import { DeliveryProofViewer } from '../../../components/DeliveryProofViewer';
+import { DeliveryRiderLocations } from './DeliveryRiderLocations';
+import { operationalLocationLabel, type DispatchRider } from '../../../lib/deliveryRiderLocation';
 import { fetchAssignedLpgPrices, formatPeso, LpgPrice } from '../../../lib/pricing';
 import { formatPHMobile, normalizePhMobile, toE164PhMobile } from '../../../lib/phMobile';
 import styles from './screen.module.css';
@@ -112,34 +114,10 @@ interface CustomerRow {
  * resolve a dispatched rider_id → display label (a dispatched rider is no
  * longer `Available`, so it won't appear in the assignable list).
  */
-interface RiderRow {
-    id: string;
+interface RiderRow extends DispatchRider {
     branch_id: string;
-    name: string;
-    plate: string;
-    status: 'Available' | 'On Delivery' | 'Maintenance Due' | 'Offline';
-    operational_location: {
-        latitude: number;
-        longitude: number;
-        accuracyM: number | null;
-        capturedAt: string;
-        receivedAt: string;
-        source: 'phone';
-    } | null;
     created_at: string;
 }
-
-/** Phone GPS freshness for dispatch only. Vehicle geofencing/PMS continues to
- * use SinoTrack ST-901 data received through Traccar on the Fleet surface. */
-const operationalLocationLabel = (rider: RiderRow): string => {
-    if (!rider.operational_location) return 'GPS unavailable';
-    const receivedAt = new Date(rider.operational_location.receivedAt);
-    if (Number.isNaN(receivedAt.getTime())) return 'GPS unavailable';
-    const ageMinutes = Math.max(0, Math.floor((Date.now() - receivedAt.getTime()) / 60_000));
-    if (ageMinutes === 0) return 'GPS just now';
-    if (ageMinutes < 15) return `GPS ${ageMinutes}m ago`;
-    return 'GPS stale';
-};
 
 // Walk-in/phone intake. The server sets order_source ("Walk-in/Phone"), branchId,
 // and status automatically, so those are never sent from the client.
@@ -307,7 +285,16 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
 
     // Rider assignment / dispatch (Slice 2). Only one row's assign panel is open
     // at a time, so a single selection/dispatch state is enough.
-    const [rosterMap, setRosterMap] = useState<Record<string, string>>({});
+    const { data: rosterData, error: rosterError, isPending: rosterLoading, isFetching: rosterRefreshing, refetch: loadRoster } = useQuery({
+        queryKey: ['dispatch-riders'],
+        queryFn: ({ signal }) => fetchJson<{ riders: RiderRow[] }>('/riders', { signal }),
+        staleTime: 0,
+        refetchInterval: 15_000,
+        retry: false,
+    });
+    const rosterMap: Record<string, string> = Object.fromEntries(
+        (rosterData?.riders ?? []).map(rider => [rider.id, `${rider.name} (${rider.plate})`]),
+    );
     const [availableRiders, setAvailableRiders] = useState<RiderRow[] | null>(null);
     const [ridersLoading, setRidersLoading] = useState(false);
     const [assigningId, setAssigningId] = useState<string | null>(null);
@@ -525,23 +512,6 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
             });
         return () => { active = false; };
     }, []);
-
-    // Full rider roster → id → "name (plate)" display map. Best-effort: if it
-    // fails, dispatched rows fall back to showing the raw rider_id.
-    const loadRoster = useCallback(async () => {
-        try {
-            const res = await apiFetch('/riders');
-            const data = await res.json();
-            if (!res.ok) return;
-            const map: Record<string, string> = {};
-            for (const r of data.riders as RiderRow[]) map[r.id] = `${r.name} (${r.plate})`;
-            setRosterMap(map);
-        } catch {
-            // Non-fatal: the rider column just falls back to the raw id.
-        }
-    }, []);
-
-    useEffect(() => { loadRoster(); }, [loadRoster]);
 
     // Fetch the assignable (Available) riders when a row's assign panel opens.
     const loadAvailableRiders = useCallback(async () => {
@@ -1262,6 +1232,14 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                     </div>
                 </div>
             )}
+
+            <DeliveryRiderLocations
+                riders={rosterData?.riders ?? []}
+                loading={rosterLoading}
+                refreshing={rosterRefreshing}
+                error={rosterError?.message ?? null}
+                onRefresh={() => { void loadRoster(); }}
+            />
 
             <div className={styles.metricsGrid} aria-label="Service request summary">
                 {summaryMetrics.map((metric) => {

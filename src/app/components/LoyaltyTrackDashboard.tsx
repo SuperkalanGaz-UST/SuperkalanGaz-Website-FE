@@ -58,18 +58,21 @@ function PrimaryMetricCard({
   label,
   value,
   icon,
+  detail,
 }: {
   eyebrow: string;
-  label: string;
+  label?: string;
   value: string;
   icon: React.ReactNode;
+  detail?: string;
 }) {
   return (
     <article className="relative min-h-40 overflow-hidden rounded-2xl border border-[#a9d4ee] bg-gradient-to-br from-white via-[#f5faff] to-[#e8f3ff] p-6 shadow-sm">
       <div className="relative z-10">
         <h2 className="text-lg font-semibold text-[#101828]">{eyebrow}</h2>
-        <p className="mt-5 text-sm font-medium text-[#1f2a44]">{label}</p>
+        {label && <p className="mt-5 text-sm font-medium text-[#1f2a44]">{label}</p>}
         <p className="mt-1 text-4xl font-semibold tracking-tight text-[#101828]">{value}</p>
+        {detail && <p className="mt-1 text-xs font-medium text-gray-500">{detail}</p>}
       </div>
       <div className="absolute right-8 top-1/2 z-10 flex h-16 w-16 -translate-y-1/2 items-center justify-center rounded-full border-[3px] border-[#087fc3] bg-white text-[#087fc3] shadow-[0_0_0_7px_rgba(8,127,195,0.10)]">
         {icon}
@@ -80,25 +83,45 @@ function PrimaryMetricCard({
   );
 }
 
-function Household({ data, hidden }: { data?: Overview['household']; hidden: boolean }) {
+function Household({
+  data,
+  hidden,
+  branchOwnerView = false,
+}: {
+  data?: Overview['household'];
+  hidden: boolean;
+  branchOwnerView?: boolean;
+}) {
   const [expanded, setExpanded] = useState<string | null>(null);
   const ledger = useQuery({ queryKey: ['customer-loyalty', expanded], queryFn: () => fetchJson<{ ledger: { household_transactions: Array<{ type: string; points_delta: number; created_at: string }> } }>(`/loyalty/customers/${expanded}`), enabled: !!expanded });
 
   return (
     <section id="household-loyalty-panel" role="tabpanel" aria-labelledby="household-loyalty-tab" hidden={hidden} className="space-y-6">
-      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1.45fr_0.9fr_0.9fr]">
-        <PrimaryMetricCard
-          eyebrow="Household Points Overview"
-          label="Points Earned This Month"
-          value={numberFormatter.format(data?.pointsEarnedThisMonth ?? 0)}
-          icon={<Star className="h-7 w-7 fill-current" aria-hidden="true" />}
-        />
-        <MetricCard
-          label="Active Household Members"
-          value={numberFormatter.format(data?.activeMembers ?? 0)}
-          detail="Active branch customers"
-          icon={<UsersRound className="h-6 w-6" aria-hidden="true" />}
-        />
+      <div className={`grid grid-cols-1 gap-5 ${branchOwnerView ? 'xl:grid-cols-2' : 'xl:grid-cols-[1.45fr_0.9fr_0.9fr]'}`}>
+        {!branchOwnerView && (
+          <PrimaryMetricCard
+            eyebrow="Household Points Overview"
+            label="Points Earned This Month"
+            value={numberFormatter.format(data?.pointsEarnedThisMonth ?? 0)}
+            icon={<Star className="h-7 w-7 fill-current" aria-hidden="true" />}
+          />
+        )}
+        {branchOwnerView ? (
+          <PrimaryMetricCard
+            eyebrow="Active Household Members"
+            label={undefined}
+            value={numberFormatter.format(data?.activeMembers ?? 0)}
+            icon={<UsersRound className="h-7 w-7" aria-hidden="true" />}
+            detail="Active branch customers"
+          />
+        ) : (
+          <MetricCard
+            label="Active Household Members"
+            value={numberFormatter.format(data?.activeMembers ?? 0)}
+            detail="Active branch customers"
+            icon={<UsersRound className="h-6 w-6" aria-hidden="true" />}
+          />
+        )}
         <MetricCard
           label="Points Expiring in 30 Days"
           value={numberFormatter.format(data?.expiringPoints ?? 0)}
@@ -328,7 +351,13 @@ function Commercial({ data, hidden }: { data?: Overview['commercial']; hidden: b
   );
 }
 
-export function LoyaltyTrackDashboard({ branchId }: { branchId?: string | null }) {
+export function LoyaltyTrackDashboard({
+  branchId,
+  branchOwnerView = false,
+}: {
+  branchId?: string | null;
+  branchOwnerView?: boolean;
+}) {
   const [track, setTrack] = useState<'household' | 'commercial'>('household');
   const query = useQuery({ queryKey: ['loyalty-overview', branchId], queryFn: () => fetchJson<{ overview: Overview }>(`/loyalty/overview?branchId=${encodeURIComponent(branchId!)}`), enabled: !!branchId });
 
@@ -367,7 +396,7 @@ export function LoyaltyTrackDashboard({ branchId }: { branchId?: string | null }
       {query.error && <p className="text-sm text-red-600">Could not load loyalty data: {query.error.message}</p>}
       {query.data && (
         <>
-          <Household data={query.data.overview.household} hidden={track !== 'household'} />
+          <Household data={query.data.overview.household} hidden={track !== 'household'} branchOwnerView={branchOwnerView} />
           <Commercial data={query.data.overview.commercial} hidden={track !== 'commercial'} />
         </>
       )}
