@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { isAuthRetryableFetchError, type AuthError } from '@supabase/supabase-js';
-import { isPendingBranchOwnerInvitation } from '../lib/auth';
+import { CheckCircle2 } from 'lucide-react';
+import { accountFromUser, isPendingBranchOwnerInvitation } from '../lib/auth';
+import { staffDashboardPath } from '../lib/staffRoutes';
 import { supabase } from '../lib/supabase/client';
 import { Login } from './Login';
 
@@ -13,6 +15,8 @@ type InvitationState =
   | { step: 'unavailable' }
   | { step: 'retry' }
   | { step: 'password' }
+  | { step: 'activated'; continuing?: boolean }
+  | { step: 'sign-in' }
   | { step: 'verify'; tokenHash: string; busy?: boolean; retry?: boolean };
 
 function clearCallback(unavailable = false) {
@@ -115,12 +119,54 @@ export function BranchOwnerInvitation() {
     }
   };
 
+  const continueToDashboard = async () => {
+    setState({ step: 'activated', continuing: true });
+    try {
+      const { data, error } = await supabase.auth.refreshSession();
+      if (!error && data.user && accountFromUser(data.user).account?.role === 'branch-owner') {
+        window.location.replace(staffDashboardPath('branch-owner'));
+        return;
+      }
+    } catch {
+      // Activation already succeeded. The invitee can sign in with their password.
+    }
+    setState({ step: 'sign-in' });
+  };
+
+  if (state.step === 'activated') {
+    return (
+      <Login invitationContent={
+        <div className="py-6 text-center">
+          <div role="status">
+            <CheckCircle2 className="mx-auto mb-5 h-12 w-12 text-emerald-600" aria-hidden="true" />
+            <h1 className="text-3xl font-bold text-gray-900">Account activated</h1>
+            <p className="mt-3 text-sm leading-6 text-gray-600">
+              Your Branch Owner account is ready to use.
+            </p>
+          </div>
+          <button type="button" className={`mt-8 ${BUTTON}`} disabled={state.continuing} onClick={continueToDashboard}>
+            {state.continuing ? 'Opening dashboard…' : 'Continue to dashboard'}
+          </button>
+        </div>
+      } />
+    );
+  }
+
+  if (state.step === 'sign-in') {
+    return (
+      <Login
+        signInNotice="Your account is active. Sign in with the password you set."
+        onLogin={(account) => window.location.replace(staffDashboardPath(account.role))}
+      />
+    );
+  }
+
   if (state.step === 'password') {
     return (
       <Login
         invitationActivation
         invitationRole="branch-owner"
-        onInvitationActivation={() => window.location.replace('/branch-owner/dashboard')}
+        onBranchOwnerActivation={() => setState({ step: 'activated' })}
       />
     );
   }

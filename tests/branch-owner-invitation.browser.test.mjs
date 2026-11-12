@@ -199,8 +199,57 @@ test('an emailed Branch Owner link verifies only on click, then sets the passwor
     assert.equal(requests.some(path => path === '/api/branches/assigned'), false);
     expired = false;
     await page.getByRole('button', { name: 'Activate account', exact: true }).click();
+    await page.getByRole('heading', { name: 'Account activated', exact: true }).waitFor();
+    assert.equal(await page.getByRole('alert').filter({ hasText: /invitation|activat/i }).count(), 0);
+    assert.equal(requests.some(path => path === '/api/branches/assigned'), false);
+    await page.getByRole('button', { name: 'Continue to dashboard', exact: true }).click();
     await page.waitForURL('**/branch-owner/dashboard');
     assert.deepEqual(chosenPasswords.at(-1), { password: 'ChosenPassword1' });
     assert.equal(requests.some(path => path.includes('franchise-admin-invitations')), false);
+  } finally { await browser.close(); }
+});
+
+test('confirmed activation stays a success when the session needs a fresh sign-in', { timeout: 15000 }, async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const context = await browser.newContext();
+    const session = sessionFor('branch-owner', 'Pending');
+    await seed(context, session);
+    let refreshAttempts = 0;
+    await intercept(context, session, async (route, url) => {
+      if (url.pathname !== '/api/branches/owner-invitations/accept') return false;
+      await route.fulfill({ json: { ok: true } });
+      return true;
+    }, async (route, url) => {
+      if (url.pathname !== '/auth/v1/token') return false;
+      if (url.searchParams.get('grant_type') === 'refresh_token') {
+        refreshAttempts += 1;
+        await route.fulfill({ status: 400, json: { error_code: 'refresh_token_not_found', msg: 'Session ended' } });
+        return true;
+      }
+      if (url.searchParams.get('grant_type') === 'password') {
+        await route.fulfill({ json: sessionFor('branch-owner') });
+        return true;
+      }
+      return false;
+    });
+    const page = await context.newPage();
+    await page.goto(baseUrl);
+    await page.waitForURL('**/?invitation=branch-owner');
+    await page.getByLabel('New password', { exact: true }).fill('ChosenPassword1');
+    await page.getByLabel('Confirm password', { exact: true }).fill('ChosenPassword1');
+    await page.getByRole('button', { name: 'Activate account', exact: true }).click();
+    await page.getByRole('heading', { name: 'Account activated', exact: true }).waitFor();
+    assert.equal(refreshAttempts, 0);
+    await page.getByRole('button', { name: 'Continue to dashboard', exact: true }).click();
+    await page.getByRole('heading', { name: 'Sign In', exact: true }).waitFor();
+    await page.getByRole('status').filter({ hasText: 'Your account is active.' }).waitFor();
+    assert.equal(await page.getByRole('alert').filter({ hasText: /invitation|activat|session/i }).count(), 0);
+    assert.equal(await page.getByRole('button', { name: 'Activate account', exact: true }).count(), 0);
+    assert.equal(refreshAttempts, 1);
+    await page.getByLabel('Username or email', { exact: true }).fill(session.user.email);
+    await page.getByLabel('Password', { exact: true }).fill('ChosenPassword1');
+    await page.getByRole('button', { name: 'Sign In', exact: true }).click();
+    await page.waitForURL('**/branch-owner/dashboard');
   } finally { await browser.close(); }
 });

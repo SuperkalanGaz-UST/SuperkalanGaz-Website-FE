@@ -247,20 +247,18 @@ export async function activateFranchiseAdminInvitation(
 }
 
 /** The verified invitee supplies their password only to their role-locked NestJS endpoint. */
-export async function activateBranchOwnerInvitation(password: string): Promise<SignInResult> {
+export async function activateBranchOwnerInvitation(password: string): Promise<AuthActionResult> {
   try {
     const response = await apiFetch('/branches/owner-invitations/accept', {
       method: 'POST', body: JSON.stringify({ password }), signal: AbortSignal.timeout(20_000),
     });
-    const body: unknown = await response.json().catch(() => null);
-    if (!response.ok) return { account: null, error: apiErrorMessage(body, 'Could not activate this Branch Owner invitation.') };
-    const refreshed = await supabase.auth.refreshSession();
-    if (refreshed.error || !refreshed.data.user) {
-      return { account: null, error: 'Your account was activated. Return to sign in with your new password.' };
+    if (!response.ok) {
+      const body: unknown = await response.json().catch(() => null);
+      return { error: apiErrorMessage(body, 'Could not activate this Branch Owner invitation.') };
     }
-    return accountFromUser(refreshed.data.user);
+    return { error: null };
   } catch {
-    return { account: null, error: 'Activation is unavailable. Please try again.' };
+    return { error: 'Activation is unavailable. Please try again.' };
   }
 }
 

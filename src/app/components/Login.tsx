@@ -19,7 +19,9 @@ interface LoginProps {
   invitationActivation?: boolean;
   invitationRole?: 'franchise-admin' | 'branch-owner';
   onInvitationActivation?: (account: Account) => void;
+  onBranchOwnerActivation?: () => void;
   invitationContent?: ReactNode;
+  signInNotice?: string;
 }
 
 export function Login({
@@ -29,7 +31,9 @@ export function Login({
   invitationActivation = false,
   invitationRole = 'franchise-admin',
   onInvitationActivation,
+  onBranchOwnerActivation,
   invitationContent,
+  signInNotice,
 }: LoginProps) {
   const [username, setUsername] = useState('');
   const [recoveryUsername, setRecoveryUsername] = useState('');
@@ -164,9 +168,20 @@ export function Login({
     }
 
     setLoading(true);
-    const result = await (invitationRole === 'branch-owner'
-      ? activateBranchOwnerInvitation(newPassword)
-      : activateFranchiseAdminInvitation(newPassword));
+    if (invitationRole === 'branch-owner') {
+      const result = await activateBranchOwnerInvitation(newPassword);
+      setLoading(false);
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+      setNewPassword('');
+      setConfirmPassword('');
+      onBranchOwnerActivation?.();
+      return;
+    }
+
+    const result = await activateFranchiseAdminInvitation(newPassword);
     setLoading(false);
     if (!result.account) {
       setError(result.error ?? 'Could not activate this invitation.');
@@ -466,6 +481,11 @@ export function Login({
         <h1 className="text-3xl font-bold text-gray-900 mb-10">Sign In</h1>
 
         <form onSubmit={handleSubmit}>
+          {signInNotice && (
+            <p className="mb-6 rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800" role="status">
+              {signInNotice}
+            </p>
+          )}
           {error && (
             <div className="mb-6 flex items-start justify-between p-3 bg-red-50 border border-red-200 rounded-md">
               <p className="text-sm text-red-600 font-medium" role="alert">{error}</p>
@@ -516,7 +536,7 @@ export function Login({
           </div>
 
           <div className="mb-6 text-right">
-            <button
+            {onPasswordReset && <button
               type="button"
               onClick={() => {
                 setForgotPassword(true);
@@ -528,7 +548,7 @@ export function Login({
               className="text-sm font-medium text-[#007BC1] hover:text-[#006399] hover:underline"
             >
               Forgot password?
-            </button>
+            </button>}
           </div>
 
           <button
