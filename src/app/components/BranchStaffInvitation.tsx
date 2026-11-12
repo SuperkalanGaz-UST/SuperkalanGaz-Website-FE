@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { isAuthRetryableFetchError, type AuthError } from '@supabase/supabase-js';
 import { CheckCircle2 } from 'lucide-react';
-import { accountFromUser, isPendingBranchOwnerInvitation } from '../lib/auth';
+import { accountFromUser, isPendingBranchInvitation, ROLE_LABELS, type BranchInvitationRole } from '../lib/auth';
 import { staffDashboardPath } from '../lib/staffRoutes';
 import { supabase } from '../lib/supabase/client';
 import { Login } from './Login';
@@ -19,10 +19,10 @@ type InvitationState =
   | { step: 'sign-in' }
   | { step: 'verify'; tokenHash: string; busy?: boolean; retry?: boolean };
 
-function clearCallback(unavailable = false) {
+function clearCallback(role: BranchInvitationRole, unavailable = false) {
   const url = new URL(window.location.href);
   url.hash = '';
-  if (unavailable) url.search = '?invitation=branch-owner&link=unavailable';
+  if (unavailable) url.search = new URLSearchParams({ invitation: role, link: 'unavailable' }).toString();
   window.history.replaceState(window.history.state, '', url);
 }
 
@@ -32,7 +32,9 @@ function canRetry(error: AuthError | null): boolean {
   ));
 }
 
-export function BranchOwnerInvitation() {
+export function BranchStaffInvitation({ role }: { role: BranchInvitationRole }) {
+  const roleName = ROLE_LABELS[role];
+  const inviterName = role === 'branch-owner' ? 'Franchise Administrator' : 'Branch Owner';
   const [state, setState] = useState<InvitationState>({ step: 'checking' });
 
   useEffect(() => {
@@ -42,7 +44,7 @@ export function BranchOwnerInvitation() {
         ['error', 'error_code', 'error_description'].some(
           (key) => fragment.has(key) || url.searchParams.has(key),
         )) {
-      clearCallback(true);
+      clearCallback(role, true);
       setState({ step: 'unavailable' });
       return;
     }
@@ -53,7 +55,7 @@ export function BranchOwnerInvitation() {
       if (tokenHash.length > 0 && tokenHash.length <= MAX_TOKEN_HASH_LENGTH) {
         setState({ step: 'verify', tokenHash });
       } else {
-        clearCallback(true);
+        clearCallback(role, true);
         setState({ step: 'unavailable' });
       }
       return;
@@ -77,11 +79,11 @@ export function BranchOwnerInvitation() {
         if (!current) return;
         if (canRetry(error)) {
           setState({ step: 'retry' });
-        } else if (!error && data?.session && isPendingBranchOwnerInvitation(data.session.user)) {
-          clearCallback();
+        } else if (!error && data?.session && isPendingBranchInvitation(data.session.user, role)) {
+          clearCallback(role);
           setState({ step: 'password' });
         } else {
-          clearCallback(true);
+          clearCallback(role, true);
           setState({ step: 'unavailable' });
         }
       } catch {
@@ -95,7 +97,7 @@ export function BranchOwnerInvitation() {
       current = false;
       window.clearTimeout(timer);
     };
-  }, []);
+  }, [role]);
 
   const verifyInvitation = async () => {
     if (state.step !== 'verify' || state.busy) return;
@@ -107,11 +109,11 @@ export function BranchOwnerInvitation() {
       const { data, error } = await supabase.auth.verifyOtp({ token_hash: tokenHash, type: 'email' });
       if (canRetry(error)) {
         setState({ step: 'verify', tokenHash, retry: true });
-      } else if (!error && data.session && isPendingBranchOwnerInvitation(data.session.user)) {
-        clearCallback();
+      } else if (!error && data.session && isPendingBranchInvitation(data.session.user, role)) {
+        clearCallback(role);
         setState({ step: 'password' });
       } else {
-        clearCallback(true);
+        clearCallback(role, true);
         setState({ step: 'unavailable' });
       }
     } catch {
@@ -123,8 +125,8 @@ export function BranchOwnerInvitation() {
     setState({ step: 'activated', continuing: true });
     try {
       const { data, error } = await supabase.auth.refreshSession();
-      if (!error && data.user && accountFromUser(data.user).account?.role === 'branch-owner') {
-        window.location.replace(staffDashboardPath('branch-owner'));
+      if (!error && data.user && accountFromUser(data.user).account?.role === role) {
+        window.location.replace(staffDashboardPath(role));
         return;
       }
     } catch {
@@ -141,7 +143,7 @@ export function BranchOwnerInvitation() {
             <CheckCircle2 className="mx-auto mb-5 h-12 w-12 text-emerald-600" aria-hidden="true" />
             <h1 className="text-3xl font-bold text-gray-900">Account activated</h1>
             <p className="mt-3 text-sm leading-6 text-gray-600">
-              Your Branch Owner account is ready to use.
+              Your {roleName} account is ready to use.
             </p>
           </div>
           <button type="button" className={`mt-8 ${BUTTON}`} disabled={state.continuing} onClick={continueToDashboard}>
@@ -165,8 +167,8 @@ export function BranchOwnerInvitation() {
     return (
       <Login
         invitationActivation
-        invitationRole="branch-owner"
-        onBranchOwnerActivation={() => setState({ step: 'activated' })}
+        invitationRole={role}
+        onBranchInvitationActivation={() => setState({ step: 'activated' })}
       />
     );
   }
@@ -180,17 +182,17 @@ export function BranchOwnerInvitation() {
         {state.step === 'unavailable' ? (
           <>
             <p role="alert" className="my-6 text-sm leading-6 text-gray-700">
-              This Branch Owner invitation is invalid, expired, or already used. If you still
-              need to set your password, ask your Franchise Administrator to resend the invitation.
+              This {roleName} invitation is invalid, expired, or already used. If you still
+              need to set your password, ask your {inviterName} to resend the invitation.
             </p>
             <button type="button" className={BUTTON} onClick={() => window.location.replace('/')}>Back to Sign In</button>
           </>
         ) : state.step === 'checking' ? (
-          <p role="status" className="mt-4 text-sm text-gray-700">Checking your Branch Owner invitation…</p>
+          <p role="status" className="mt-4 text-sm text-gray-700">Checking your {roleName} invitation…</p>
         ) : (
           <>
             <p className="my-6 text-sm leading-6 text-gray-700">
-              Verify your Branch Owner invitation to choose your password.
+              Verify your {roleName} invitation to choose your password.
             </p>
             {(state.step === 'retry' || state.retry) && (
               <p role="alert" className="mb-4 text-sm text-red-600">

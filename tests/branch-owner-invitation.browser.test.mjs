@@ -253,3 +253,110 @@ test('confirmed activation stays a success when the session needs a fresh sign-i
     await page.waitForURL('**/branch-owner/dashboard');
   } finally { await browser.close(); }
 });
+
+test('an owner can invite a Branch Manager and see the account pending without setting a password', { timeout: 60000 }, async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const context = await browser.newContext();
+    const session = sessionFor('branch-owner');
+    await seed(context, session);
+    const submissions = [];
+    const managerId = '00000000-0000-4000-8000-000000000006';
+    let resent = false;
+    await intercept(context, session, async (route, url) => {
+      if (url.pathname === '/api/branches/assigned') {
+        await route.fulfill({ json: { branches: [{ id: branchId, name: 'Test Branch', geofence: null }] } });
+        return true;
+      }
+      if (url.pathname === '/api/users' && route.request().method() === 'POST') {
+        const data = route.request().postDataJSON();
+        submissions.push(data);
+        await route.fulfill(submissions.length === 1
+          ? { status: 409, json: { message: 'Email already in use' } }
+          : { status: 201, json: { id: managerId } });
+        return true;
+      }
+      if (url.pathname === '/api/users') {
+        const users = submissions.length < 2 ? [] : [{
+          id: managerId, display_name: 'New Manager', email: submissions.at(-1).email,
+          status: 'Pending', branch_ids: [branchId], branches: ['Test Branch'], last_login_at: null,
+          pending_manager_invitation: true,
+        }];
+        await route.fulfill({ json: { users } });
+        return true;
+      }
+      if (url.pathname === '/api/users/' + managerId + '/branch-manager-invitation/resend') {
+        assert.equal(url.searchParams.get('branchId'), branchId);
+        resent = true;
+        await route.fulfill({ json: { ok: true } });
+        return true;
+      }
+      return false;
+    });
+    const page = await context.newPage();
+    await page.goto(baseUrl + '/branch-owner/user-management');
+    await page.getByRole('button', { name: 'Invite Branch Manager', exact: true }).click();
+    await page.getByLabel(/Full Name/).fill('New Manager');
+    await page.getByLabel(/Email Address/).fill('existing@example.invalid');
+    await page.getByLabel(/Phone Number/).fill('09171234567');
+    await page.getByLabel(/Username/).fill('new-manager');
+    assert.equal(await page.locator('input[type="password"]').count(), 0);
+    await page.getByRole('button', { name: 'Send invitation', exact: true }).click();
+    await page.getByRole('alert').filter({ hasText: 'Email already in use' }).waitFor();
+    await page.getByLabel(/Email Address/).fill('manager@example.invalid');
+    await page.getByRole('button', { name: 'Send invitation', exact: true }).click();
+    const manager = page.getByRole('row').filter({ hasText: 'New Manager' });
+    await manager.getByText('Pending', { exact: true }).waitFor();
+    assert.deepEqual(submissions.at(-1), {
+      name: 'New Manager', email: 'manager@example.invalid', phone: '+639171234567',
+      username: 'new-manager', branchIds: [branchId],
+    });
+    await manager.getByRole('button', { name: 'Resend invitation to New Manager' }).click();
+    await page.getByText('Branch Manager invitation resent.', { exact: true }).waitFor();
+    assert.equal(resent, true);
+  } finally { await browser.close(); }
+});
+
+test('the invited Branch Manager verifies email and sets their own password before opening the dashboard', { timeout: 60000 }, async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const context = await browser.newContext();
+    const session = sessionFor('branch-manager', 'Pending');
+    Object.assign(session.user.app_metadata, {
+      branch_manager_invitation: true, branch_ids: [branchId], branches: ['Test Branch'],
+    });
+    const apiPaths = [];
+    let verifications = 0;
+    await intercept(context, session, async (route, url) => {
+      apiPaths.push(url.pathname);
+      if (url.pathname !== '/api/users/branch-manager-invitations/accept') return false;
+      assert.deepEqual(route.request().postDataJSON(), { password: 'ChosenPassword1' });
+      session.user.app_metadata.status = 'Active';
+      await route.fulfill({ json: { ok: true } });
+      return true;
+    }, async (route, url) => {
+      if (url.pathname !== '/auth/v1/verify') return false;
+      verifications += 1;
+      const { token_hash, type } = route.request().postDataJSON();
+      assert.deepEqual({ token_hash, type }, { token_hash: 'fake-manager-invite', type: 'email' });
+      await route.fulfill({ json: session });
+      return true;
+    });
+    const page = await context.newPage();
+    await page.goto(baseUrl + '/?invitation=branch-manager#token_hash=fake-manager-invite');
+    const verify = page.getByRole('button', { name: 'Verify invitation', exact: true });
+    await verify.waitFor();
+    assert.equal(verifications, 0);
+    await verify.click();
+    await page.getByText(/activate your Branch Manager account/i).waitFor();
+    assert.deepEqual(apiPaths, []);
+    assert.equal(verifications, 1);
+    await page.getByLabel('New password', { exact: true }).fill('ChosenPassword1');
+    await page.getByLabel('Confirm password', { exact: true }).fill('ChosenPassword1');
+    await page.getByRole('button', { name: 'Activate account', exact: true }).click();
+    await page.getByRole('heading', { name: 'Account activated', exact: true }).waitFor();
+    assert.deepEqual(apiPaths, ['/api/users/branch-manager-invitations/accept']);
+    await page.getByRole('button', { name: 'Continue to dashboard', exact: true }).click();
+    await page.waitForURL('**/branch-manager/dashboard');
+  } finally { await browser.close(); }
+});

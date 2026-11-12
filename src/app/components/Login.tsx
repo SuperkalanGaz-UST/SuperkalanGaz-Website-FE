@@ -4,8 +4,10 @@ import { ArrowLeft, CheckCircle2, Eye, EyeOff, Mail, X } from 'lucide-react';
 import { InputOTP, InputOTPGroup, InputOTPSlot } from './ui/input-otp';
 import {
   Account,
+  ROLE_LABELS,
   activateFranchiseAdminInvitation,
-  activateBranchOwnerInvitation,
+  activateBranchInvitation,
+  type BranchInvitationRole,
   requestPasswordReset,
   signIn,
   updatePassword,
@@ -17,9 +19,9 @@ interface LoginProps {
   passwordRecovery?: boolean;
   onPasswordReset?: () => Promise<void>;
   invitationActivation?: boolean;
-  invitationRole?: 'franchise-admin' | 'branch-owner';
+  invitationRole?: 'franchise-admin' | BranchInvitationRole;
   onInvitationActivation?: (account: Account) => void;
-  onBranchOwnerActivation?: () => void;
+  onBranchInvitationActivation?: () => void;
   invitationContent?: ReactNode;
   signInNotice?: string;
 }
@@ -31,7 +33,7 @@ export function Login({
   invitationActivation = false,
   invitationRole = 'franchise-admin',
   onInvitationActivation,
-  onBranchOwnerActivation,
+  onBranchInvitationActivation,
   invitationContent,
   signInNotice,
 }: LoginProps) {
@@ -168,8 +170,8 @@ export function Login({
     }
 
     setLoading(true);
-    if (invitationRole === 'branch-owner') {
-      const result = await activateBranchOwnerInvitation(newPassword);
+    if (invitationRole !== 'franchise-admin') {
+      const result = await activateBranchInvitation(invitationRole, newPassword);
       setLoading(false);
       if (result.error) {
         setError(result.error);
@@ -177,7 +179,7 @@ export function Login({
       }
       setNewPassword('');
       setConfirmPassword('');
-      onBranchOwnerActivation?.();
+      onBranchInvitationActivation?.();
       return;
     }
 
@@ -256,11 +258,10 @@ export function Login({
       return (
         <>
           <h1 className="text-3xl font-bold text-gray-900">
-            {invitationRole === 'branch-owner' ? 'Set Password' : 'Activate your account'}
+            {invitationRole === 'franchise-admin' ? 'Activate your account' : 'Set Password'}
           </h1>
           <p className="mt-3 mb-8 text-sm leading-6 text-gray-600">
-            Your email is verified. Choose your own password to finish activating your
-            {invitationRole === 'branch-owner' ? 'Branch Owner' : 'Franchise Administrator'} account.
+            Your email is verified. Choose your own password to activate your {ROLE_LABELS[invitationRole]} account.
           </p>
           <form onSubmit={handleInvitationActivation}>
             <div className="mb-5">

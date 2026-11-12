@@ -61,9 +61,12 @@ export function isPendingFranchiseAdminInvitation(user: User): boolean {
   return claims.role === 'franchise-admin' && claims.status === 'Pending';
 }
 
-export function isPendingBranchOwnerInvitation(user: User): boolean {
+export type BranchInvitationRole = 'branch-owner' | 'branch-manager';
+
+export function isPendingBranchInvitation(user: User, role: BranchInvitationRole): boolean {
   const claims = user.app_metadata ?? {};
-  return claims.role === 'branch-owner' && claims.status === 'Pending' && claims.branch_owner_invitation === true;
+  return claims.role === role && claims.status === 'Pending' &&
+    (role === 'branch-owner' ? claims.branch_owner_invitation : claims.branch_manager_invitation) === true;
 }
 
 export function isPendingDeliveryRiderInvitation(user: User): boolean {
@@ -247,14 +250,20 @@ export async function activateFranchiseAdminInvitation(
 }
 
 /** The verified invitee supplies their password only to their role-locked NestJS endpoint. */
-export async function activateBranchOwnerInvitation(password: string): Promise<AuthActionResult> {
+export async function activateBranchInvitation(
+  role: BranchInvitationRole,
+  password: string,
+): Promise<AuthActionResult> {
+  const path = role === 'branch-owner'
+    ? '/branches/owner-invitations/accept'
+    : '/users/branch-manager-invitations/accept';
   try {
-    const response = await apiFetch('/branches/owner-invitations/accept', {
+    const response = await apiFetch(path, {
       method: 'POST', body: JSON.stringify({ password }), signal: AbortSignal.timeout(20_000),
     });
     if (!response.ok) {
       const body: unknown = await response.json().catch(() => null);
-      return { error: apiErrorMessage(body, 'Could not activate this Branch Owner invitation.') };
+      return { error: apiErrorMessage(body, 'Could not activate this invitation.') };
     }
     return { error: null };
   } catch {
