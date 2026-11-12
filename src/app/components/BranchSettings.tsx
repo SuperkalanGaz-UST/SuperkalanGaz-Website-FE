@@ -7,11 +7,8 @@ import { apiFetch, apiErrorMessage } from "../lib/api";
 import { toast } from "sonner";
 import styles from "./BranchSettings.module.css";
 
-/** Delivery coverage polygon stored on a branch (null = none set). */
-export interface BranchGeofence {
-  type: "polygon";
-  points: [number, number][];
-}
+import type { BranchGeofence } from '../lib/branchGeofence';
+export type { BranchGeofence } from '../lib/branchGeofence';
 
 /** A registered branch as returned by GET /branches. */
 export interface BranchRow {
@@ -25,6 +22,7 @@ export interface BranchRow {
   province: string | null;
   region: string | null;
   geofence: BranchGeofence | null;
+  owner_id: string | null;
   created_at: string;
 }
 

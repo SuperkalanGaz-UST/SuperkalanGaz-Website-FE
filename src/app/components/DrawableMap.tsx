@@ -5,6 +5,7 @@ import {
   LngLatBounds,
   Map as MapLibreMap,
   NavigationControl,
+  Marker,
 } from 'maplibre-gl';
 import type { FeatureCollection, LineString, Point, Polygon } from 'geojson';
 import {
@@ -14,6 +15,10 @@ import {
 
 interface DrawableMapProps {
   points: [number, number][];
+  branchCenter?: [number, number];
+  onPlaceCenter?: (lat: number, lng: number) => void;
+  onMoveCenter?: (lat: number, lng: number) => void;
+  showVertices?: boolean;
   isDrawing: boolean;
   onAddPoint: (lat: number, lng: number) => void;
   /**
@@ -103,10 +108,15 @@ function fitInitialPoints(map: MapLibreMap, points: [number, number][]): void {
   }
 }
 
-export function DrawableMap({ points, isDrawing, onAddPoint, focus }: DrawableMapProps) {
+export function DrawableMap({ points, isDrawing, onAddPoint, focus, branchCenter, onPlaceCenter, onMoveCenter, showVertices = true }: DrawableMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const pointsRef = useRef(points);
+  const onPlaceCenterRef = useRef(onPlaceCenter);
+  const onMoveCenterRef = useRef(onMoveCenter);
+  onMoveCenterRef.current = onMoveCenter;
+  const markerRef = useRef<Marker | null>(null);
+  onPlaceCenterRef.current = onPlaceCenter;
   const isDrawingRef = useRef(isDrawing);
   const onAddPointRef = useRef(onAddPoint);
   const initialPointsRef = useRef(points);
@@ -146,7 +156,9 @@ export function DrawableMap({ points, isDrawing, onAddPoint, focus }: DrawableMa
     );
 
     map.on('click', (event) => {
-      if (isDrawingRef.current) {
+      if (onPlaceCenterRef.current) {
+        onPlaceCenterRef.current(event.lngLat.lat, event.lngLat.lng);
+      } else if (isDrawingRef.current) {
         onAddPointRef.current(event.lngLat.lat, event.lngLat.lng);
       }
     });
@@ -158,6 +170,8 @@ export function DrawableMap({ points, isDrawing, onAddPoint, focus }: DrawableMa
     return () => {
       map.off('styleimagemissing', onMissingImage);
       mapRef.current = null;
+      markerRef.current?.remove();
+      markerRef.current = null;
       map.remove();
     };
     // The map owns its DOM lifecycle; prop changes are synchronized below.
@@ -167,7 +181,40 @@ export function DrawableMap({ points, isDrawing, onAddPoint, focus }: DrawableMa
   useEffect(() => {
     const map = mapRef.current;
     if (map?.isStyleLoaded()) updateSources(map, points);
-  }, [points]);
+    if (map && !showVertices) fitInitialPoints(map, points);
+  }, [points, showVertices]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !branchCenter) {
+      markerRef.current?.remove();
+      markerRef.current = null;
+      return;
+    }
+    if (!markerRef.current) {
+      markerRef.current = new Marker({ color: '#185FA5', draggable: !!onMoveCenterRef.current }).setLngLat(toLngLat(branchCenter)).addTo(map);
+      markerRef.current.on('dragend', () => {
+        const position = markerRef.current?.getLngLat();
+        if (position) onMoveCenterRef.current?.(position.lat, position.lng);
+      });
+      markerRef.current.getElement().setAttribute('aria-label', 'Branch location');
+      markerRef.current.getElement().setAttribute('title', 'Branch location');
+    } else markerRef.current.setLngLat(toLngLat(branchCenter));
+    fitInitialPoints(map, pointsRef.current.length ? pointsRef.current : [branchCenter]);
+  }, [branchCenter]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const update = () => {
+      if (map.getLayer('branch-geofence-point-circles')) {
+        map.setLayoutProperty('branch-geofence-point-circles', 'visibility', showVertices ? 'visible' : 'none');
+      }
+    };
+    update();
+    map.on('load', update);
+    return () => { map.off('load', update); };
+  }, [showVertices]);
 
   useEffect(() => {
     const map = mapRef.current;

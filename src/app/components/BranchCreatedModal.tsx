@@ -12,8 +12,7 @@ interface BranchCreatedModalProps {
   geofenceSummary: string;
   ownerName: string;
   ownerEmail: string;
-  /** One-time password for a newly provisioned owner; null for existing owners. */
-  ownerTempPassword?: string | null;
+  ownerInvitationSent?: boolean;
   onClose: () => void;
   onRegisterAnother: () => void;
 }
@@ -24,37 +23,17 @@ export function BranchCreatedModal({
   province,
   ownerName,
   ownerEmail,
-  ownerTempPassword,
+  ownerInvitationSent,
   onClose,
   onRegisterAnother,
 }: BranchCreatedModalProps) {
   const [copied, setCopied] = useState(false);
-  const [pwCopied, setPwCopied] = useState(false);
-  // The one-time password must be acknowledged before the modal can be dismissed.
-  const [acknowledged, setAcknowledged] = useState(false);
 
   const handleCopy = () => {
     navigator.clipboard.writeText(branchReference).catch(() => {});
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
-
-  const handleCopyPassword = () => {
-    if (!ownerTempPassword) return;
-    navigator.clipboard
-      .writeText(ownerTempPassword)
-      .then(() => {
-        setPwCopied(true);
-        // Copying the secret counts as acknowledging it.
-        setAcknowledged(true);
-        setTimeout(() => setPwCopied(false), 2000);
-      })
-      .catch(() => {});
-  };
-
-  // Dismiss actions stay blocked until the one-time secret is acknowledged. The
-  // existing-owner path has no secret, so there is nothing to gate.
-  const secretPending = !!ownerTempPassword && !acknowledged;
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
@@ -108,46 +87,14 @@ export function BranchCreatedModal({
             </button>
           </div>
 
-          {/* New-owner credentials: the one irreplaceable item — shown once and
-              handed to the owner manually. Amber = security warning, not accent. */}
-          {ownerTempPassword ? (
-            <div className="bg-[#FFF8E6] border border-[#F0D488] rounded-xl px-3.5 py-3">
-              <div className="flex items-start gap-2.5">
-                <User className="w-4 h-4 text-[#B4820E] flex-shrink-0 mt-0.5" />
-                <p className="text-sm text-[#8A6608] leading-relaxed">
-                  A Branch Owner login was created for{' '}
-                  <span className="font-semibold">{ownerEmail}</span>. Share this
-                  temporary password securely — it won&apos;t be shown again. The owner
-                  must change it on first login.
-                </p>
-              </div>
-              <div className="mt-2.5 flex items-center gap-2 bg-white border border-[#F0D488] rounded-lg px-3 py-2">
-                <span className="flex-1 text-sm font-mono font-medium text-gray-900 break-all">
-                  {ownerTempPassword}
-                </span>
-                <button
-                  onClick={handleCopyPassword}
-                  className="flex-shrink-0 text-[#B4820E] hover:text-[#8A6608] transition-colors"
-                  title="Copy temporary password"
-                >
-                  {pwCopied ? (
-                    <CheckCircle className="w-4 h-4 text-green-600" />
-                  ) : (
-                    <Copy className="w-4 h-4" />
-                  )}
-                </button>
-              </div>
-              {/* Gate: Done / Register Another stay disabled until this is checked
-                  (copying the password auto-checks it). */}
-              <label className="mt-2.5 flex items-center gap-2 text-sm text-[#8A6608] cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={acknowledged}
-                  onChange={(e) => setAcknowledged(e.target.checked)}
-                  className="w-4 h-4 accent-[#007BC1]"
-                />
-                I&apos;ve copied the password
-              </label>
+          {ownerInvitationSent ? (
+            <div className="flex items-start gap-2.5 bg-blue-50 rounded-xl px-3.5 py-3">
+              <User className="w-4 h-4 text-[#00568A] flex-shrink-0 mt-0.5" />
+              <p className="text-sm text-[#00568A] leading-relaxed">
+                An invitation email was sent to <span className="font-semibold">{ownerEmail}</span>.
+                {' '}The Branch Owner follows the link and sets their own password. The account
+                stays pending until setup is complete. If the link expires, resend it from Edit branch.
+              </p>
             </div>
           ) : (
             <div className="flex items-start gap-2.5 bg-blue-50 rounded-xl px-3.5 py-3">
@@ -172,7 +119,6 @@ export function BranchCreatedModal({
             <div className="flex gap-2">
               <button
                 onClick={onRegisterAnother}
-                disabled={secretPending}
                 className="flex-1 h-[36px] bg-white border border-gray-200 text-gray-700 text-sm rounded-xl flex items-center justify-center gap-1.5 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
               >
                 <PlusCircle className="w-4 h-4 text-gray-500" />
@@ -180,7 +126,6 @@ export function BranchCreatedModal({
               </button>
               <button
                 onClick={onClose}
-                disabled={secretPending}
                 className="flex-1 h-[36px] bg-white border border-gray-200 text-gray-700 text-sm rounded-xl hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
               >
                 Done

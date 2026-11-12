@@ -16,6 +16,7 @@ import { useIdleTimer } from './hooks/useIdleTimer';
 import {
   Account,
   accountFromUser,
+  isPendingBranchOwnerInvitation,
   isPendingDeliveryRiderInvitation,
   isPendingFranchiseAdminInvitation,
   signOut,
@@ -55,6 +56,7 @@ export default function App({ children }: { children: ReactNode }) {
   const [account, setAccount] = useState<Account | null>(null);
   const [authReady, setAuthReady] = useState(false);
   const [passwordRecovery, setPasswordRecovery] = useState(false);
+  const [invitationRole, setInvitationRole] = useState<'franchise-admin' | 'branch-owner'>('franchise-admin');
   const [invitationActivation, setInvitationActivation] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
@@ -111,7 +113,8 @@ export default function App({ children }: { children: ReactNode }) {
         return;
       }
 
-      if (isPendingFranchiseAdminInvitation(session.user)) {
+      if (isPendingFranchiseAdminInvitation(session.user) || isPendingBranchOwnerInvitation(session.user)) {
+        setInvitationRole(isPendingBranchOwnerInvitation(session.user) ? 'branch-owner' : 'franchise-admin');
         setInvitationActivation(true);
         setAccount(null);
         setAuthReady(true);
@@ -264,6 +267,7 @@ export default function App({ children }: { children: ReactNode }) {
           passwordRecovery={passwordRecovery}
           onPasswordReset={handlePasswordReset}
           invitationActivation={invitationActivation}
+          invitationRole={invitationRole}
           onInvitationActivation={handleInvitationActivation}
         />
       )}
