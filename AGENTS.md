@@ -180,13 +180,13 @@ Hard constraints:
   branch selected from the Owner's JWT-derived `branch_ids`.
 - **Delivery Rider web access is registration-only.** The dedicated public, token-gated web
   route reviews the locked invitation, creates the password, and records final invitation
-  acceptance. It then directs the Delivery Rider to mobile; PH mobile verification and all
-  Delivery Rider operations remain in the app.
+  acceptance. It then directs the Delivery Rider to the app for details confirmation and
+  operations. The PH mobile number is a contact field.
   A verified pending `driver` Supabase session returned to the web root must be routed into
   this registration flow, following the Franchise Administrator invitation pattern.
 - **Invitation acceptance is the authorization.** The web calls the API to consume the
-  invitation but leaves the account pending. The API activates it only after app-based PH
-  mobile verification. No Branch Manager approval or applicant-selected branch is allowed.
+  invitation but leaves the account pending. The API activates it after app-based details
+  confirmation. No Branch Manager approval or applicant-selected branch is allowed.
 - **Customers see delivery status milestones only — never live GPS coordinates.**
 
 ---
