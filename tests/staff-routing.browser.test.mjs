@@ -148,17 +148,62 @@ test('owner CSAT requests use only the explicitly selected live branch UUID', { 
   } finally { await context.close(); await browser.close(); }
 });
 
+test('owner branch recovers from a temporary assignment failure on sign-in and reload', { timeout: 20_000 }, async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const { context } = await createContext(browser, sessionFor('branch-owner'), { signedOut: true });
+    let attempts = 0;
+    let reloading = false;
+    await context.route(`${apiOrigin}/api/branches/assigned`, async route => {
+      assert.ok(route.request().headers().authorization?.startsWith('Bearer '));
+      if (++attempts === 1) {
+        // On reload, leave the first request pending to exercise the client timeout.
+        if (reloading) return;
+        await route.fulfill({ status: 503, json: { message: 'Branch lookup temporarily unavailable' } });
+      } else {
+        await route.fulfill({ json: { branches: [branches[0]] } });
+      }
+    });
+
+    const page = await context.newPage();
+    await page.goto(`${baseUrl}/branch-owner/settings`);
+    await page.getByLabel('Username or email', { exact: true }).fill('routing-test');
+    await page.getByLabel('Password', { exact: true }).fill('synthetic-password');
+    await page.getByRole('button', { name: 'Sign In', exact: true }).click();
+
+    for (const trigger of ['sign-in', 'reload']) {
+      if (trigger === 'reload') {
+        attempts = 0;
+        reloading = true;
+        await page.reload();
+      }
+      const badge = page.getByText(branches[0].name, { exact: true });
+      const retry = page.getByRole('button', { name: 'Branch unavailable · Retry', exact: true });
+      const outcome = await Promise.race([
+        badge.waitFor({ timeout: 8_000 }).then(() => 'branch shown'),
+        retry.waitFor({ timeout: 8_000 }).then(() => 'Branch unavailable · Retry'),
+      ]);
+      assert.equal(outcome, 'branch shown', `${trigger} should recover without a click`);
+      assert.equal(attempts, 2, `${trigger} should retry the temporary failure once`);
+    }
+  } finally { await browser.close(); }
+});
+
 test('failed live assignment keeps owner branch data unavailable', { timeout: 60_000 }, async () => {
   const browser = await chromium.launch({ headless: true });
   try {
     for (const status of [403, 503]) {
       const { context, apiRequests } = await createContext(browser, sessionFor('branch-owner'));
       try {
-        await context.route(`${apiOrigin}/api/branches/assigned`, route =>
-          route.fulfill({ status, json: { message: 'Branch assignment unavailable' } }));
+        let attempts = 0;
+        await context.route(`${apiOrigin}/api/branches/assigned`, route => {
+          attempts++;
+          return route.fulfill({ status, json: { message: 'Branch assignment unavailable' } });
+        });
         const page = await context.newPage();
         await page.goto(`${baseUrl}/branch-owner/customer-ratings`);
         await page.getByRole('button', { name: 'Branch unavailable · Retry', exact: true }).waitFor();
+        assert.equal(attempts, status === 503 ? 2 : 1);
         assert.equal(apiRequests.some(path => path.startsWith('/api/csat/')), false);
         assert.equal(await page.getByText('Routing Branch A', { exact: true }).count(), 0);
       } finally { await context.close(); }
