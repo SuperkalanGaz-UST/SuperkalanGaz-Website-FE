@@ -58,7 +58,6 @@ export default function App({ children }: { children: ReactNode }) {
   const [authReady, setAuthReady] = useState(false);
   const [passwordRecovery, setPasswordRecovery] = useState(false);
   const [ownerInvitationLink, setOwnerInvitationLink] = useState(false);
-  const [invitationRole, setInvitationRole] = useState<'franchise-admin' | 'branch-owner'>('franchise-admin');
   const [invitationActivation, setInvitationActivation] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
@@ -122,8 +121,15 @@ export default function App({ children }: { children: ReactNode }) {
         return;
       }
 
-      if (isPendingFranchiseAdminInvitation(session.user) || isPendingBranchOwnerInvitation(session.user)) {
-        setInvitationRole(isPendingBranchOwnerInvitation(session.user) ? 'branch-owner' : 'franchise-admin');
+      if (isPendingBranchOwnerInvitation(session.user)) {
+        // Keep legacy callbacks on the same setup screen through confirmation.
+        setAccount(null);
+        setAuthReady(false);
+        window.location.replace('/?invitation=branch-owner');
+        return;
+      }
+
+      if (isPendingFranchiseAdminInvitation(session.user)) {
         setInvitationActivation(true);
         setAccount(null);
         setAuthReady(true);
@@ -278,7 +284,6 @@ export default function App({ children }: { children: ReactNode }) {
           passwordRecovery={passwordRecovery}
           onPasswordReset={handlePasswordReset}
           invitationActivation={invitationActivation}
-          invitationRole={invitationRole}
           onInvitationActivation={handleInvitationActivation}
         />
       )}
