@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import dynamic from "next/dynamic";
+import { BranchGeofenceEditor } from "./BranchGeofenceEditor";
+import { isBranchGeofence, type BranchGeofence } from "../lib/branchGeofence";
 import { X } from "lucide-react";
 import { apiFetch, apiErrorMessage } from "../lib/api";
 import { toast } from "sonner";
@@ -11,12 +12,6 @@ import { provinceFocus } from "../lib/phProvinces";
 import { cityMunicipalityFocus } from "../lib/phCitiesMunicipalities";
 import { formatPhMobileNational, normalizePhMobile } from "../lib/phMobile";
 
-// The WebGL map is browser-only, so load it client-side only.
-const DrawableMap = dynamic(
-  () => import("./DrawableMap").then((m) => m.DrawableMap),
-  { ssr: false },
-);
-
 /** The branch's linked owner, as returned by GET /users. */
 interface OwnerProfile {
   id: string;
@@ -24,7 +19,7 @@ interface OwnerProfile {
   display_name: string | null;
   username: string | null;
   phone: string | null;
-  status: "Active" | "Inactive";
+  status: "Active" | "Inactive" | "Pending";
 }
 
 interface EditBranchModalProps {
@@ -53,61 +48,64 @@ export function EditBranchModal({ branch, onClose, onSaved }: EditBranchModalPro
   const [province, setProvince] = useState(branch.province ?? "");
   const [region, setRegion] = useState(branch.region ?? '');
 
-  // --- Geofence (draw-on-map polygon) ---
-  const [points, setPoints] = useState<[number, number][]>(branch.geofence?.points ?? []);
-  const [isDrawing, setIsDrawing] = useState(false);
-  const polygonClosed = points.length >= 3;
+  const addressKey = [address.trim(), city.trim(), province.trim()].join(', ');
+  const [coverage, setCoverage] = useState<BranchGeofence | null>(branch.geofence);
+  const [coverageAddress, setCoverageAddress] = useState(addressKey);
+  const geofence = coverageAddress === addressKey ? coverage : null;
 
   // --- Linked owner ---
   const [owner, setOwner] = useState<OwnerProfile | null>(null);
   const [ownerLoading, setOwnerLoading] = useState(true);
+  const [ownerError, setOwnerError] = useState<string | null>(null);
+  const [ownerReload, setOwnerReload] = useState(0);
   const [ownerName, setOwnerName] = useState("");
   const [ownerEmail, setOwnerEmail] = useState("");
   const [ownerPhone, setOwnerPhone] = useState("");
   const [ownerPhoneTouched, setOwnerPhoneTouched] = useState(false);
-  const [ownerStatus, setOwnerStatus] = useState<"Active" | "Inactive">("Active");
+  const [ownerStatus, setOwnerStatus] = useState<"Active" | "Inactive" | "Pending">("Active");
 
+  const [resendingInvitation, setResendingInvitation] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  // Load the owner linked to this branch (owners carry the branch name in their
-  // `branches` array). If several cover it, edit the first (primary).
+  // owner_id is the canonical association. Directory order and branch labels
+  // cannot identify an owner, especially when several accounts retain old scope.
   useEffect(() => {
     let cancelled = false;
+    setOwner(null);
+    setOwnerError(null);
+    if (!branch.owner_id) {
+      setOwnerLoading(false);
+      return;
+    }
+    const ownerId = branch.owner_id;
+    setOwnerLoading(true);
     (async () => {
-      setOwnerLoading(true);
       try {
         const res = await apiFetch(
-          `/users?role=branch-owner&branch=${encodeURIComponent(branch.name)}`,
+          `/users?role=branch-owner&branchId=${encodeURIComponent(branch.id)}`,
         );
         const data = await res.json().catch(() => null);
         if (!res.ok) throw new Error(apiErrorMessage(data, "Failed to load the owner."));
-        const first = (data?.users as OwnerProfile[])?.[0] ?? null;
+        const profiles: OwnerProfile[] = Array.isArray(data?.users) ? data.users : [];
+        const assigned = profiles.find((profile) => profile.id === ownerId);
+        if (!assigned) {
+          throw new Error("The assigned Branch Owner could not be loaded. Retry before saving.");
+        }
         if (!cancelled) {
-          setOwner(first);
-          if (first) {
-            setOwnerName(first.display_name ?? first.username ?? "");
-            setOwnerEmail(first.email ?? "");
-            setOwnerPhone(formatPhMobileNational(first.phone ?? ""));
-            setOwnerStatus(first.status);
-          }
+          setOwner(assigned);
+          setOwnerName(assigned.display_name ?? assigned.username ?? "");
+          setOwnerEmail(assigned.email ?? "");
+          setOwnerPhone(formatPhMobileNational(assigned.phone ?? ""));
+          setOwnerStatus(assigned.status);
         }
       } catch (err) {
-        if (!cancelled) toast.error(err instanceof Error ? err.message : "Failed to load the owner.");
+        if (!cancelled) setOwnerError(err instanceof Error ? err.message : "Failed to load the owner.");
       } finally {
         if (!cancelled) setOwnerLoading(false);
       }
     })();
-    return () => {
-      cancelled = true;
-    };
-  }, [branch.name]);
-
-  const addPoint = (lat: number, lng: number) => setPoints((prev) => [...prev, [lat, lng]]);
-  const undoPoint = () => setPoints((prev) => prev.slice(0, -1));
-  const clearPolygon = () => {
-    setPoints([]);
-    setIsDrawing(false);
-  };
+    return () => { cancelled = true; };
+  }, [branch.id, branch.owner_id, ownerReload]);
 
   const handleProvinceChange = (nextProvince: string) => {
     if (nextProvince !== province) setCity("");
@@ -122,11 +120,12 @@ export function EditBranchModal({ branch, onClose, onSaved }: EditBranchModalPro
   const showContactError = contactNumberTouched && canonicalContactNumber === null;
   const showOwnerPhoneError = ownerPhoneTouched && canonicalOwnerPhone === null;
   const ownerValid =
-    !owner ||
+    !owner || owner.status === "Pending" ||
     (ownerName.trim() !== "" &&
       emailValid(ownerEmail.trim()) &&
       canonicalOwnerPhone !== null);
   const canSave =
+    (!geofence || isBranchGeofence(geofence)) &&
     name.trim() !== "" &&
     canonicalContactNumber !== null &&
     address.trim() !== "" &&
@@ -134,6 +133,7 @@ export function EditBranchModal({ branch, onClose, onSaved }: EditBranchModalPro
     province.trim() !== "" &&
     ownerValid &&
     !ownerLoading &&
+    !ownerError &&
     !submitting;
 
   const handleSubmit = async () => {
@@ -150,7 +150,7 @@ export function EditBranchModal({ branch, onClose, onSaved }: EditBranchModalPro
           city: city.trim(),
           province: province.trim(),
           region: region || null,
-          geofence: polygonClosed ? { type: "polygon", points } : null,
+          geofence,
         }),
       });
       const data = await res.json().catch(() => null);
@@ -160,7 +160,7 @@ export function EditBranchModal({ branch, onClose, onSaved }: EditBranchModalPro
       }
 
       // 2) Owner profile — only the fields that actually changed.
-      if (owner) {
+      if (owner && owner.status !== "Pending") {
         const patch: Record<string, unknown> = {};
         if (ownerName.trim() !== (owner.display_name ?? owner.username ?? ""))
           patch.name = ownerName.trim();
@@ -259,7 +259,7 @@ export function EditBranchModal({ branch, onClose, onSaved }: EditBranchModalPro
             </div>
             <div>
               <label className={label}>Full address</label>
-              <input value={address} onChange={(e) => setAddress(e.target.value)} className={field} />
+              <input aria-label="Full address" value={address} onChange={(e) => setAddress(e.target.value)} className={field} />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
@@ -289,58 +289,10 @@ export function EditBranchModal({ branch, onClose, onSaved }: EditBranchModalPro
 
           {/* Geofence */}
           <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h3 className={sectionTitle}>Coverage geofence</h3>
-              <span className="text-xs text-gray-500">
-                {polygonClosed
-                  ? `Polygon · ${points.length} vertices`
-                  : points.length > 0
-                    ? `${points.length} point${points.length > 1 ? "s" : ""} · need ≥ 3`
-                    : "No coverage set"}
-              </span>
-            </div>
-            <div className="h-[230px] border border-gray-200 rounded-lg overflow-hidden relative">
-              <DrawableMap
-                points={points}
-                isDrawing={isDrawing}
-                onAddPoint={addPoint}
-                focus={
-                  cityMunicipalityFocus(province, city) ?? provinceFocus(province)
-                }
-              />
-              {isDrawing && (
-                <div className="absolute top-2 left-1/2 -translate-x-1/2 z-[400] bg-[#007BC1] text-white text-[11px] px-3 py-1 rounded-full shadow pointer-events-none">
-                  Click map to place points
-                </div>
-              )}
-            </div>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => setIsDrawing((v) => !v)}
-                className={`px-3 h-[30px] text-xs rounded-lg font-medium transition-colors ${
-                  isDrawing ? "bg-[#CC1903] text-white" : "bg-[#007BC1] text-white"
-                }`}
-              >
-                {isDrawing ? "◼ Stop drawing" : "⬡ Draw polygon"}
-              </button>
-              <button
-                type="button"
-                onClick={undoPoint}
-                disabled={points.length === 0}
-                className="px-3 h-[30px] bg-white border border-gray-200 text-xs text-gray-700 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-50 transition-colors"
-              >
-                ↺ Undo last point
-              </button>
-              <button
-                type="button"
-                onClick={clearPolygon}
-                disabled={points.length === 0}
-                className="px-3 h-[30px] bg-white border border-gray-200 text-xs text-gray-700 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-50 transition-colors"
-              >
-                ✕ Clear
-              </button>
-            </div>
+            <h3 className={sectionTitle}>Coverage geofence</h3>
+            <BranchGeofenceEditor address={{ address, city, province }} key={addressKey} value={geofence}
+              onChange={(value) => { setCoverage(value); setCoverageAddress(addressKey); }}
+              focus={cityMunicipalityFocus(province, city) ?? provinceFocus(province)} />
           </div>
 
           {/* Owner details */}
@@ -348,16 +300,40 @@ export function EditBranchModal({ branch, onClose, onSaved }: EditBranchModalPro
             <h3 className={sectionTitle}>Current owner profile</h3>
             {ownerLoading ? (
               <p className="text-sm text-gray-500">Loading owner…</p>
+            ) : ownerError ? (
+              <div role="alert" className="space-y-2 text-sm text-[#C0392B]">
+                <p>{ownerError}</p>
+                <button type="button" onClick={() => setOwnerReload((count) => count + 1)}
+                  className="px-3 py-2 border border-gray-200 rounded-lg text-gray-700 hover:bg-gray-50">
+                  Retry owner lookup
+                </button>
+              </div>
             ) : !owner ? (
               <p className="text-sm text-gray-500">
                 No Branch Owner is linked to this branch.
               </p>
             ) : (
               <div className="space-y-4">
+                {owner.status === "Pending" && <div className="space-y-2 rounded-lg bg-blue-50 p-3 text-sm text-[#00568A]">
+                  <p>This Branch Owner must follow their invitation link and set their own password before signing in.</p>
+                  <button type="button" disabled={resendingInvitation} className="px-3 py-2 border rounded-lg bg-white disabled:opacity-50"
+                    onClick={async () => {
+                      setResendingInvitation(true);
+                      try {
+                        const response = await apiFetch(`/branches/${branch.id}/owner-invitation/resend`, { method: 'POST' });
+                        const body = await response.json().catch(() => null);
+                        if (!response.ok) throw new Error(apiErrorMessage(body, 'Could not resend the invitation.'));
+                        toast.success('Branch Owner invitation email sent.');
+                      } catch (error) { toast.error(error instanceof Error ? error.message : 'Could not resend the invitation.'); }
+                      finally { setResendingInvitation(false); }
+                    }}>{resendingInvitation ? 'Sending invitation…' : 'Resend invitation'}</button>
+                </div>}
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className={label}>Owner name</label>
                     <input
+                      aria-label="Owner name"
+                      disabled={owner.status === "Pending"}
                       value={ownerName}
                       onChange={(e) => setOwnerName(e.target.value)}
                       className={field}
@@ -366,10 +342,12 @@ export function EditBranchModal({ branch, onClose, onSaved }: EditBranchModalPro
                   <div>
                     <label className={label}>Status</label>
                     <select
+                      disabled={owner.status === "Pending"}
                       value={ownerStatus}
                       onChange={(e) => setOwnerStatus(e.target.value as "Active" | "Inactive")}
                       className={field}
                     >
+                      {owner.status === "Pending" && <option value="Pending">Pending invitation</option>}
                       <option value="Active">Active</option>
                       <option value="Inactive">Inactive</option>
                     </select>
@@ -380,6 +358,7 @@ export function EditBranchModal({ branch, onClose, onSaved }: EditBranchModalPro
                     <label className={label}>Email address</label>
                     <input
                       type="email"
+                      disabled={owner.status === "Pending"}
                       value={ownerEmail}
                       onChange={(e) => setOwnerEmail(e.target.value)}
                       className={field}
@@ -400,7 +379,8 @@ export function EditBranchModal({ branch, onClose, onSaved }: EditBranchModalPro
                       <input
                         type="tel"
                         inputMode="numeric"
-                        value={ownerPhone}
+                        disabled={owner.status === "Pending"}
+                      value={ownerPhone}
                         onChange={(e) => setOwnerPhone(formatPhMobileNational(e.target.value))}
                         onBlur={() => setOwnerPhoneTouched(true)}
                         aria-invalid={showOwnerPhoneError}

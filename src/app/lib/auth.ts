@@ -61,6 +61,11 @@ export function isPendingFranchiseAdminInvitation(user: User): boolean {
   return claims.role === 'franchise-admin' && claims.status === 'Pending';
 }
 
+export function isPendingBranchOwnerInvitation(user: User): boolean {
+  const claims = user.app_metadata ?? {};
+  return claims.role === 'branch-owner' && claims.status === 'Pending' && claims.branch_owner_invitation === true;
+}
+
 export function isPendingDeliveryRiderInvitation(user: User): boolean {
   const claims = (user.app_metadata ?? {}) as Record<string, unknown>;
   return claims.role === 'driver' && claims.status === 'Pending';
@@ -239,6 +244,24 @@ export async function activateFranchiseAdminInvitation(
     };
   }
   return accountFromUser(refreshed.data.user);
+}
+
+/** The verified invitee supplies their password only to their role-locked NestJS endpoint. */
+export async function activateBranchOwnerInvitation(password: string): Promise<SignInResult> {
+  try {
+    const response = await apiFetch('/branches/owner-invitations/accept', {
+      method: 'POST', body: JSON.stringify({ password }), signal: AbortSignal.timeout(20_000),
+    });
+    const body: unknown = await response.json().catch(() => null);
+    if (!response.ok) return { account: null, error: apiErrorMessage(body, 'Could not activate this Branch Owner invitation.') };
+    const refreshed = await supabase.auth.refreshSession();
+    if (refreshed.error || !refreshed.data.user) {
+      return { account: null, error: 'Your account was activated. Return to sign in with your new password.' };
+    }
+    return accountFromUser(refreshed.data.user);
+  } catch {
+    return { account: null, error: 'Activation is unavailable. Please try again.' };
+  }
 }
 
 export async function signOut(): Promise<void> {

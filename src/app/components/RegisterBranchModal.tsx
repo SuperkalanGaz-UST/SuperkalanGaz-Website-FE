@@ -1,11 +1,6 @@
-import dynamic from 'next/dynamic';
 import { useEffect, useState } from 'react';
-
-// The WebGL map is browser-only, so keep it out of the server-rendered bundle.
-const DrawableMap = dynamic(
-  () => import('./DrawableMap').then((m) => m.DrawableMap),
-  { ssr: false },
-);
+import { BranchGeofenceEditor } from './BranchGeofenceEditor';
+import { geofenceSummary, isBranchGeofence, type BranchGeofence } from '../lib/branchGeofence';
 import { X, Check, Info } from 'lucide-react';
 import { toast } from 'sonner';
 import { apiFetch, apiErrorMessage } from '../lib/api';
@@ -165,45 +160,17 @@ export function RegisterBranchModal({ isOpen, onClose }: RegisterBranchModalProp
   const [curfewStart, setCurfewStart] = useState('06:00');
   const [curfewEnd, setCurfewEnd] = useState('21:00');
 
-  // Polygon drawing state (the only coverage-area mode)
-  const [polygonPoints, setPolygonPoints] = useState<[number, number][]>([]);
-  const [isDrawingPolygon, setIsDrawingPolygon] = useState(false);
-
-  const handleAddPoint = (lat: number, lng: number) => {
-    setPolygonPoints((prev) => [...prev, [lat, lng]]);
-  };
-
-  const handleUndoPoint = () => {
-    setPolygonPoints((prev) => prev.slice(0, -1));
-  };
-
-  const handleClearPolygon = () => {
-    setPolygonPoints([]);
-    setIsDrawingPolygon(false);
-  };
-
-  /** Approximate polygon area in km² using the spherical excess formula */
-  const calcArea = (pts: [number, number][]): number => {
-    if (pts.length < 3) return 0;
-    const R = 6371;
-    let area = 0;
-    for (let i = 0; i < pts.length; i++) {
-      const [lat1, lng1] = pts[i];
-      const [lat2, lng2] = pts[(i + 1) % pts.length];
-      area +=
-        ((lng2 - lng1) * Math.PI) / 180 *
-        (2 + Math.sin((lat1 * Math.PI) / 180) + Math.sin((lat2 * Math.PI) / 180));
-    }
-    return Math.abs((area * R * R) / 2);
-  };
-
-  const polygonArea = calcArea(polygonPoints);
-  const polygonClosed = polygonPoints.length >= 3;
+  const addressKey = [address.trim(), city.trim(), province.trim()].join(', ');
+  const [coverage, setCoverage] = useState<BranchGeofence | null>(null);
+  const [coverageAddress, setCoverageAddress] = useState(addressKey);
+  // Address edits invalidate a previously selected location, including across wizard steps.
+  const geofence = coverageAddress === addressKey ? coverage : null;
+  const coverageValid = !geofence || isBranchGeofence(geofence);
 
   const [showSuccess, setShowSuccess] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  // One-time password returned when a brand-new owner login is provisioned.
-  const [ownerTempPassword, setOwnerTempPassword] = useState<string | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [ownerInvitationSent, setOwnerInvitationSent] = useState(false);
   // The real branch reference/code the API assigned, shown on the success modal.
   const [branchReference, setBranchReference] = useState('');
 
@@ -223,6 +190,7 @@ export function RegisterBranchModal({ isOpen, onClose }: RegisterBranchModalProp
   const handleSubmit = async () => {
     if (submitting) return;
     setSubmitting(true);
+    setSubmitError(null);
 
     try {
       const res = await apiFetch('/branches', {
@@ -245,7 +213,7 @@ export function RegisterBranchModal({ isOpen, onClose }: RegisterBranchModalProp
           ownerMobile: ownerType === 'new' ? canonicalOwnerMobile : undefined,
           // Persist the drawn coverage polygon (>= 3 points), or null if none was
           // drawn. Stored on core.branches.geofence (jsonb).
-          geofence: polygonClosed ? { type: 'polygon', points: polygonPoints } : null,
+          geofence,
           // NOTE: low-stock threshold and curfew are collected by the wizard UI
           // but intentionally NOT sent — they have no home in core.branches yet
           // (deferred). The API ignores them if sent.
@@ -255,12 +223,15 @@ export function RegisterBranchModal({ isOpen, onClose }: RegisterBranchModalProp
       const data = await res.json().catch(() => null);
 
       if (!res.ok) {
-        toast.error(apiErrorMessage(data, 'Could not create the branch. Please try again.'));
+        setSubmitError(apiErrorMessage(data, 'Could not create the branch. Please try again.'));
         return;
       }
 
-      // Present only when a new owner was provisioned (no email infra to send it).
-      setOwnerTempPassword(data?.owner?.tempPassword ?? null);
+      if (ownerType === 'new' && data?.owner?.invitationSent !== true) {
+        toast.error('The branch was created, but invitation sending could not be confirmed. Check its owner invitation before retrying.');
+        return;
+      }
+      setOwnerInvitationSent(data?.owner?.invitationSent === true);
       setBranchReference(data?.code ?? '');
       setShowSuccess(true);
     } catch {
@@ -278,7 +249,7 @@ export function RegisterBranchModal({ isOpen, onClose }: RegisterBranchModalProp
 
   const handleRegisterAnother = () => {
     setShowSuccess(false);
-    setOwnerTempPassword(null);
+    setOwnerInvitationSent(false);
     setBranchReference('');
     setCurrentStep(1);
     setSelectedOwnerId(null);
@@ -297,12 +268,12 @@ export function RegisterBranchModal({ isOpen, onClose }: RegisterBranchModalProp
     setEmailTouched(false);
     setMobile('');
     setMobileTouched(false);
+    setCoverage(null);
     setCurfewStart('06:00');
     setCurfewEnd('21:00');
   };
 
-  const getGeofenceSummary = () =>
-    `Polygon · ${polygonPoints.length} vertices · ~${polygonArea.toFixed(2)} km²`;
+  const getGeofenceSummary = () => geofenceSummary(geofence);
 
   // The currently chosen existing owner (if any), and the search-filtered list.
   const selectedOwnerProfile = owners.find((o) => o.id === selectedOwnerId) ?? null;
@@ -339,7 +310,7 @@ export function RegisterBranchModal({ isOpen, onClose }: RegisterBranchModalProp
         geofenceSummary={getGeofenceSummary()}
         ownerName={resolvedOwnerName}
         ownerEmail={resolvedOwnerEmail}
-        ownerTempPassword={ownerTempPassword}
+        ownerInvitationSent={ownerInvitationSent}
         onClose={handleSuccessClose}
         onRegisterAnother={handleRegisterAnother}
       />
@@ -369,7 +340,7 @@ export function RegisterBranchModal({ isOpen, onClose }: RegisterBranchModalProp
       );
     }
     if (currentStep === 3) {
-      return true;
+      return coverageValid;
     }
     return true;
   })();
@@ -434,6 +405,7 @@ export function RegisterBranchModal({ isOpen, onClose }: RegisterBranchModalProp
 
         {/* Body */}
         <div className="p-6">
+          {submitError && <p role="alert" className="mb-4 text-sm text-[#C0392B]">{submitError}</p>}
           {/* Step 1: Branch Details */}
           {currentStep === 1 && (
             <div className="space-y-4">
@@ -493,6 +465,7 @@ export function RegisterBranchModal({ isOpen, onClose }: RegisterBranchModalProp
                 <label className="block text-xs text-[#6B6B67] mb-1">Full address</label>
                 <input
                   type="text"
+                  aria-label="Full address"
                   value={address}
                   onChange={(e) => setAddress(e.target.value)}
                   placeholder="National Hwy, Calamba, Laguna"
@@ -635,6 +608,7 @@ export function RegisterBranchModal({ isOpen, onClose }: RegisterBranchModalProp
                       <label className="block text-xs text-[#6B6B67] mb-1">First name</label>
                       <input
                         type="text"
+                        aria-label="Owner first name"
                         value={firstName}
                         onChange={(e) => setFirstName(e.target.value)}
                         className="w-full h-[34px] px-3 text-[13px] border border-[#E4E4E0] rounded-lg bg-[#F7F7F6] outline-none focus:border-[#185FA5]"
@@ -644,6 +618,7 @@ export function RegisterBranchModal({ isOpen, onClose }: RegisterBranchModalProp
                       <label className="block text-xs text-[#6B6B67] mb-1">Last name</label>
                       <input
                         type="text"
+                        aria-label="Owner last name"
                         value={lastName}
                         onChange={(e) => setLastName(e.target.value)}
                         className="w-full h-[34px] px-3 text-[13px] border border-[#E4E4E0] rounded-lg bg-[#F7F7F6] outline-none focus:border-[#185FA5]"
@@ -656,6 +631,7 @@ export function RegisterBranchModal({ isOpen, onClose }: RegisterBranchModalProp
                       <label className="block text-xs text-[#6B6B67] mb-1">Email address</label>
                       <input
                         type="email"
+                        aria-label="Owner email address"
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
                         // Canonicalize (trim + lowercase) as the value leaves the
@@ -714,7 +690,7 @@ export function RegisterBranchModal({ isOpen, onClose }: RegisterBranchModalProp
                   <div className="flex gap-2 p-3 bg-[#E6F1FB] border border-[#B5D4F4] rounded-lg">
                     <Info className="w-3.5 h-3.5 text-[#185FA5] flex-shrink-0 mt-0.5" />
                     <p className="text-[13px] text-[#185FA5]">
-                      A temporary password will be emailed to the owner. They must change it on first login.
+                      The owner will receive an invitation link by email and set their own password. Their account stays pending until setup is complete.
                     </p>
                   </div>
                 </div>
@@ -728,80 +704,17 @@ export function RegisterBranchModal({ isOpen, onClose }: RegisterBranchModalProp
               <div className="flex gap-2 p-3 bg-[#E6F1FB] border border-[#B5D4F4] rounded-lg">
                 <Info className="w-3.5 h-3.5 text-[#185FA5] flex-shrink-0 mt-0.5" />
                 <p className="text-[13px] text-[#185FA5]">
-                  The geofence defines the delivery coverage area. Riders are alerted if they leave this boundary. Draw a polygon on the map to set it.
+                  Set the branch location, then choose a circular radius or draw a polygon for its delivery coverage area.
                 </p>
               </div>
 
-                <div className="space-y-3">
-                  {/* Live MapLibre map */}
-                  <div className="h-[230px] border border-[#E4E4E0] rounded-lg overflow-hidden relative">
-                    <DrawableMap
-                      points={polygonPoints}
-                      isDrawing={isDrawingPolygon}
-                      onAddPoint={handleAddPoint}
-                      // Prefer the Step 1 city/municipality; retain province
-                      // framing as a safe fallback for older saved values.
-                      focus={
-                        cityMunicipalityFocus(province, city) ?? provinceFocus(province)
-                      }
-                    />
-                    {/* Drawing mode badge overlay */}
-                    {isDrawingPolygon && (
-                      <div className="absolute top-2 left-1/2 -translate-x-1/2 z-[400] bg-[#185FA5] text-white text-[11px] px-3 py-1 rounded-full shadow pointer-events-none">
-                        Click map to place points
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => setIsDrawingPolygon((v) => !v)}
-                      className={`px-3 h-[30px] text-xs rounded-lg font-medium transition-colors ${
-                        isDrawingPolygon
-                          ? 'bg-[#C0392B] text-white'
-                          : 'bg-[#185FA5] text-white'
-                      }`}
-                    >
-                      {isDrawingPolygon ? '◼ Stop drawing' : '⬡ Draw polygon'}
-                    </button>
-                    <button
-                      onClick={handleUndoPoint}
-                      disabled={polygonPoints.length === 0}
-                      className="px-3 h-[30px] bg-white border border-[#E4E4E0] text-xs text-[#6B6B67] rounded-lg disabled:opacity-40 disabled:cursor-not-allowed hover:bg-[#F7F7F6] transition-colors"
-                    >
-                      ↺ Undo last point
-                    </button>
-                    <button
-                      onClick={handleClearPolygon}
-                      disabled={polygonPoints.length === 0}
-                      className="px-3 h-[30px] bg-white border border-[#E4E4E0] text-xs text-[#6B6B67] rounded-lg disabled:opacity-40 disabled:cursor-not-allowed hover:bg-[#F7F7F6] transition-colors"
-                    >
-                      ✕ Clear
-                    </button>
-                  </div>
-
-                  <div className="flex gap-2.5 flex-wrap">
-                    <span className="px-2.5 py-1 border border-[#E4E4E0] rounded-lg text-[11px] text-[#6B6B67]">
-                      Area · {polygonClosed ? `~${polygonArea.toFixed(2)} km²` : '—'}
-                    </span>
-                    <span className="px-2.5 py-1 border border-[#E4E4E0] rounded-lg text-[11px] text-[#6B6B67]">
-                      Points · {polygonPoints.length}
-                    </span>
-                    {polygonClosed ? (
-                      <span className="px-2.5 py-1 bg-[#EAF3DE] border border-[#C0DD97] rounded-lg text-[11px] text-[#3B6D11]">
-                        Polygon closed
-                      </span>
-                    ) : polygonPoints.length > 0 ? (
-                      <span className="px-2.5 py-1 bg-[#FFF3E0] border border-[#F0C070] rounded-lg text-[11px] text-[#C07A12]">
-                        {isDrawingPolygon ? 'Drawing…' : 'Incomplete — need ≥ 3 points'}
-                      </span>
-                    ) : (
-                      <span className="px-2.5 py-1 bg-[#F7F7F6] border border-[#E4E4E0] rounded-lg text-[11px] text-[#6B6B67]">
-                        No polygon drawn
-                      </span>
-                    )}
-                  </div>
-                </div>
+              <BranchGeofenceEditor
+                address={{ address, city, province }}
+                key={addressKey}
+                value={geofence}
+                onChange={(value) => { setCoverage(value); setCoverageAddress(addressKey); }}
+                focus={cityMunicipalityFocus(province, city) ?? provinceFocus(province)}
+              />
 
               <div>
                 <label className="block text-xs text-[#6B6B67] mb-2">Time curfew — riders must return by</label>
@@ -864,7 +777,9 @@ export function RegisterBranchModal({ isOpen, onClose }: RegisterBranchModalProp
               <div className="flex gap-2 p-3 bg-[#EAF3DE] border border-[#C0DD97] rounded-lg">
                 <Check className="w-3.5 h-3.5 text-[#3B6D11] flex-shrink-0 mt-0.5" />
                 <p className="text-[13px] text-[#3B6D11]">
-                  All required fields are complete. Confirming will create the branch and send an access notification to the assigned owner.
+                  {ownerType === 'new'
+                    ? 'Confirming creates the branch and emails a password-setup invitation to the new Branch Owner.'
+                    : 'Confirming creates the branch and links the selected Branch Owner’s existing account.'}
                 </p>
               </div>
             </div>

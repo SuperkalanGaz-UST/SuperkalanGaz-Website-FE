@@ -4,6 +4,7 @@ import { InputOTP, InputOTPGroup, InputOTPSlot } from './ui/input-otp';
 import {
   Account,
   activateFranchiseAdminInvitation,
+  activateBranchOwnerInvitation,
   requestPasswordReset,
   signIn,
   updatePassword,
@@ -15,6 +16,7 @@ interface LoginProps {
   passwordRecovery?: boolean;
   onPasswordReset?: () => Promise<void>;
   invitationActivation?: boolean;
+  invitationRole?: 'franchise-admin' | 'branch-owner';
   onInvitationActivation?: (account: Account) => void;
 }
 
@@ -23,6 +25,7 @@ export function Login({
   passwordRecovery = false,
   onPasswordReset,
   invitationActivation = false,
+  invitationRole = 'franchise-admin',
   onInvitationActivation,
 }: LoginProps) {
   const [username, setUsername] = useState('');
@@ -158,7 +161,9 @@ export function Login({
     }
 
     setLoading(true);
-    const result = await activateFranchiseAdminInvitation(newPassword);
+    const result = await (invitationRole === 'branch-owner'
+      ? activateBranchOwnerInvitation(newPassword)
+      : activateFranchiseAdminInvitation(newPassword));
     setLoading(false);
     if (!result.account) {
       setError(result.error ?? 'Could not activate this invitation.');
@@ -233,7 +238,7 @@ export function Login({
           <h1 className="text-3xl font-bold text-gray-900">Activate your account</h1>
           <p className="mt-3 mb-8 text-sm leading-6 text-gray-600">
             Your email is verified. Choose your own password to finish activating your
-            Franchise Administrator account.
+            {invitationRole === 'branch-owner' ? 'Branch Owner' : 'Franchise Administrator'} account.
           </p>
           <form onSubmit={handleInvitationActivation}>
             <div className="mb-5">
