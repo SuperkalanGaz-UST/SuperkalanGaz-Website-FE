@@ -28,6 +28,45 @@ interface BranchContextType {
 
 const BranchContext = createContext<BranchContextType | undefined>(undefined);
 
+const ASSIGNED_BRANCH_TIMEOUT_MS = 5_000;
+const RETRYABLE_ASSIGNMENT_STATUSES = new Set([408, 500, 502, 503, 504]);
+
+async function loadAssignedBranches(signal: AbortSignal, canRetry = true): Promise<AssignedBranch[]> {
+  const timeout = AbortSignal.timeout(ASSIGNED_BRANCH_TIMEOUT_MS);
+  const requestSignal = AbortSignal.any([signal, timeout]);
+
+  let response: Response;
+  let data: unknown;
+  try {
+    requestSignal.throwIfAborted();
+    response = await apiFetch('/branches/assigned', { cache: 'no-store', signal: requestSignal });
+    data = await response.json().catch(() => null);
+    requestSignal.throwIfAborted();
+  } catch (error) {
+    signal.throwIfAborted();
+    if (canRetry && (timeout.aborted || error instanceof TypeError)) {
+      return retryAssignedBranches(signal);
+    }
+    throw new Error(timeout.aborted ? 'The branch lookup timed out.' : 'Could not reach the server.');
+  }
+
+  if (!response.ok) {
+    if (canRetry && RETRYABLE_ASSIGNMENT_STATUSES.has(response.status)) {
+      return retryAssignedBranches(signal);
+    }
+    throw new Error(apiErrorMessage(data, 'Could not load the assigned branches.'));
+  }
+
+  return assignedBranchesFrom(data);
+}
+
+async function retryAssignedBranches(signal: AbortSignal): Promise<AssignedBranch[]> {
+  // A temporary failure on the first dashboard load shouldn't require a click.
+  await new Promise<void>((resolve) => window.setTimeout(resolve, 400));
+  signal.throwIfAborted();
+  return loadAssignedBranches(signal, false);
+}
+
 interface BranchProviderProps {
   children: ReactNode;
 }
@@ -43,6 +82,7 @@ export function BranchProvider({ children }: BranchProviderProps) {
   const [assignedBranches, setAssignedBranches] = useState<AssignedBranch[] | null>(null);
   const [assignedBranchesLoading, setAssignedBranchesLoading] = useState(true);
   const [assignedBranchesError, setAssignedBranchesError] = useState<string | null>(null);
+  const assignmentRequest = useRef<AbortController | null>(null);
 
   const selectedBranch =
     availableBranchOptions.find((branch) => branch.id === selectedBranchId)?.name ??
@@ -64,26 +104,15 @@ export function BranchProvider({ children }: BranchProviderProps) {
   }, [availableBranchOptions, selectedBranchId]);
 
   const refreshAssignedBranches = useCallback(async () => {
+    assignmentRequest.current?.abort();
     const controller = new AbortController();
-    const timeout = window.setTimeout(() => controller.abort(), 5_000);
+    assignmentRequest.current = controller;
     setAssignedBranchesLoading(true);
     setAssignedBranchesError(null);
 
     try {
-      const response = await apiFetch('/branches/assigned', { signal: controller.signal });
-      const data: unknown = await response.json().catch(() => null);
-      if (!response.ok) {
-        const message = apiErrorMessage(data, 'Could not load the assigned geofences.');
-        setAssignedBranches(null);
-        setAssignedBranchesError(message);
-        // Do not keep a claim-derived selection after the authoritative API
-        // failed to validate it. The shell remains visible, but branch writes
-        // stay unavailable until a successful refresh resolves live UUIDs.
-        setAvailableBranchOptions([]);
-        setSelectedBranchIdState(null);
-        return;
-      }
-      const resolved = assignedBranchesFrom(data);
+      const resolved = await loadAssignedBranches(controller.signal);
+      if (controller.signal.aborted) return;
       setAssignedBranches(resolved);
       setAvailableBranchOptions(resolved);
       setSelectedBranchIdState((current) =>
@@ -91,24 +120,25 @@ export function BranchProvider({ children }: BranchProviderProps) {
           ? current
           : resolved.length === 1 ? resolved[0].id : null,
       );
-    } catch {
+    } catch (error) {
+      if (controller.signal.aborted) return;
+      // Branch data stays unavailable until the API validates the live UUIDs.
       setAssignedBranches(null);
       setAvailableBranchOptions([]);
       setSelectedBranchIdState(null);
-      setAssignedBranchesError(
-        controller.signal.aborted
-          ? 'The geofence request timed out.'
-          : 'Could not reach the server.',
-      );
+      setAssignedBranchesError(error instanceof Error ? error.message : 'Could not load the assigned branches.');
     } finally {
-      window.clearTimeout(timeout);
-      setAssignedBranchesLoading(false);
+      if (assignmentRequest.current === controller && !controller.signal.aborted) {
+        assignmentRequest.current = null;
+        setAssignedBranchesLoading(false);
+      }
     }
   }, []);
 
   // Prefetch once when the Branch Owner app mounts, before Fleet is opened.
   useEffect(() => {
     void refreshAssignedBranches();
+    return () => assignmentRequest.current?.abort();
   }, [refreshAssignedBranches]);
 
   useEffect(() => () => {
