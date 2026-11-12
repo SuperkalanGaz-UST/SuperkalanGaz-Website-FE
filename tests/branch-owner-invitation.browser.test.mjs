@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import { chromium } from 'playwright';
@@ -178,7 +179,8 @@ test('an emailed Branch Owner link verifies only on click, then sets the passwor
       return true;
     });
     const page = await context.newPage();
-    const tokenHash = 'a'.repeat(64);
+    // Supabase formats email OTP hashes as 56 hexadecimal characters (SHA-224).
+    const tokenHash = createHash('sha224').update('owner-invite@example.invalid123456').digest('hex');
     await page.goto(`${baseUrl}/?invitation=branch-owner#token_hash=${tokenHash}`);
     await page.getByRole('heading', { name: 'Set Password', exact: true }).waitFor({ timeout: 3000 });
     const verify = page.getByRole('button', { name: 'Verify invitation', exact: true });
