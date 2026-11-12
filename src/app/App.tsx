@@ -10,13 +10,15 @@ import { toast } from 'sonner';
 import { Toaster } from './components/ui/sonner';
 import { IdleLogoutWarningDialog } from './components/IdleLogoutWarningDialog';
 import { Login } from './components/Login';
+import { BranchStaffInvitation } from './components/BranchStaffInvitation';
 import { LogoutConfirmationDialog } from './components/LogoutConfirmationDialog';
 import { AccountProvider } from './contexts/AccountContext';
 import { useIdleTimer } from './hooks/useIdleTimer';
 import {
   Account,
   accountFromUser,
-  isPendingBranchOwnerInvitation,
+  isPendingBranchInvitation,
+  type BranchInvitationRole,
   isPendingDeliveryRiderInvitation,
   isPendingFranchiseAdminInvitation,
   signOut,
@@ -56,7 +58,7 @@ export default function App({ children }: { children: ReactNode }) {
   const [account, setAccount] = useState<Account | null>(null);
   const [authReady, setAuthReady] = useState(false);
   const [passwordRecovery, setPasswordRecovery] = useState(false);
-  const [invitationRole, setInvitationRole] = useState<'franchise-admin' | 'branch-owner'>('franchise-admin');
+  const [branchInvitationRole, setBranchInvitationRole] = useState<BranchInvitationRole | null>(null);
   const [invitationActivation, setInvitationActivation] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
@@ -83,6 +85,14 @@ export default function App({ children }: { children: ReactNode }) {
   });
 
   useEffect(() => {
+    const url = new URL(window.location.href);
+    const invitation = url.searchParams.get('invitation');
+    if (url.pathname === '/' && (invitation === 'branch-owner' || invitation === 'branch-manager')) {
+      // An explicit invitation must not fall through to an existing staff session.
+      setBranchInvitationRole(invitation);
+      return;
+    }
+
     let mounted = true;
     let restoreTimedOut = false;
     const restoreTimer = window.setTimeout(() => {
@@ -113,8 +123,17 @@ export default function App({ children }: { children: ReactNode }) {
         return;
       }
 
-      if (isPendingFranchiseAdminInvitation(session.user) || isPendingBranchOwnerInvitation(session.user)) {
-        setInvitationRole(isPendingBranchOwnerInvitation(session.user) ? 'branch-owner' : 'franchise-admin');
+      const invitationRole = session.user.app_metadata?.role;
+      if ((invitationRole === 'branch-owner' || invitationRole === 'branch-manager') &&
+          isPendingBranchInvitation(session.user, invitationRole)) {
+        // Keep legacy callbacks on the same setup screen through confirmation.
+        setAccount(null);
+        setAuthReady(false);
+        window.location.replace('/?invitation=' + invitationRole);
+        return;
+      }
+
+      if (isPendingFranchiseAdminInvitation(session.user)) {
         setInvitationActivation(true);
         setAccount(null);
         setAuthReady(true);
@@ -210,6 +229,8 @@ export default function App({ children }: { children: ReactNode }) {
   // Let Next.js render its not-found boundary for invalid role/screen URLs.
   if (pathname !== '/' && !staffRoute) return children;
 
+  if (branchInvitationRole) return <BranchStaffInvitation role={branchInvitationRole} />;
+
   if (!authReady || needsRoleRedirect) {
     return (
       <main
@@ -267,7 +288,6 @@ export default function App({ children }: { children: ReactNode }) {
           passwordRecovery={passwordRecovery}
           onPasswordReset={handlePasswordReset}
           invitationActivation={invitationActivation}
-          invitationRole={invitationRole}
           onInvitationActivation={handleInvitationActivation}
         />
       )}

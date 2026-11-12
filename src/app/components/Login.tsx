@@ -1,10 +1,13 @@
 import { useState } from 'react';
+import type { ReactNode } from 'react';
 import { ArrowLeft, CheckCircle2, Eye, EyeOff, Mail, X } from 'lucide-react';
 import { InputOTP, InputOTPGroup, InputOTPSlot } from './ui/input-otp';
 import {
   Account,
+  ROLE_LABELS,
   activateFranchiseAdminInvitation,
-  activateBranchOwnerInvitation,
+  activateBranchInvitation,
+  type BranchInvitationRole,
   requestPasswordReset,
   signIn,
   updatePassword,
@@ -12,12 +15,15 @@ import {
 } from '../lib/auth';
 
 interface LoginProps {
-  onLogin: (account: Account) => void;
+  onLogin?: (account: Account) => void;
   passwordRecovery?: boolean;
   onPasswordReset?: () => Promise<void>;
   invitationActivation?: boolean;
-  invitationRole?: 'franchise-admin' | 'branch-owner';
+  invitationRole?: 'franchise-admin' | BranchInvitationRole;
   onInvitationActivation?: (account: Account) => void;
+  onBranchInvitationActivation?: () => void;
+  invitationContent?: ReactNode;
+  signInNotice?: string;
 }
 
 export function Login({
@@ -27,6 +33,9 @@ export function Login({
   invitationActivation = false,
   invitationRole = 'franchise-admin',
   onInvitationActivation,
+  onBranchInvitationActivation,
+  invitationContent,
+  signInNotice,
 }: LoginProps) {
   const [username, setUsername] = useState('');
   const [recoveryUsername, setRecoveryUsername] = useState('');
@@ -52,7 +61,7 @@ export function Login({
     setLoading(false);
 
     if (account) {
-      onLogin(account);
+      onLogin?.(account);
     } else {
       setError(signInError ?? 'Invalid username or password');
     }
@@ -161,9 +170,20 @@ export function Login({
     }
 
     setLoading(true);
-    const result = await (invitationRole === 'branch-owner'
-      ? activateBranchOwnerInvitation(newPassword)
-      : activateFranchiseAdminInvitation(newPassword));
+    if (invitationRole !== 'franchise-admin') {
+      const result = await activateBranchInvitation(invitationRole, newPassword);
+      setLoading(false);
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+      setNewPassword('');
+      setConfirmPassword('');
+      onBranchInvitationActivation?.();
+      return;
+    }
+
+    const result = await activateFranchiseAdminInvitation(newPassword);
     setLoading(false);
     if (!result.account) {
       setError(result.error ?? 'Could not activate this invitation.');
@@ -213,6 +233,8 @@ export function Login({
   );
 
   const renderCardContent = () => {
+    if (invitationContent) return invitationContent;
+
     if (resetComplete) {
       return (
         <div className="py-6 text-center">
@@ -235,10 +257,11 @@ export function Login({
     if (invitationActivation) {
       return (
         <>
-          <h1 className="text-3xl font-bold text-gray-900">Activate your account</h1>
+          <h1 className="text-3xl font-bold text-gray-900">
+            {invitationRole === 'franchise-admin' ? 'Activate your account' : 'Set Password'}
+          </h1>
           <p className="mt-3 mb-8 text-sm leading-6 text-gray-600">
-            Your email is verified. Choose your own password to finish activating your
-            {invitationRole === 'branch-owner' ? 'Branch Owner' : 'Franchise Administrator'} account.
+            Your email is verified. Choose your own password to activate your {ROLE_LABELS[invitationRole]} account.
           </p>
           <form onSubmit={handleInvitationActivation}>
             <div className="mb-5">
@@ -459,6 +482,11 @@ export function Login({
         <h1 className="text-3xl font-bold text-gray-900 mb-10">Sign In</h1>
 
         <form onSubmit={handleSubmit}>
+          {signInNotice && (
+            <p className="mb-6 rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800" role="status">
+              {signInNotice}
+            </p>
+          )}
           {error && (
             <div className="mb-6 flex items-start justify-between p-3 bg-red-50 border border-red-200 rounded-md">
               <p className="text-sm text-red-600 font-medium" role="alert">{error}</p>
@@ -509,7 +537,7 @@ export function Login({
           </div>
 
           <div className="mb-6 text-right">
-            <button
+            {onPasswordReset && <button
               type="button"
               onClick={() => {
                 setForgotPassword(true);
@@ -521,7 +549,7 @@ export function Login({
               className="text-sm font-medium text-[#007BC1] hover:text-[#006399] hover:underline"
             >
               Forgot password?
-            </button>
+            </button>}
           </div>
 
           <button

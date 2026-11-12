@@ -24,9 +24,10 @@ interface BranchManager {
   username: string;
   branchIds: string[];
   branches: string[];
-  status: 'Active' | 'Inactive';
+  status: 'Active' | 'Inactive' | 'Pending';
   dateCreated: string;
   lastLogin: string;
+  pendingInvitation: boolean;
 }
 
 interface DeliveryRiderInvitation {
@@ -59,9 +60,10 @@ interface ProfileRow {
   phone: string | null;
   branch_ids: string[] | null;
   branches: string[] | null;
-  status: 'Active' | 'Inactive';
+  status: 'Active' | 'Inactive' | 'Pending';
   created_at: string;
   last_login_at: string | null;
+  pending_manager_invitation?: boolean;
 }
 
 function toManager(p: ProfileRow): BranchManager {
@@ -78,6 +80,7 @@ function toManager(p: ProfileRow): BranchManager {
       ? new Date(p.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
       : '—',
     lastLogin: displayDateTime(p.last_login_at),
+    pendingInvitation: p.pending_manager_invitation === true,
   };
 }
 
@@ -211,7 +214,9 @@ export function UserManagement() {
   const [deactivateReason, setDeactivateReason] = useState('');
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [editingManager, setEditingManager] = useState<BranchManager | null>(null);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [managerToDeactivate, setManagerToDeactivate] = useState<BranchManager | null>(null);
+  const [managerInvitationBusy, setManagerInvitationBusy] = useState(false);
+  const [managerEmailError, setManagerEmailError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [invitationToRevoke, setInvitationToRevoke] =
@@ -251,6 +256,7 @@ export function UserManagement() {
 
   const handleAddClick = () => {
     setEditingManager(null);
+    setManagerEmailError(null);
     setFormData({
       name: '',
       email: '',
@@ -265,6 +271,8 @@ export function UserManagement() {
   };
 
   const handleEditClick = (manager: BranchManager) => {
+    if (manager.status === 'Pending') return;
+    setManagerEmailError(null);
     setEditingManager(manager);
     setFormData({
       name: manager.name,
@@ -280,8 +288,8 @@ export function UserManagement() {
     setShowModal(true);
   };
 
-  const handleDeleteClick = (id: string) => {
-    setDeletingId(id);
+  const handleDeleteClick = (manager: BranchManager) => {
+    setManagerToDeactivate(manager);
     setShowDeleteDialog(true);
   };
 
@@ -297,7 +305,8 @@ export function UserManagement() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (formData.password !== formData.confirmPassword) {
+    setManagerEmailError(null);
+    if (editingManager && formData.password !== formData.confirmPassword) {
       toast.error('Passwords do not match');
       return;
     }
@@ -330,9 +339,9 @@ export function UserManagement() {
         if (!res.ok) throw new Error(apiErrorMessage(data, 'Update failed'));
         toast.success('Branch manager account updated successfully.');
       } else {
-        if (!formData.password) {
-          toast.error('Password is required');
-          setSubmitting(false);
+        const phone = canonicalPhMobile(formData.phone);
+        if (!phone) {
+          toast.error('Enter a valid Philippine mobile number.');
           return;
         }
         const res = await apiFetch('/users', {
@@ -340,17 +349,21 @@ export function UserManagement() {
           body: JSON.stringify({
             name: formData.name,
             email: formData.email,
-            phone: formData.phone,
-            username: formData.username,
-            password: formData.password,
-            status: formData.status,
-            role: 'branch-manager',
+            phone,
+            username: formData.username.trim(),
             branchIds: [formData.branchId],
           }),
         });
         const data = await res.json();
-        if (!res.ok) throw new Error(apiErrorMessage(data, 'Create failed'));
-        toast.success('Branch manager account created successfully.');
+        if (!res.ok) {
+          const message = apiErrorMessage(data, 'Could not send the invitation.');
+          if (res.status === 409 && message === 'Email already in use') {
+            setManagerEmailError(message);
+            return;
+          }
+          throw new Error(message);
+        }
+        toast.success('Branch Manager invitation sent.');
       }
 
       refreshAccounts();
@@ -362,19 +375,43 @@ export function UserManagement() {
     }
   };
 
-  const handleConfirmDelete = async () => {
-    if (!deletingId) return;
+  const handleResendManagerInvitation = async (manager: BranchManager) => {
+    const [branchId] = manager.branchIds;
+    if (!branchId) return;
+    setManagerInvitationBusy(true);
     try {
-      const res = await apiFetch(`/users/${deletingId}`, { method: 'DELETE' });
+      const params = new URLSearchParams({ branchId });
+      const res = await apiFetch(
+        '/users/' + manager.id + '/branch-manager-invitation/resend?' + params,
+        { method: 'POST' },
+      );
+      if (!res.ok) throw new Error(apiErrorMessage(await res.json(), 'Could not resend the invitation.'));
+      toast.success('Branch Manager invitation resent.');
+      refreshAccounts();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not resend the invitation.');
+    } finally {
+      setManagerInvitationBusy(false);
+    }
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!managerToDeactivate) return;
+    const pending = managerToDeactivate.pendingInvitation;
+    const [branchId] = managerToDeactivate.branchIds;
+    if (pending && !branchId) return;
+    const path = '/users/' + managerToDeactivate.id + (pending ? '?branchId=' + encodeURIComponent(branchId) : '');
+    try {
+      const res = await apiFetch(path, { method: 'DELETE' });
       const data = await res.json();
-      if (!res.ok) throw new Error(apiErrorMessage(data, 'Deactivation failed'));
-      toast.success('Branch manager account deactivated.');
+      if (!res.ok) throw new Error(apiErrorMessage(data, 'Could not remove account access.'));
+      toast.success(pending ? 'Branch Manager invitation revoked.' : 'Branch Manager account deactivated.');
       refreshAccounts();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Deactivation failed');
+      toast.error(err instanceof Error ? err.message : 'Could not remove account access.');
     } finally {
       setShowDeleteDialog(false);
-      setDeletingId(null);
+      setManagerToDeactivate(null);
     }
   };
 
@@ -532,7 +569,7 @@ export function UserManagement() {
                 className="inline-flex h-10 items-center gap-2 rounded-lg bg-[#007BC1] px-4 text-sm font-semibold text-white transition-colors hover:bg-[#005a8f]"
               >
                 <UserPlus className="h-4 w-4" aria-hidden="true" />
-                Create Branch Manager Account
+                Invite Branch Manager
               </button>
             </div>
           </div>
@@ -646,7 +683,9 @@ export function UserManagement() {
                         className={`inline-block px-3 py-1 rounded-full text-[11px] font-medium ${
                           manager.status === 'Active'
                             ? 'bg-green-100 text-green-700'
-                            : 'bg-red-100 text-red-700'
+                            : manager.status === 'Pending'
+                              ? 'bg-amber-100 text-amber-700'
+                              : 'bg-red-100 text-red-700'
                         }`}
                       >
                         {manager.status}
@@ -656,20 +695,33 @@ export function UserManagement() {
                     <td className="py-3 text-[13px] text-gray-600 whitespace-nowrap">{manager.lastLogin}</td>
                     <td className="py-3">
                       <div className="flex items-center gap-2">
+                        {manager.pendingInvitation ? (
+                          <button
+                            type="button"
+                            onClick={() => void handleResendManagerInvitation(manager)}
+                            disabled={managerInvitationBusy || manager.branchIds.length !== 1}
+                            aria-label={'Resend invitation to ' + manager.name}
+                            title="Resend invitation"
+                            className="p-1.5 text-gray-600 hover:text-[#007BC1] hover:bg-gray-100 rounded disabled:opacity-50"
+                          >
+                            <MailPlus className="w-4 h-4" />
+                          </button>
+                        ) : manager.status !== 'Pending' ? (
+                          <button
+                            type="button"
+                            onClick={() => handleEditClick(manager)}
+                            aria-label={`Edit ${manager.name}`}
+                            title="Edit Branch Manager"
+                            className="p-1.5 text-gray-600 hover:text-[#007BC1] hover:bg-gray-100 rounded transition-colors"
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </button>
+                        ) : null}
                         <button
                           type="button"
-                          onClick={() => handleEditClick(manager)}
-                          aria-label={`Edit ${manager.name}`}
-                          title="Edit Branch Manager"
-                          className="p-1.5 text-gray-600 hover:text-[#007BC1] hover:bg-gray-100 rounded transition-colors"
-                        >
-                          <Pencil className="w-4 h-4" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteClick(manager.id)}
-                          aria-label={`Deactivate ${manager.name}`}
-                          title="Deactivate Branch Manager"
+                          onClick={() => handleDeleteClick(manager)}
+                          aria-label={(manager.pendingInvitation ? 'Revoke invitation for ' : 'Deactivate ') + manager.name}
+                          title={manager.pendingInvitation ? 'Revoke invitation' : 'Deactivate Branch Manager'}
                           className="p-1.5 text-gray-600 hover:text-red-600 hover:bg-gray-100 rounded transition-colors"
                         >
                           <UserX className="w-4 h-4" />
@@ -912,7 +964,7 @@ export function UserManagement() {
             {/* Fixed Header */}
             <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between flex-shrink-0">
               <h3 className="text-base font-semibold text-gray-900">
-                {editingManager ? 'Edit Branch Manager' : 'Create Branch Manager Account'}
+                {editingManager ? 'Edit Branch Manager' : 'Invite Branch Manager'}
               </h3>
               <button
                 onClick={handleCloseModal}
@@ -927,10 +979,11 @@ export function UserManagement() {
               <div className="px-6 py-4 overflow-y-auto flex-1">
                 <div className="space-y-4">
                 <div>
-                  <label className="block text-sm text-gray-700 mb-1.5">
+                  <label htmlFor="manager-name" className="block text-sm text-gray-700 mb-1.5">
                     Full Name <span className="text-red-500">*</span>
                   </label>
                   <input
+                    id="manager-name"
                     type="text"
                     required
                     value={formData.name}
@@ -941,24 +994,34 @@ export function UserManagement() {
                 </div>
 
                 <div>
-                  <label className="block text-sm text-gray-700 mb-1.5">
+                  <label htmlFor="manager-email" className="block text-sm text-gray-700 mb-1.5">
                     Email Address <span className="text-red-500">*</span>
                   </label>
                   <input
+                    id="manager-email"
                     type="email"
                     required
                     value={formData.email}
-                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                    aria-invalid={managerEmailError !== null}
+                    aria-describedby={managerEmailError ? 'manager-email-error' : undefined}
+                    onChange={(e) => {
+                      setManagerEmailError(null);
+                      setFormData({ ...formData, email: e.target.value });
+                    }}
                     placeholder="Enter email address"
                     className="w-full h-[44px] px-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#007BC1] focus:border-transparent outline-none text-sm"
                   />
+                  {managerEmailError && (
+                    <p id="manager-email-error" role="alert" className="mt-1 text-sm text-red-600">{managerEmailError}</p>
+                  )}
                 </div>
 
                 <div>
-                  <label className="block text-sm text-gray-700 mb-1.5">
+                  <label htmlFor="manager-phone" className="block text-sm text-gray-700 mb-1.5">
                     Phone Number <span className="text-red-500">*</span>
                   </label>
                   <input
+                    id="manager-phone"
                     type="text"
                     required
                     value={formData.phone}
@@ -969,10 +1032,11 @@ export function UserManagement() {
                 </div>
 
                 <div>
-                  <label className="block text-sm text-gray-700 mb-1.5">
+                  <label htmlFor="manager-username" className="block text-sm text-gray-700 mb-1.5">
                     Username <span className="text-red-500">*</span>
                   </label>
                   <input
+                    id="manager-username"
                     type="text"
                     required
                     value={formData.username}
@@ -982,51 +1046,53 @@ export function UserManagement() {
                   />
                 </div>
 
-                <div>
-                  <label className="block text-sm text-gray-700 mb-1.5">
-                    Password <span className="text-red-500">*</span>
-                  </label>
-                  <div className="relative">
-                    <input
-                      type={showPassword ? 'text' : 'password'}
-                      required
-                      value={formData.password}
-                      onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                      placeholder="Enter password"
-                      className="w-full h-[44px] px-3 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#007BC1] focus:border-transparent outline-none text-sm"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                    >
-                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </button>
-                  </div>
-                </div>
+                {editingManager && (
+                  <>
+                    <div>
+                      <label className="block text-sm text-gray-700 mb-1.5">
+                        Password
+                      </label>
+                      <div className="relative">
+                        <input
+                          type={showPassword ? 'text' : 'password'}
+                          value={formData.password}
+                          onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                          placeholder="Enter password"
+                          className="w-full h-[44px] px-3 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#007BC1] focus:border-transparent outline-none text-sm"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowPassword(!showPassword)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                        >
+                          {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                      </div>
+                    </div>
 
-                <div>
-                  <label className="block text-sm text-gray-700 mb-1.5">
-                    Confirm Password <span className="text-red-500">*</span>
-                  </label>
-                  <div className="relative">
-                    <input
-                      type={showConfirmPassword ? 'text' : 'password'}
-                      required
-                      value={formData.confirmPassword}
-                      onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
-                      placeholder="Re-enter password"
-                      className="w-full h-[44px] px-3 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#007BC1] focus:border-transparent outline-none text-sm"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                    >
-                      {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </button>
-                  </div>
-                </div>
+                    <div>
+                      <label className="block text-sm text-gray-700 mb-1.5">
+                        Confirm Password
+                      </label>
+                      <div className="relative">
+                        <input
+                          type={showConfirmPassword ? 'text' : 'password'}
+                          value={formData.confirmPassword}
+                          onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
+                          placeholder="Re-enter password"
+                          className="w-full h-[44px] px-3 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#007BC1] focus:border-transparent outline-none text-sm"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                        >
+                          {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                      </div>
+                    </div>
+                  </>
+                )}
 
                 {isMultiBranch && (
                   <div>
@@ -1045,50 +1111,53 @@ export function UserManagement() {
                   </div>
                 )}
 
-                <div>
-                  <label className="block text-sm text-gray-700 mb-2">
-                    Status <span className="text-red-500">*</span>
-                  </label>
-                  <div className="flex items-center gap-4">
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="status"
-                        checked={formData.status === 'Active'}
-                        onChange={() => setFormData({ ...formData, status: 'Active' })}
-                        className="sr-only"
-                      />
-                      <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
-                        formData.status === 'Active' ? 'border-[#007BC1]' : 'border-gray-300'
-                      }`}>
-                        {formData.status === 'Active' && (
-                          <div className="w-2 h-2 rounded-full bg-[#007BC1]"></div>
-                        )}
-                      </div>
-                      <span className="text-sm text-gray-700">Active</span>
+                {editingManager && (
+                  <div>
+                    <label className="block text-sm text-gray-700 mb-2">
+                      Status <span className="text-red-500">*</span>
                     </label>
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="status"
-                        checked={formData.status === 'Inactive'}
-                        onChange={() => setFormData({ ...formData, status: 'Inactive' })}
-                        className="sr-only"
-                      />
-                      <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
-                        formData.status === 'Inactive' ? 'border-[#007BC1]' : 'border-gray-300'
-                      }`}>
-                        {formData.status === 'Inactive' && (
-                          <div className="w-2 h-2 rounded-full bg-[#007BC1]"></div>
-                        )}
-                      </div>
-                      <span className="text-sm text-gray-700">Inactive</span>
-                    </label>
+                    <div className="flex items-center gap-4">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="status"
+                          checked={formData.status === 'Active'}
+                          onChange={() => setFormData({ ...formData, status: 'Active' })}
+                          className="sr-only"
+                        />
+                        <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
+                          formData.status === 'Active' ? 'border-[#007BC1]' : 'border-gray-300'
+                        }`}>
+                          {formData.status === 'Active' && (
+                            <div className="w-2 h-2 rounded-full bg-[#007BC1]"></div>
+                          )}
+                        </div>
+                        <span className="text-sm text-gray-700">Active</span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="status"
+                          checked={formData.status === 'Inactive'}
+                          onChange={() => setFormData({ ...formData, status: 'Inactive' })}
+                          className="sr-only"
+                        />
+                        <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
+                          formData.status === 'Inactive' ? 'border-[#007BC1]' : 'border-gray-300'
+                        }`}>
+                          {formData.status === 'Inactive' && (
+                            <div className="w-2 h-2 rounded-full bg-[#007BC1]"></div>
+                          )}
+                        </div>
+                        <span className="text-sm text-gray-700">Inactive</span>
+                      </label>
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
 
               <div className="mt-6 text-xs text-gray-500 px-6">
+                {!editingManager && <p className="mb-2">The recipient will verify their email and choose their password.</p>}
                 This account will have Branch Manager access for{' '}
                 {availableBranchOptions.find((branch) => branch.id === formData.branchId)?.name ??
                   selectedBranch}{' '}
@@ -1110,7 +1179,7 @@ export function UserManagement() {
                   disabled={submitting}
                   className="px-4 py-2 bg-[#1e3a5f] text-white rounded-lg text-sm font-normal hover:bg-[#152942] transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                 >
-                  {submitting ? 'Saving…' : editingManager ? 'Save Changes' : 'Create Account'}
+                  {submitting ? (editingManager ? 'Saving…' : 'Sending…') : editingManager ? 'Save Changes' : 'Send invitation'}
                 </button>
               </div>
             </form>
@@ -1121,9 +1190,11 @@ export function UserManagement() {
       {showDeleteDialog && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg border border-gray-200 w-[400px] p-6">
-            <h3 className="font-semibold text-gray-900 mb-2">Deactivate Account</h3>
+            <h3 className="font-semibold text-gray-900 mb-2">{managerToDeactivate?.pendingInvitation ? 'Revoke invitation' : 'Deactivate Account'}</h3>
             <p className="text-sm text-gray-600 mb-6">
-              This Branch Manager will no longer be able to sign in. The account and its history will be retained.
+              {managerToDeactivate?.pendingInvitation
+                ? 'The recipient will lose access to this invitation.'
+                : 'This Branch Manager will no longer be able to sign in. The account and its history will be retained.'}
             </p>
             <div className="flex items-center justify-end gap-3">
               <button
@@ -1136,7 +1207,7 @@ export function UserManagement() {
                 onClick={handleConfirmDelete}
                 className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm hover:bg-red-700 transition-colors"
               >
-                Deactivate
+                {managerToDeactivate?.pendingInvitation ? 'Revoke invitation' : 'Deactivate'}
               </button>
             </div>
           </div>
