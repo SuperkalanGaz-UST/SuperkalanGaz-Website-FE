@@ -10,6 +10,7 @@ import { toast } from 'sonner';
 import { Toaster } from './components/ui/sonner';
 import { IdleLogoutWarningDialog } from './components/IdleLogoutWarningDialog';
 import { Login } from './components/Login';
+import { BranchOwnerInvitation } from './components/BranchOwnerInvitation';
 import { LogoutConfirmationDialog } from './components/LogoutConfirmationDialog';
 import { AccountProvider } from './contexts/AccountContext';
 import { useIdleTimer } from './hooks/useIdleTimer';
@@ -56,6 +57,7 @@ export default function App({ children }: { children: ReactNode }) {
   const [account, setAccount] = useState<Account | null>(null);
   const [authReady, setAuthReady] = useState(false);
   const [passwordRecovery, setPasswordRecovery] = useState(false);
+  const [ownerInvitationLink, setOwnerInvitationLink] = useState(false);
   const [invitationRole, setInvitationRole] = useState<'franchise-admin' | 'branch-owner'>('franchise-admin');
   const [invitationActivation, setInvitationActivation] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
@@ -83,6 +85,13 @@ export default function App({ children }: { children: ReactNode }) {
   });
 
   useEffect(() => {
+    const url = new URL(window.location.href);
+    if (url.pathname === '/' && url.searchParams.get('invitation') === 'branch-owner') {
+      // An explicit invitation must not fall through to an existing staff session.
+      setOwnerInvitationLink(true);
+      return;
+    }
+
     let mounted = true;
     let restoreTimedOut = false;
     const restoreTimer = window.setTimeout(() => {
@@ -209,6 +218,8 @@ export default function App({ children }: { children: ReactNode }) {
 
   // Let Next.js render its not-found boundary for invalid role/screen URLs.
   if (pathname !== '/' && !staffRoute) return children;
+
+  if (ownerInvitationLink) return <BranchOwnerInvitation />;
 
   if (!authReady || needsRoleRedirect) {
     return (

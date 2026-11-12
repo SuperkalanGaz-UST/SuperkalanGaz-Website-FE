@@ -27,11 +27,12 @@ async function seed(context, session) {
     }
   }, { key: `sb-${new URL(supabaseUrl).hostname.split('.')[0]}-auth-token`, session });
 }
-async function intercept(context, session, handler) {
+async function intercept(context, session, handler, authHandler = async () => false) {
   await context.route('**/*', async route => {
     const url = new URL(route.request().url());
     if (url.origin === new URL(baseUrl).origin) return route.continue();
     if (url.origin === authOrigin) {
+      if (await authHandler(route, url)) return;
       if (url.pathname === '/auth/v1/user') return route.fulfill({ json: session.user });
       if (url.pathname === '/auth/v1/token') return route.fulfill({ json: session });
       if (url.pathname === '/auth/v1/logout') return route.fulfill({ status: 204 });
@@ -44,6 +45,55 @@ async function intercept(context, session, handler) {
     return route.fulfill({ json: { branches: [], users: [], notifications: [], unreadCount: 0, locations: [] } });
   });
 }
+
+test('expired invitation callback explains how to get a new link even with an existing staff session', { timeout: 15000 }, async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const context = await browser.newContext();
+    const session = sessionFor('franchise-admin');
+    await seed(context, session);
+    const requests = [];
+    await intercept(context, session, async (route, url) => {
+      requests.push(url.pathname);
+      return false;
+    });
+    const page = await context.newPage();
+    await page.goto(`${baseUrl}/?invitation=branch-owner#error=access_denied&error_code=otp_expired&error_description=Email+link+is+invalid+or+has+expired`, { waitUntil: 'domcontentloaded' });
+    await page.getByRole('heading', { name: 'Invitation unavailable', exact: true }).waitFor({ timeout: 3000 });
+    await page.getByRole('alert').filter({ hasText: /ask your Franchise Administrator to resend/i }).waitFor();
+    assert.equal(await page.getByRole('heading', { name: 'Sign In', exact: true }).count(), 0);
+    assert.equal(requests.length, 0, 'An invitation callback must not open another account’s dashboard');
+    assert.equal(new URL(page.url()).hash, '');
+  } finally { await browser.close(); }
+});
+
+test('legacy links show password setup while checking Auth and offer a retry when Auth stalls', { timeout: 15000 }, async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const context = await browser.newContext();
+    const session = sessionFor('branch-owner', 'Pending');
+    let releaseUser;
+    const userReady = new Promise(resolve => { releaseUser = resolve; });
+    await intercept(context, session, async () => false, async (route, url) => {
+      if (url.pathname !== '/auth/v1/user') return false;
+      await userReady;
+      await route.fulfill({ json: session.user });
+      return true;
+    });
+    const page = await context.newPage();
+    const fragment = new URLSearchParams({
+      access_token: session.access_token, refresh_token: session.refresh_token,
+      expires_in: String(session.expires_in), token_type: session.token_type, type: 'invite',
+    });
+    await page.goto(`${baseUrl}/?invitation=branch-owner#${fragment}`, { waitUntil: 'domcontentloaded' });
+    await page.getByRole('heading', { name: 'Set Password', exact: true }).waitFor({ timeout: 3000 });
+    await page.getByRole('status').filter({ hasText: /Checking your Branch Owner invitation/ }).waitFor();
+    await page.getByRole('button', { name: 'Try again', exact: true }).waitFor({ timeout: 5500 });
+    releaseUser();
+    await page.getByRole('button', { name: 'Try again', exact: true }).click();
+    await page.getByLabel('New password', { exact: true }).waitFor({ timeout: 3000 });
+  } finally { await browser.close(); }
+});
 
 test('new owner registration reports SMTP failures and then confirms an invitation without displaying a password', { timeout: 60000 }, async () => {
   const browser = await chromium.launch({ headless: true });
@@ -95,14 +145,14 @@ test('new owner registration reports SMTP failures and then confirms an invitati
   } finally { await browser.close(); }
 });
 
-test('pending owner sets their own password, retries expired setup, and enters only the Owner dashboard after activation', { timeout: 60000 }, async () => {
+test('an emailed Branch Owner link verifies only on click, then sets the password through NestJS', { timeout: 60000 }, async () => {
   const browser = await chromium.launch({ headless: true });
   try {
     const context = await browser.newContext({ viewport: { width: 1440, height: 1050 } });
     const session = sessionFor('branch-owner', 'Pending');
-    await seed(context, session);
     const requests = [];
     const chosenPasswords = [];
+    const verifications = [];
     let expired = true;
     await intercept(context, session, async (route, url) => {
       requests.push(url.pathname);
@@ -120,10 +170,24 @@ test('pending owner sets their own password, retries expired setup, and enters o
         return true;
       }
       return false;
+    }, async (route, url) => {
+      if (url.pathname !== '/auth/v1/verify') return false;
+      const { token_hash, type } = route.request().postDataJSON();
+      verifications.push({ token_hash, type });
+      await route.fulfill({ json: session });
+      return true;
     });
     const page = await context.newPage();
-    await page.goto(`${baseUrl}/?invitation=branch-owner`);
-    await page.getByRole('heading', { name: 'Activate your account', exact: true }).waitFor();
+    const tokenHash = 'a'.repeat(64);
+    await page.goto(`${baseUrl}/?invitation=branch-owner#token_hash=${tokenHash}`);
+    await page.getByRole('heading', { name: 'Set Password', exact: true }).waitFor({ timeout: 3000 });
+    const verify = page.getByRole('button', { name: 'Verify invitation', exact: true });
+    await verify.waitFor();
+    assert.deepEqual(verifications, [], 'Opening or previewing the email link must not spend it');
+    await verify.click();
+    await page.getByLabel('New password', { exact: true }).waitFor();
+    assert.deepEqual(verifications, [{ token_hash: tokenHash, type: 'email' }]);
+    assert.equal(new URL(page.url()).hash, '');
     await page.getByText(/Branch Owner account\./).waitFor();
     assert.equal(requests.length, 0, 'Pending owners must not load protected dashboard data');
     await page.getByLabel('New password', { exact: true }).fill('ChosenPassword1');
