@@ -4,7 +4,7 @@ import { isPendingBranchOwnerInvitation } from '../lib/auth';
 import { supabase } from '../lib/supabase/client';
 import { Login } from './Login';
 
-const TOKEN_HASH = /^[a-f0-9]{64}$/i;
+const MAX_TOKEN_HASH_LENGTH = 256;
 const LEGACY_CALLBACK_WAIT_MS = 4_000;
 const BUTTON = 'block w-full rounded-md bg-[#007BC1] px-4 py-3.5 text-center font-medium text-white hover:bg-[#006399] disabled:opacity-60';
 
@@ -45,8 +45,10 @@ export function BranchOwnerInvitation() {
 
     const tokenHash = fragment.get('token_hash');
     if (tokenHash !== null) {
-      if (TOKEN_HASH.test(tokenHash)) setState({ step: 'verify', tokenHash });
-      else {
+      // Supabase owns the token format and verifies authenticity on click.
+      if (tokenHash.length > 0 && tokenHash.length <= MAX_TOKEN_HASH_LENGTH) {
+        setState({ step: 'verify', tokenHash });
+      } else {
         clearCallback(true);
         setState({ step: 'unavailable' });
       }
