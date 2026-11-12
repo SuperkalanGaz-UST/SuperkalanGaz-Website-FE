@@ -3,7 +3,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ReactNode, useEffect, useState } from 'react';
 import { supabase } from './lib/supabase/client';
-import { Loader2 } from 'lucide-react';
 
 export function Providers({ children }: { children: ReactNode }) {
   const [queryClient] = useState(
@@ -19,8 +18,6 @@ export function Providers({ children }: { children: ReactNode }) {
       })
   );
 
-  const [authReady, setAuthReady] = useState(false);
-
   useEffect(() => {
     let identity: string | null = null;
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
@@ -33,28 +30,11 @@ export function Providers({ children }: { children: ReactNode }) {
       }
       identity = nextIdentity;
     });
-    // Wait for Supabase to restore the session from storage before rendering the app.
-    // This prevents useQuery calls from firing prematurely before auth is fully ready.
-    void supabase.auth.getSession().then(() => {
-      setAuthReady(true);
-    });
     return () => subscription.unsubscribe();
   }, [queryClient]);
 
-  if (!authReady) {
-    return (
-      <main
-        className="flex min-h-screen items-center justify-center bg-[#e8e8e8] text-gray-700"
-        aria-busy="true"
-      >
-        <div className="flex items-center gap-3" role="status">
-          <Loader2 className="h-5 w-5 animate-spin text-[#007BC1]" aria-hidden="true" />
-          <span className="text-sm font-medium">Restoring your secure session…</span>
-        </div>
-      </main>
-    );
-  }
-
+  // Staff screens gate their own queries on an authenticated account. Public
+  // invitation screens must be able to render even while Auth is unreachable.
   return (
     <QueryClientProvider client={queryClient}>
       {children}

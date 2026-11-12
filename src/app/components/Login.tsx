@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import type { ReactNode } from 'react';
 import { ArrowLeft, CheckCircle2, Eye, EyeOff, Mail, X } from 'lucide-react';
 import { InputOTP, InputOTPGroup, InputOTPSlot } from './ui/input-otp';
 import {
@@ -12,12 +13,13 @@ import {
 } from '../lib/auth';
 
 interface LoginProps {
-  onLogin: (account: Account) => void;
+  onLogin?: (account: Account) => void;
   passwordRecovery?: boolean;
   onPasswordReset?: () => Promise<void>;
   invitationActivation?: boolean;
   invitationRole?: 'franchise-admin' | 'branch-owner';
   onInvitationActivation?: (account: Account) => void;
+  invitationContent?: ReactNode;
 }
 
 export function Login({
@@ -27,6 +29,7 @@ export function Login({
   invitationActivation = false,
   invitationRole = 'franchise-admin',
   onInvitationActivation,
+  invitationContent,
 }: LoginProps) {
   const [username, setUsername] = useState('');
   const [recoveryUsername, setRecoveryUsername] = useState('');
@@ -52,7 +55,7 @@ export function Login({
     setLoading(false);
 
     if (account) {
-      onLogin(account);
+      onLogin?.(account);
     } else {
       setError(signInError ?? 'Invalid username or password');
     }
@@ -213,6 +216,8 @@ export function Login({
   );
 
   const renderCardContent = () => {
+    if (invitationContent) return invitationContent;
+
     if (resetComplete) {
       return (
         <div className="py-6 text-center">
@@ -235,7 +240,9 @@ export function Login({
     if (invitationActivation) {
       return (
         <>
-          <h1 className="text-3xl font-bold text-gray-900">Activate your account</h1>
+          <h1 className="text-3xl font-bold text-gray-900">
+            {invitationRole === 'branch-owner' ? 'Set Password' : 'Activate your account'}
+          </h1>
           <p className="mt-3 mb-8 text-sm leading-6 text-gray-600">
             Your email is verified. Choose your own password to finish activating your
             {invitationRole === 'branch-owner' ? 'Branch Owner' : 'Franchise Administrator'} account.
