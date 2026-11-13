@@ -264,6 +264,13 @@ function InventoryList({
           <p className="mt-1 text-sm text-gray-500">
             Read-only stock visibility for this branch, including configured reorder thresholds.
           </p>
+          <button
+            type="button"
+            onClick={() => window.dispatchEvent(new CustomEvent('navigate', { detail: 'reorder-log-full' }))}
+            className="mt-2 text-sm font-semibold text-[#007BC1] hover:text-[#005a8f]"
+          >
+            View reorder request log
+          </button>
         </div>
         <CategoryFilter activeCategory={activeCategory} onChange={onChangeCategory} />
       </div>
