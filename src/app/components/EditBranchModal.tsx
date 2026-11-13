@@ -52,6 +52,9 @@ export function EditBranchModal({ branch, onClose, onSaved }: EditBranchModalPro
   const [coverage, setCoverage] = useState<BranchGeofence | null>(branch.geofence);
   const [coverageAddress, setCoverageAddress] = useState(addressKey);
   const geofence = coverageAddress === addressKey ? coverage : null;
+  // Coverage drawn for the old address no longer applies, but saving must never
+  // silently send geofence: null and erase it. Require it to be set again first.
+  const coverageNeedsRedo = coverage !== null && coverageAddress !== addressKey;
 
   // --- Linked owner ---
   const [owner, setOwner] = useState<OwnerProfile | null>(null);
@@ -126,6 +129,7 @@ export function EditBranchModal({ branch, onClose, onSaved }: EditBranchModalPro
       canonicalOwnerPhone !== null);
   const canSave =
     (!geofence || isBranchGeofence(geofence)) &&
+    !coverageNeedsRedo &&
     name.trim() !== "" &&
     canonicalContactNumber !== null &&
     address.trim() !== "" &&
@@ -290,6 +294,11 @@ export function EditBranchModal({ branch, onClose, onSaved }: EditBranchModalPro
           {/* Geofence */}
           <div className="space-y-3">
             <h3 className={sectionTitle}>Coverage geofence</h3>
+            {coverageNeedsRedo && (
+              <p role="alert" className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                The address changed, so the saved coverage area no longer applies. Locate the new address and set the coverage again before saving, or restore the original address to keep it.
+              </p>
+            )}
             <BranchGeofenceEditor address={{ address, city, province }} key={addressKey} value={geofence}
               onChange={(value) => { setCoverage(value); setCoverageAddress(addressKey); }}
               focus={cityMunicipalityFocus(province, city) ?? provinceFocus(province)} />
@@ -402,6 +411,9 @@ export function EditBranchModal({ branch, onClose, onSaved }: EditBranchModalPro
 
         {/* Footer */}
         <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-gray-100 sticky bottom-0 bg-white">
+          {coverageNeedsRedo && (
+            <span className="mr-auto text-xs text-amber-700">Set the coverage area for the new address to save.</span>
+          )}
           <button
             type="button"
             onClick={onClose}
