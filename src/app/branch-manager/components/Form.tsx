@@ -75,9 +75,9 @@ export function FormItem({ children, name, className = "" }: any) {
   );
 }
 
-export function FormLabel({ children, className = "" }: any) {
+export function FormLabel({ children, className = "", htmlFor }: any) {
   return (
-    <label style={{ fontSize: "0.875rem", fontWeight: 500 }} className={className}>
+    <label htmlFor={htmlFor} style={{ fontSize: "0.875rem", fontWeight: 500 }} className={className}>
       {children}
     </label>
   );
