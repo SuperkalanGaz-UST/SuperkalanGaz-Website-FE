@@ -8,7 +8,7 @@ import { toast } from 'sonner';
 import { Badge } from '../../components/Badge';
 import { Button } from '../../components/Button';
 import { Tabs, TabsList, TabsTrigger } from '../../components/Tabs';
-import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '../../components/Select';
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/app/components/ui/select';
 import { apiFetch, apiErrorMessage, fetchJson } from '../../../lib/api';
 import { formatPHMobile } from '../../../lib/phMobile';
 import styles from './screen.module.css';
@@ -230,6 +230,7 @@ export default function Rewards() {
     const [codeSearch, setCodeSearch] = useState('');
     const [codeSearchLoading, setCodeSearchLoading] = useState(false);
     const [codeSearchError, setCodeSearchError] = useState<string | null>(null);
+    const [codeResult, setCodeResult] = useState<RedemptionRow | null>(null);
 
     const isCommercial = track === COMMERCIAL;
 
@@ -446,6 +447,7 @@ export default function Rewards() {
         if (!code) return;
         setCodeSearchLoading(true);
         setCodeSearchError(null);
+        setCodeResult(null);
         try {
             const res = await apiFetch(`/loyalty/redemptions/verify/${encodeURIComponent(code)}`);
             const data = await res.json();
@@ -454,10 +456,12 @@ export default function Rewards() {
                 return;
             }
             const found = data.redemption as RedemptionRow;
-            // Switch to "all" so the row is visible, then prepend the found row.
+            // Show the code's own track with every status so its row is visible in the queue.
+            if (found.track === HOUSEHOLD || found.track === COMMERCIAL) setTrack(found.track);
+            setRejectId(null);
             setActiveTab('all');
-            void queryClient.invalidateQueries({ queryKey: ['redemptions'] });
-            toast.success(`Found redemption for ${found.customer_name ?? 'customer'} — status: ${found.status}`);
+            void queryClient.invalidateQueries({ queryKey: ['loyalty-redemptions'] });
+            setCodeResult(found);
             setCodeSearch('');
         } catch (err) {
             setCodeSearchError(err instanceof Error ? err.message : 'Failed to look up code');
@@ -608,9 +612,9 @@ export default function Rewards() {
                                 </div>
                             ) : (
                                 <div>
-                                    <label className={styles.fieldLabel}>Reward</label>
+                                    <label className={styles.fieldLabel} htmlFor="redemption-reward">Reward</label>
                                     <Select value={selectedItemId} onValueChange={setSelectedItemId}>
-                                        <SelectTrigger>
+                                        <SelectTrigger id="redemption-reward">
                                             <SelectValue placeholder="Select a reward…" />
                                         </SelectTrigger>
                                         <SelectContent>
@@ -679,7 +683,15 @@ export default function Rewards() {
                     </div>
                 </div>
                 {codeSearchError && (
-                    <div style={{ padding: '8px 16px', color: '#dc2626', fontSize: 13 }}>{codeSearchError}</div>
+                    <div role="alert" style={{ padding: '8px 16px', color: '#dc2626', fontSize: 13 }}>{codeSearchError}</div>
+                )}
+                {codeResult && (
+                    <div role="status" style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', padding: '8px 16px', fontSize: 13, background: '#f0f9ff', borderBottom: '1px solid #e0f2fe' }}>
+                        <strong>Code {codeResult.redemption_code ?? '—'}</strong>
+                        <span>{codeResult.customer_name ?? 'Customer'} · {codeResult.catalog_item_name ?? codeResult.reward_description ?? (codeResult.track === COMMERCIAL ? 'Free cylinder' : 'Reward')}</span>
+                        <Badge variant={getStatusVariant(codeResult.status)}>{STATUS_TABS.find(s => s.value === codeResult.status)?.label ?? codeResult.status}</Badge>
+                        <button type="button" onClick={() => setCodeResult(null)} style={{ marginLeft: 'auto', color: '#475569' }} aria-label="Dismiss code result">Dismiss</button>
+                    </div>
                 )}
 
                 <div className={styles.tableWrapper}>

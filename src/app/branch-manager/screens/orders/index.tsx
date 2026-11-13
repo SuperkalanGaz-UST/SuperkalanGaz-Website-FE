@@ -27,7 +27,7 @@ import { toast } from 'sonner';
 import * as z from 'zod';
 import { Badge } from '../../components/Badge';
 import { Button } from '../../components/Button';
-import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '../../components/Select';
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/app/components/ui/select';
 import { RowActionsMenu } from '../../components/RowActionsMenu';
 import { Popover, PopoverTrigger, PopoverContent } from '../../../components/ui/popover';
 import { Tabs, TabsList, TabsTrigger } from '../../components/Tabs';
@@ -349,10 +349,15 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
     const form = useForm({
         defaultValues: {
             customerName: '', customerContact: '', deliveryAddress: '',
-            cylinderSize: '', quantity: 1, specialInstructions: '',
+            cylinderSize: '', quantity: 1 as number | '', specialInstructions: '',
         },
         schema: newRequestSchema,
     });
+    // Live order total (price snapshot is still taken server-side at creation).
+    const selectedPrice = catalogPrices.find(p => p.cylinder_size === form.values.cylinderSize);
+    const newRequestTotal = selectedPrice && typeof form.values.quantity === 'number' && form.values.quantity > 0
+        ? selectedPrice.unit_price * form.values.quantity
+        : null;
 
     // Debounced customer search (BM-024). Fires only when the trimmed term is >= 2
     // chars (the API 400s below that) and never while a customer is already locked
@@ -1181,10 +1186,10 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                                 </div>
                                 <div className={styles.formGrid}>
                                     <FormItem name="cylinderSize">
-                                        <FormLabel>Cylinder Size</FormLabel>
+                                        <FormLabel htmlFor="new-request-cylinder">Cylinder Size</FormLabel>
                                         <Select value={form.values.cylinderSize} onValueChange={(val: string) => { form.setValues(prev => ({ ...prev, cylinderSize: val })); form.validateField('cylinderSize', val); }}>
                                             <FormControl>
-                                                <SelectTrigger><SelectValue placeholder="Select size..." /></SelectTrigger>
+                                                <SelectTrigger id="new-request-cylinder"><SelectValue placeholder="Select size..." /></SelectTrigger>
                                             </FormControl>
                                             <SelectContent>
                                                 {[...catalogPrices]
@@ -1202,11 +1207,12 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                                         <FormMessage />
                                     </FormItem>
                                     <FormItem name="quantity">
-                                        <FormLabel>Quantity</FormLabel>
+                                        <FormLabel htmlFor="new-request-quantity">Quantity</FormLabel>
                                         <FormControl>
-                                            <Input type="number" min="1" value={form.values.quantity}
+                                            <Input id="new-request-quantity" type="number" min="1" value={form.values.quantity}
                                                 onChange={e => {
-                                                    const n = e.target.value === '' ? 1 : parseInt(e.target.value, 10);
+                                                    // Keep an empty field empty while typing; the schema enforces >= 1 on blur/submit.
+                                                    const n = e.target.value === '' ? '' : parseInt(e.target.value, 10);
                                                     form.setValues(p => ({ ...p, quantity: n }));
                                                 }}
                                                 onBlur={() => form.validateField('quantity')} />
@@ -1223,6 +1229,9 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                                     </FormItem>
                                 </div>
                                 <div className={styles.formFooter}>
+                                    {newRequestTotal !== null && (
+                                        <span className={styles.formTotal} aria-live="polite">Total {formatPeso(newRequestTotal)}</span>
+                                    )}
                                     <Button type="submit" size="default" variant="primary" disabled={submitting || pricesLoading || catalogPrices.length === 0}>
                                         {submitting ? 'Creating…' : 'Create Request'}
                                     </Button>
@@ -1457,11 +1466,12 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                                                                     <span className={styles.mutedText}>No available riders</span>
                                                                 ) : (
                                                                     <Select 
-                                                                        value={availableRiders.find(r => r.id === selectedRiderId)?.name || ''} 
+                                                                        value={selectedRiderId}
                                                                         onValueChange={setSelectedRiderId}
                                                                     >
-                                                                        <SelectTrigger style={{ height: '2.25rem', borderRadius: '0.375rem', borderColor: 'rgba(0,0,0,0.15)', color: selectedRiderId ? 'inherit' : '#64748b' }}>
-                                                                            <SelectValue placeholder="Select rider…" />
+                                                                        <SelectTrigger aria-label="Delivery Rider" style={{ height: '2.25rem', borderRadius: '0.375rem', borderColor: 'rgba(0,0,0,0.15)', color: selectedRiderId ? 'inherit' : '#64748b' }}>
+                                                                            {/* Trigger shows just the name; the list items carry plate + location. */}
+                                                                            <SelectValue placeholder="Select Delivery Rider…">{availableRiders.find(r => r.id === selectedRiderId)?.name}</SelectValue>
                                                                         </SelectTrigger>
                                                                         <SelectContent>
                                                                             {availableRiders.map(r => (
@@ -1615,9 +1625,12 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                                                                 value={editValues.cylinderSize}
                                                                 onChange={e => setEditValues(p => ({ ...p, cylinderSize: e.target.value }))}
                                                             >
-                                                                <option value="11kg">11kg</option>
-                                                                <option value="22kg">22kg</option>
-                                                                <option value="50kg">50kg</option>
+                                                                {!catalogPrices.some(p => p.cylinder_size === editValues.cylinderSize) && (
+                                                                    <option value={editValues.cylinderSize}>{editValues.cylinderSize}</option>
+                                                                )}
+                                                                {catalogPrices.map(p => (
+                                                                    <option key={p.id} value={p.cylinder_size}>{p.cylinder_size} — {formatPeso(p.unit_price)}</option>
+                                                                ))}
                                                             </select>
                                                         </div>
                                                         <div className={styles.editorField}>
