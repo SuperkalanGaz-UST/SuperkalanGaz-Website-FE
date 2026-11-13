@@ -54,7 +54,7 @@ export const governanceApi = {
     decision: 'approve' | 'reject' | 'request-revision',
     reason: string,
   ) =>
-    json<{ request: GovernanceRequest; temporary_password?: string }>(
+    json<{ request: GovernanceRequest }>(
       `/governance/requests/${id}/decision`,
       {
         method: 'PATCH',
