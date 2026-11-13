@@ -119,6 +119,11 @@ export function StaffAccountReviews() {
   const selected =
     filtered.find((request) => request.id === selectedId) ?? filtered[0] ?? null;
 
+  // A reason typed for one applicant must never be submitted as the audited reason
+  // for another; the selection can also change via search, filters or a refetch.
+  const selectedRequestId = selected?.id;
+  useEffect(() => { setReason(''); }, [selectedRequestId]);
+
   const decide = async (decision: 'approve' | 'reject') => {
     if (!selected) return;
     if (documentReviewState !== 'ready') {
