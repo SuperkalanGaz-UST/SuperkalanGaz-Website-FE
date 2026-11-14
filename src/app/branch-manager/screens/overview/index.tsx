@@ -1,5 +1,6 @@
 'use client';
 
+import { serviceRequestCylinderSummary, type ServiceRequestCylinderFields } from '../../../lib/serviceRequestItems';
 import React, { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Flame, Star, StarHalf, ShoppingCart, Truck, AlertTriangle, MoreVertical } from 'lucide-react';
@@ -16,13 +17,11 @@ import typography from '../../../components/FranchiseReports.module.css';
 
 /** Trimmed Service Request row (SRD module, GET /service-requests) — only the
  * fields this dashboard's KPIs and "Recent Orders" table need. */
-interface SRRow {
+interface SRRow extends ServiceRequestCylinderFields {
     id: string;
     sr_code: string;
     status: 'Pending' | 'Dispatched' | 'En Route' | 'Delivered' | 'Cancelled' | 'Under Review';
     customer_name: string;
-    quantity: number;
-    cylinder_size: string;
     rider_id: string | null;
     requested_at: string;
 }
@@ -355,7 +354,7 @@ export default function Dashboard({ onViewOrders }: DashboardProps = {}) {
                                         >
                                             <td className={styles.monoText}>{order.sr_code}</td>
                                             <td className={styles.boldText}>{order.customer_name}</td>
-                                            <td>{order.quantity}x {order.cylinder_size}</td>
+                                            <td>{serviceRequestCylinderSummary(order)}</td>
                                             <td>
                                                 <Badge variant={getStatusVariant(order.status)}>{order.status}</Badge>
                                             </td>

@@ -39,8 +39,9 @@ import { apiFetch, apiErrorMessage, fetchJson } from '../../../lib/api';
 import { DeliveryProofViewer } from '../../../components/DeliveryProofViewer';
 import { DeliveryRiderLocations } from './DeliveryRiderLocations';
 import { operationalLocationLabel, type DispatchRider } from '../../../lib/deliveryRiderLocation';
-import { fetchAssignedLpgPrices, formatPeso, LpgPrice } from '../../../lib/pricing';
+import { CYLINDER_SIZES, fetchAssignedLpgPrices, formatPeso, LpgPrice } from '../../../lib/pricing';
 import { formatPHMobile, normalizePhMobile, toE164PhMobile } from '../../../lib/phMobile';
+import { serviceRequestItems, type ServiceRequestCylinderFields, type ServiceRequestItem } from '../../../lib/serviceRequestItems';
 import styles from './screen.module.css';
 
 /**
@@ -48,7 +49,7 @@ import styles from './screen.module.css';
  * in snake_case; branch scope is derived from the caller's token server-side, so
  * no branch_id is ever sent from here (AGENTS.md §5).
  */
-interface SRRow {
+interface SRRow extends ServiceRequestCylinderFields {
     id: string;
     sr_code: string;
     branch_id: string;
@@ -66,8 +67,6 @@ interface SRRow {
     customer_name: string;
     customer_contact: string;
     delivery_address: string;
-    cylinder_size: string;
-    quantity: number;
     unit_price: number | null;
     total_amount: number | null;
     special_instructions: string | null;
@@ -309,7 +308,11 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
     // (gated in the Actions cell). Like the assign panel, only one row's editor
     // or cancel panel is open at a time, so single ids/values are enough.
     const [editingId, setEditingId] = useState<string | null>(null);
-    const [editValues, setEditValues] = useState({ deliveryAddress: '', cylinderSize: '', quantity: 1, specialInstructions: '' });
+    const [editValues, setEditValues] = useState({
+        deliveryAddress: '',
+        items: [] as ServiceRequestItem[],
+        specialInstructions: '',
+    });
     const [editError, setEditError] = useState<string | null>(null);
     const [savingEditId, setSavingEditId] = useState<string | null>(null);
     // Cancel-with-mandatory-reason (BM-036). cancelConfirmId = which row's confirm
@@ -622,8 +625,7 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
         setEditingId(req.id);
         setEditValues({
             deliveryAddress: req.delivery_address,
-            cylinderSize: req.cylinder_size,
-            quantity: req.quantity,
+            items: serviceRequestItems(req),
             specialInstructions: req.special_instructions ?? '',
         });
         setEditError(null);
@@ -632,6 +634,13 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
     const closeEdit = () => {
         setEditingId(null);
         setEditError(null);
+    };
+
+    const updateEditItem = (index: number, change: Partial<ServiceRequestItem>) => {
+        setEditValues(current => ({
+            ...current,
+            items: current.items.map((item, i) => i === index ? { ...item, ...change } : item),
+        }));
     };
 
     const handleSaveEdit = async (req: SRRow) => {
@@ -645,18 +654,32 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
             deliveryAddress?: string;
             cylinderSize?: string;
             quantity?: number;
+            items?: { cylinderSize: string; quantity: number }[];
             specialInstructions?: string;
         } = {};
         if (nextAddress !== req.delivery_address) changes.deliveryAddress = nextAddress;
-        if (editValues.cylinderSize !== req.cylinder_size) changes.cylinderSize = editValues.cylinderSize;
-        if (editValues.quantity !== req.quantity) changes.quantity = editValues.quantity;
+        const currentItems = serviceRequestItems(req);
+        const itemsChanged = editValues.items.length !== currentItems.length ||
+            editValues.items.some((item, index) => item.cylinder_size !== currentItems[index].cylinder_size ||
+                item.quantity !== currentItems[index].quantity);
+        if (itemsChanged && currentItems.length === 1 && editValues.items.length === 1) {
+            const [item] = editValues.items;
+            if (item.cylinder_size !== req.cylinder_size) changes.cylinderSize = item.cylinder_size;
+            if (item.quantity !== req.quantity) changes.quantity = item.quantity;
+        } else if (itemsChanged) {
+            changes.items = editValues.items.map(({ cylinder_size, quantity }) => ({ cylinderSize: cylinder_size, quantity }));
+        }
         // Empty string is an allowed value here (clears the note); only include it
         // when it actually differs from the current value.
         if (nextInstructions !== currentInstructions) changes.specialInstructions = nextInstructions;
 
         // Client-side validation before hitting the API.
-        if (!Number.isInteger(editValues.quantity) || editValues.quantity < 1) {
-            setEditError('Quantity must be at least 1.');
+        if (editValues.items.some(item => !Number.isInteger(item.quantity) || item.quantity < 1)) {
+            setEditError('Each cylinder quantity must be at least 1.');
+            return;
+        }
+        if (new Set(editValues.items.map(item => item.cylinder_size)).size !== editValues.items.length) {
+            setEditError('Choose a different cylinder size for each item.');
             return;
         }
         if ('deliveryAddress' in changes && changes.deliveryAddress === '') {
@@ -1319,7 +1342,7 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                         <thead>
                             <tr>
                                 <th>Status</th><th>Source</th><th>Request ID</th><th>Customer</th><th>Contact</th>
-                                <th className={styles.cylinderCell}>Cylinder</th>
+                                <th className={styles.cylinderCell}>Cylinders</th>
                                 <th className={styles.spacedColumn}>Requested</th>
                                 <th className={styles.spacedColumn}>SLA</th>
                                 <th>Delivery Rider</th><th>Actions</th>
@@ -1394,7 +1417,9 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                                         </td>
                                         <td className={styles.contactCell}>{req.customer_contact}</td>
                                         <td className={styles.cylinderCell}>
-                                            <div className={styles.primaryText}>{req.quantity}× {req.cylinder_size}</div>
+                                            {serviceRequestItems(req).map(item => (
+                                                <div key={item.cylinder_size} className={styles.primaryText}>{item.quantity}× {item.cylinder_size}</div>
+                                            ))}
                                             {req.total_amount !== null && (
                                                 <div className={styles.mutedText} style={{ marginTop: '0.25rem', fontSize: '0.75rem', whiteSpace: 'nowrap' }}>
                                                     {formatPeso(Number(req.total_amount))}
@@ -1608,29 +1633,6 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                                                             />
                                                         </div>
                                                         <div className={styles.editorField}>
-                                                            <label className={styles.fieldLabel} htmlFor={`edit-cylinder-${req.id}`}>Cylinder Size</label>
-                                                            <select
-                                                                id={`edit-cylinder-${req.id}`}
-                                                                className={styles.riderSelect}
-                                                                value={editValues.cylinderSize}
-                                                                onChange={e => setEditValues(p => ({ ...p, cylinderSize: e.target.value }))}
-                                                            >
-                                                                <option value="11kg">11kg</option>
-                                                                <option value="22kg">22kg</option>
-                                                                <option value="50kg">50kg</option>
-                                                            </select>
-                                                        </div>
-                                                        <div className={styles.editorField}>
-                                                            <label className={styles.fieldLabel} htmlFor={`edit-quantity-${req.id}`}>Quantity</label>
-                                                            <Input
-                                                                id={`edit-quantity-${req.id}`}
-                                                                type="number"
-                                                                min="1"
-                                                                value={editValues.quantity}
-                                                                onChange={e => setEditValues(p => ({ ...p, quantity: Number(e.target.value) }))}
-                                                            />
-                                                        </div>
-                                                        <div className={styles.editorField}>
                                                             <label className={styles.fieldLabel} htmlFor={`edit-instructions-${req.id}`}>Special Instructions</label>
                                                             <Input
                                                                 id={`edit-instructions-${req.id}`}
@@ -1640,6 +1642,39 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                                                             />
                                                         </div>
                                                     </div>
+                                                    <fieldset className={styles.cylinderEditor}>
+                                                        <legend className={styles.fieldLabel}>Cylinders</legend>
+                                                        {editValues.items.map((item, index) => (
+                                                            <div key={index} className={styles.cylinderEditorRow}>
+                                                                <div className={styles.editorField}>
+                                                                    <label className={styles.fieldLabel} htmlFor={`edit-cylinder-${req.id}-${index}`}>Cylinder Size</label>
+                                                                    <select
+                                                                        id={`edit-cylinder-${req.id}-${index}`}
+                                                                        className={styles.riderSelect}
+                                                                        value={item.cylinder_size}
+                                                                        onChange={event => updateEditItem(index, { cylinder_size: event.target.value })}
+                                                                    >
+                                                                        {!CYLINDER_SIZES.some(size => size === item.cylinder_size) && (
+                                                                            <option value={item.cylinder_size}>{item.cylinder_size}</option>
+                                                                        )}
+                                                                        {[...CYLINDER_SIZES].reverse().map(size => (
+                                                                            <option key={size} value={size} disabled={editValues.items.some((other, i) => i !== index && other.cylinder_size === size)}>{size}</option>
+                                                                        ))}
+                                                                    </select>
+                                                                </div>
+                                                                <div className={styles.editorField}>
+                                                                    <label className={styles.fieldLabel} htmlFor={`edit-quantity-${req.id}-${index}`}>Quantity</label>
+                                                                    <Input
+                                                                        id={`edit-quantity-${req.id}-${index}`}
+                                                                        type="number"
+                                                                        min="1"
+                                                                        value={item.quantity}
+                                                                        onChange={event => updateEditItem(index, { quantity: Number(event.target.value) })}
+                                                                    />
+                                                                </div>
+                                                            </div>
+                                                        ))}
+                                                    </fieldset>
                                                     {editError && <p className={styles.fieldError}>{editError}</p>}
                                                     <div className={styles.editorActions}>
                                                         <Button size="sm" variant="ghost" onClick={closeEdit} disabled={savingEditId === req.id}>Cancel</Button>

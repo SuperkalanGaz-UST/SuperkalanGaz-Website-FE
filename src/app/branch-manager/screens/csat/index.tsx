@@ -1,5 +1,6 @@
 'use client';
 
+import { serviceRequestCylinderSummary, type ServiceRequestCylinderFields } from '../../../lib/serviceRequestItems';
 import React, { useCallback, useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { RefreshCw, Star, MessageSquare, AlertTriangle, Flag, AlertCircle, CheckCircle } from 'lucide-react';
@@ -16,14 +17,12 @@ import styles from './screen.module.css';
  * so the Branch Manager can see where the delivery actually went wrong before
  * writing a resolution.
  */
-interface ServiceRequestContext {
+interface ServiceRequestContext extends ServiceRequestCylinderFields {
     id: string;
     order_source: string;
     status: string;
     customer_name: string;
     delivery_address: string;
-    cylinder_size: string;
-    quantity: number;
     rider_id: string | null;
     requested_at: string;
     dispatched_at: string | null;
@@ -412,7 +411,7 @@ export default function Csat() {
                                                         <div className={styles.panel}>
                                                             <div className={styles.panelTitle}>Associated Service Request</div>
                                                             <div className={styles.detailGrid}>
-                                                                <div><span className={styles.detailLabel}>Order</span>{r.service_request.quantity}× {r.service_request.cylinder_size}</div>
+                                                                <div><span className={styles.detailLabel}>Order</span>{serviceRequestCylinderSummary(r.service_request)}</div>
                                                                 <div><span className={styles.detailLabel}>Source</span>{r.service_request.order_source}</div>
                                                                 <div><span className={styles.detailLabel}>Status</span>{r.service_request.status}</div>
                                                                 <div><span className={styles.detailLabel}>Rider</span>{r.rider_name ?? '—'}</div>
@@ -561,7 +560,7 @@ export default function Csat() {
                                                         <div className={styles.panel}>
                                                             <div className={styles.panelTitle}>Associated Service Request</div>
                                                             <div className={styles.detailGrid}>
-                                                                <div><span className={styles.detailLabel}>Order</span>{i.service_request.quantity}× {i.service_request.cylinder_size}</div>
+                                                                <div><span className={styles.detailLabel}>Order</span>{serviceRequestCylinderSummary(i.service_request)}</div>
                                                                 <div><span className={styles.detailLabel}>Source</span>{i.service_request.order_source}</div>
                                                                 <div><span className={styles.detailLabel}>Status</span>{i.service_request.status}</div>
                                                                 <div><span className={styles.detailLabel}>Rider</span>{i.rider_name ?? '—'}</div>

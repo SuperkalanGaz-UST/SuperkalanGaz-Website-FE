@@ -1,5 +1,6 @@
 'use client';
 
+import { serviceRequestCylinderSummary, type ServiceRequestCylinderFields } from '../../../lib/serviceRequestItems';
 import React, { useMemo, useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { RefreshCw, Search, UserRound, X, Coins, Boxes, Users } from 'lucide-react';
@@ -35,11 +36,9 @@ interface CustomerRow {
 /** One order from GET /service-requests/customers/:id — trimmed to what the
  * detail view's order-history table shows (the full row also carries payment
  * and SLA fields the orders screen uses, not needed here). */
-interface OrderHistoryRow {
+interface OrderHistoryRow extends ServiceRequestCylinderFields {
     id: string;
     status: string;
-    cylinder_size: string;
-    quantity: number;
     total_amount: number | null;
     requested_at: string;
     delivered_at: string | null;
@@ -408,7 +407,7 @@ export default function Customers({ onViewOrders }: CustomersProps = {}) {
                                                 {orders.slice(0, 7).map((o) => (
                                                     <tr key={o.id}>
                                                         <td className={styles.mutedText}>{formatDate(o.requested_at)}</td>
-                                                        <td>{o.cylinder_size}</td>
+                                                        <td>{serviceRequestCylinderSummary(o)}</td>
                                                         <td>{o.quantity}</td>
                                                         <td>{formatCurrency(o.total_amount)}</td>
                                                         <td><Badge variant={getStatusVariant(o.status)}>{o.status}</Badge></td>
