@@ -145,9 +145,9 @@ to the first claim entry, and never use a branch name as selection state or an a
 | Role | Interface | Can do | Must NOT do |
 | ---- | --------- | ------ | ----------- |
 | **Super Administrator (SA)** | Web | Top-level governance; directly invite, resend, revoke, deactivate, and reactivate Franchise Administrator accounts; approve or reject FA-submitted SLA-threshold, price-configuration, and Branch Owner-reassignment requests; review immutable Franchise Administrator account, price-change, Branch Owner-change, approval, and security activity logs; cross-branch read visibility | Set or know an invited user's password; expose invitation credentials; submit or approve their own governance request; mutate audit history; perform operational writes; process service requests; dispatch; approve redemptions |
-| **Franchise Administrator (FA)** | Web | Cross-branch read visibility; submit system-wide SLA-threshold, price-configuration, and Branch Owner-reassignment requests for SA approval; perform initial branch and Branch Owner onboarding; manage other branch accounts | Create, invite, approve, deactivate, or reactivate Franchise Administrator accounts; approve governance requests; mutate audit history; perform operational writes; process service requests; dispatch; approve redemptions |
-| **Branch Owner (BO)** | Web | Own one or more assigned branches; select one authorized branch context at a time; configure that branch's loyalty merchandise catalog, point rates, threshold values *within FA-set bounds*, and Dual-Authorization toggle; view analytics for assigned branches | Process daily orders; dispatch; access any branch outside `branch_ids` |
-| **Branch Manager (BM)** | Web | **Day-to-day ops for their branch:** create/process service requests, offer Service Requests to authorized Delivery Riders, register and maintain branch vehicles, approve loyalty redemptions | Authorize Delivery Rider identity or branch membership; change SLA thresholds; act outside own branch |
+| **Franchise Administrator (FA)** | Web | Cross-branch read visibility; manage the franchise-wide Household rewards catalog and earn rates (§8a); submit system-wide SLA-threshold, price-configuration, and Branch Owner-reassignment requests for SA approval; perform initial branch and Branch Owner onboarding; manage other branch accounts | Create, invite, approve, deactivate, or reactivate Franchise Administrator accounts; approve governance requests; mutate audit history; perform operational writes; process service requests; dispatch; approve redemptions |
+| **Branch Owner (BO)** | Web | Own one or more assigned branches; select one authorized branch context at a time; view analytics and read-only loyalty information for assigned branches | Process daily orders; dispatch; access any branch outside `branch_ids` |
+| **Branch Manager (BM)** | Web | **Day-to-day ops for their branch:** create/process service requests, offer Service Requests to authorized Delivery Riders, register and maintain branch vehicles, verify Household reward codes once at pickup and process Commercial redemptions | Authorize Delivery Rider identity or branch membership; change SLA thresholds; act outside own branch |
 | **Delivery Rider (DR)** | **Web or mobile onboarding; mobile operations** | Accept a Branch Owner invitation through the dedicated registration flow, then use mobile to manage availability, accept or decline assigned service-request offers, and update delivery milestones | Access a web operations dashboard; choose or change authoritative `branch_id`; browse or claim unoffered requests; access another branch or staff governance screens |
 | **Customer (CU)** | **Mobile only** | Place orders, track delivery status *milestones*, submit CSAT | Access web dashboard; see live GPS coordinates |
 
@@ -216,22 +216,9 @@ Hard constraints:
    Service Request/dispatch views. Never use phone coordinates on the Fleet geofence/PMS map
    or label them as SinoTrack/Traccar telemetry.
 
-### 8a. Loyalty Program Rules `[api] [web]`
+### 8a. Loyalty Program Rules `[all]`
 
-Two entirely separate tracks — **do not share tables/logic that would merge them**:
-
-- **Household track:** points-based; **12-month point expiry**; BO-configurable merchandise
-  catalog and point rates *per cylinder size*; redemption-code system; digital ledger.
-- **Commercial track:** **30+1 purchase-count model** → free cylinder reward.
-
-Shared workflow:
-- **Dual-authorization redemption:** the system flags eligibility; a **Branch Manager
-  approves** before any reward dispatches.
-- **`Dual Authorization` toggle** lives in **Branch Owner Settings** and controls the BM
-  approval gate. **Both ON and OFF code paths must be implemented and covered in
-  acceptance criteria.**
-- **Re-validate eligibility at BM approval time** (not only at flagging time) — panel-defense
-  requirement.
+Follow the workspace [Household and Commercial loyalty rules](../AGENTS.md#8a-loyalty-program-rules-all) when implementing rewards configuration, earning, and redemption.
 
 ### 8b. Delivery Rider invitation and branch activation `[api] [web] [mobile]`
 

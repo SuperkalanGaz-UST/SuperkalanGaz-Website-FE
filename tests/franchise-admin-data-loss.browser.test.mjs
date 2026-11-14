@@ -3,8 +3,8 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import { chromium } from 'playwright';
 
-// Synthetic identity and intercepted API responses: no real branches, users or reviews are modified.
-test('address edit never wipes coverage, unconfirmed invitation never re-creates, reasons never carry over', { timeout: 120000 }, async () => {
+// Synthetic identity and intercepted API responses keep the test isolated from live records.
+test('branch registration, coverage editing and owner reassignment stay separate in Franchise Registry', { timeout: 120000 }, async () => {
   const env = await readFile(new URL('../.env.local', import.meta.url), 'utf8');
   const supabaseUrl = env.match(/^NEXT_PUBLIC_SUPABASE_URL=(.+)$/m)?.[1]?.trim();
   const apiOrigin = new URL(env.match(/^NEXT_PUBLIC_API_URL=(.+)$/m)?.[1]?.trim() ?? 'http://localhost:3001').origin;
@@ -16,13 +16,13 @@ test('address edit never wipes coverage, unconfirmed invitation never re-creates
   const token = `${encode({ alg: 'HS256', typ: 'JWT' })}.${encode({ sub: user.id, exp, role: 'authenticated' })}.synthetic`;
   const center = [14.5995, 120.9842];
   const points = Array.from({ length: 12 }, (_, i) => [center[0] + 0.01 * Math.sin(i * Math.PI / 6), center[1] + 0.01 * Math.cos(i * Math.PI / 6)]);
-  const branch = { owner_id: null, id: '00000000-0000-4000-8000-000000000002', name: 'Coverage Branch', code: 'COV', status: 'active', region: 'NCR', address: '123 Test Street', city: 'Manila', province: 'Metro Manila', contact_number: '+639171234567', geofence: { type: 'polygon', center, radiusMeters: 1000, points }, created_at: new Date().toISOString() };
-  const reviews = [
-    { id: 'r-1', role: 'branch-owner', status: 'pending', applicant_name: 'Alpha Applicant', applicant_email: 'alpha@example.invalid', applicant_phone: null, branch_name: 'Coverage Branch', branch_address: null, submitted_at: new Date().toISOString(), decided_by_name: null, decision_reason: null },
-    { id: 'r-2', role: 'branch-manager', status: 'pending', applicant_name: 'Beta Applicant', applicant_email: 'beta@example.invalid', applicant_phone: null, branch_name: 'Coverage Branch', branch_address: null, submitted_at: new Date().toISOString(), decided_by_name: null, decision_reason: null },
-  ];
+  const currentOwner = { id: '00000000-0000-4000-8000-000000000003', display_name: 'Current Owner', email: 'current@example.invalid', phone: '+639171234567', status: 'Active' };
+  const proposedOwner = { id: '00000000-0000-4000-8000-000000000005', display_name: 'Proposed Owner', status: 'Active' };
+  const pendingOwner = { id: '00000000-0000-4000-8000-000000000006', display_name: 'Pending Owner', status: 'Pending' };
+  const branch = { owner_id: currentOwner.id, id: '00000000-0000-4000-8000-000000000002', name: 'Coverage Branch', code: 'COV', status: 'active', region: 'NCR', address: '123 Test Street', city: 'Manila', province: 'Metro Manila', contact_number: '+639171234567', geofence: { type: 'polygon', center, radiusMeters: 1000, points }, created_at: new Date().toISOString() };
   const patches = [];
   const registrations = [];
+  const proposals = [];
   const errors = [];
   const browser = await chromium.launch({ headless: true, args: ['--enable-webgl', '--use-gl=angle', '--use-angle=swiftshader'] });
   try {
@@ -43,7 +43,19 @@ test('address edit never wipes coverage, unconfirmed invitation never re-creates
         return route.fulfill({ json: { id: '00000000-0000-4000-8000-000000000004', code: 'NEW-OWNER', owner: { invitationSent: false } } });
       }
       if (url.pathname === '/api/branches') return route.fulfill({ json: { branches: [branch] } });
-      if (url.pathname === '/api/staff-registration/requests') return route.fulfill({ json: { requests: reviews } });
+      if (url.pathname === '/api/users' && url.searchParams.get('role') === 'branch-owner') {
+        const users = url.searchParams.has('branchId') ? [currentOwner] : [currentOwner, proposedOwner, pendingOwner];
+        return route.fulfill({ json: { users } });
+      }
+      if (url.pathname === '/api/governance/requests') {
+        if (request.method() === 'POST') {
+          proposals.push(request.postDataJSON());
+          return route.fulfill({ status: 201, json: { request: { status: 'pending' } } });
+        }
+        return route.fulfill({ json: { requests: proposals.map((proposal, index) => ({
+          id: `proposal-${index}`, ...proposal, status: 'pending', submitted_at: new Date().toISOString(),
+        })) } });
+      }
       if (url.pathname === '/api/prices/regions') return route.fulfill({ json: { regions: [{ code: 'NCR', name: 'Metro Manila (NCR)' }] } });
       return route.fulfill({ json: { serviceRequests: [], branches: [], customers: [], users: [], documents: [], notifications: [], unreadCount: 0, summary: null, ratings: [], locations: [] } });
     });
@@ -90,16 +102,43 @@ test('address edit never wipes coverage, unconfirmed invitation never re-creates
     await page.getByRole('button', { name: /Register another/i }).click();
     assert.equal(await page.getByPlaceholder('Search known locations…').inputValue(), '', 'next registration starts empty');
     assert.equal(await page.getByLabel('Full address', { exact: true }).inputValue(), '');
-    await page.keyboard.press('Escape');
+    await page.goto(`${baseUrl}/franchise-admin/franchise-registry`);
+    await page.getByRole('heading', { name: 'Franchise Registry', exact: true }).waitFor();
 
-    // 3) A typed reason is cleared when the selected applicant changes through search.
-    await page.goto(baseUrl);
-    await page.getByRole('link', { name: 'Account Reviews', exact: true }).click();
-    const reason = page.getByLabel('Decision reason');
-    await reason.fill('Reason written for Alpha only');
-    await page.getByPlaceholder('Search name, email, or branch').fill('Beta');
-    await page.getByText('beta@example.invalid').first().waitFor();
-    assert.equal(await reason.inputValue(), '', 'reason does not carry over to Beta');
+    // 3) Governance history and SLA submission remain, while branch edits open the transfer form.
+    assert.equal(await page.getByRole('link', { name: 'Account Reviews', exact: true }).count(), 0);
+    await page.getByRole('link', { name: 'Governance Requests', exact: true }).click();
+    await page.getByRole('heading', { name: 'SLA threshold request', exact: true }).waitFor();
+    assert.equal(await page.getByRole('button', { name: 'Branch Owner', exact: false }).count(), 0);
+    await page.getByRole('link', { name: 'Franchise Registry', exact: true }).click();
+    await page.getByRole('button', { name: 'Edit', exact: true }).click();
+    await page.getByRole('button', { name: 'Request Branch Owner reassignment', exact: true }).click();
+    await page.getByText('Current Owner (Active)', { exact: true }).waitFor();
+    const ownerSelect = page.getByLabel('Proposed Branch Owner', { exact: true });
+    await ownerSelect.selectOption(proposedOwner.id);
+    assert.deepEqual(await ownerSelect.locator('option').allTextContents(), ['Select a Branch Owner', 'Proposed Owner']);
+    await page.getByLabel('Business justification').fill('Transfer ownership of this branch.');
+    await page.getByRole('button', { name: 'Submit reassignment request', exact: true }).click();
+    await page.getByText('Request submitted for Super Administrator review.', { exact: true }).waitFor();
+    assert.deepEqual(proposals, [{
+      type: 'branch-owner-change',
+      title: 'Reassign Branch Owner for Coverage Branch',
+      reason: 'Transfer ownership of this branch.',
+      riskLevel: 'medium',
+      branchId: branch.id,
+      payload: { newOwnerId: proposedOwner.id },
+    }]);
+    assert.equal(patches.length, 1, 'submitting a proposal does not edit the branch');
+    await page.getByRole('button', { name: 'Close edit branch dialog', exact: true }).click();
+    await page.getByRole('link', { name: 'Governance Requests', exact: true }).click();
+    await page.getByRole('row').filter({ hasText: 'Reassign Branch Owner for Coverage Branch' }).getByText('pending', { exact: true }).waitFor();
+    await page.getByLabel('Business justification').fill('Update the dispatch threshold.');
+    await page.getByRole('button', { name: 'Submit SLA request', exact: true }).click();
+    await page.getByRole('row').filter({ hasText: 'Request to dispatch SLA threshold' }).getByText('pending', { exact: true }).waitFor();
+    assert.equal(proposals[1].type, 'sla-threshold');
+
+    const retiredPage = await page.goto(`${baseUrl}/franchise-admin/account-reviews`);
+    assert.equal(retiredPage.status(), 404);
 
     assert.deepEqual(errors, []);
   } finally { await browser.close(); }

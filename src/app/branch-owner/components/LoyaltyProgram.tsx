@@ -1,5 +1,6 @@
 'use client';
 
+import { HouseholdRewardDetails } from './HouseholdRewardDetails';
 import { Header } from './Header';
 import { useBranch } from '../contexts/BranchContext';
 import { LoyaltyTrackDashboard } from '../../components/LoyaltyTrackDashboard';
@@ -23,6 +24,7 @@ export function LoyaltyProgram() {
             View redemption history
           </button>
         </div>
+        {selectedBranchId && <HouseholdRewardDetails branchId={selectedBranchId} />}
         <LoyaltyTrackDashboard branchId={selectedBranchId} branchOwnerView />
       </div>
     </div>

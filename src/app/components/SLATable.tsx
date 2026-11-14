@@ -99,7 +99,9 @@ export function SLATable({ from, to, branchIds }: Props) {
                   <td className="py-3 text-[13px] text-gray-600">{branch.total_service_requests}</td>
                   <td className="py-3 text-[13px] text-gray-900">
                     {branch.overall_compliance_rate === null ? (
-                      <span className="text-gray-400">Not evaluated</span>
+                      <span className="text-gray-400">
+                        {branch.total_service_requests === 0 ? 'No Data' : 'Not evaluated'}
+                      </span>
                     ) : (
                       `${branch.overall_compliance_rate}%`
                     )}

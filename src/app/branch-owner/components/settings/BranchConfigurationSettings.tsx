@@ -8,15 +8,11 @@ import { useBranch } from '../../contexts/BranchContext';
 import { apiErrorMessage, apiFetch, fetchJson } from '../../../lib/api';
 
 interface BranchConfiguration {
-  dualAuth: boolean;
-  pointRates: Record<'2.7kg' | '5kg' | '11kg' | '22kg' | '50kg', string>;
   openingTime: string;
   closingTime: string;
 }
 
 const defaultConfiguration: BranchConfiguration = {
-  dualAuth: true,
-  pointRates: { '2.7kg': '5', '5kg': '10', '11kg': '15', '22kg': '20', '50kg': '25' },
   openingTime: '07:00',
   closingTime: '20:00',
 };
@@ -31,7 +27,7 @@ interface StockThresholdRow {
 const numberFieldClassName =
   'h-10 w-full min-w-0 rounded-lg border border-gray-300 bg-white px-3 text-sm text-gray-900 outline-none transition focus:border-[#007BC1] focus:ring-2 focus:ring-[#007BC1]/15';
 
-/** Combined loyalty and inventory controls, always scoped to the selected BO branch. */
+/** Inventory and operating-hours settings for the selected branch. */
 export function BranchConfigurationSettings() {
   const { selectedBranch, selectedBranchId } = useBranch();
   const [savedByBranch, setSavedByBranch] = useState<Record<string, BranchConfiguration>>({});
@@ -49,36 +45,6 @@ export function BranchConfigurationSettings() {
   }, [savedConfiguration]);
 
   const queryClient = useQueryClient();
-
-  const { data: loyaltySettings, error: queryError } = useQuery({
-    queryKey: ['loyalty-settings', selectedBranchId],
-    queryFn: () => fetchJson<{ settings: any }>(`/loyalty/settings?branchId=${encodeURIComponent(selectedBranchId!)}`),
-    enabled: !!selectedBranchId,
-    staleTime: 30_000,
-  });
-
-  useEffect(() => {
-    if (loyaltySettings?.settings) {
-      const rates = loyaltySettings.settings.point_rates as Record<keyof BranchConfiguration['pointRates'], number>;
-      setForm((current) => ({
-        ...current,
-        dualAuth: loyaltySettings.settings.dual_auth === true,
-        pointRates: {
-          '2.7kg': String(rates['2.7kg']),
-          '5kg': String(rates['5kg']),
-          '11kg': String(rates['11kg']),
-          '22kg': String(rates['22kg']),
-          '50kg': String(rates['50kg']),
-        },
-      }));
-    }
-  }, [loyaltySettings]);
-
-  useEffect(() => {
-    if (queryError) {
-      toast.error(queryError.message || 'Failed to load loyalty settings');
-    }
-  }, [queryError]);
 
   // Low-stock alert levels are the real per-branch thresholds in inventory.stock_levels.
   const { data: stockData, isLoading: stockLoading, error: stockError } = useQuery({
@@ -114,13 +80,6 @@ export function BranchConfigurationSettings() {
       toast.error('Select an active branch before saving settings.');
       return;
     }
-    const pointRates = Object.fromEntries(
-      Object.entries(form.pointRates).map(([size, value]) => [size, Number(value)]),
-    );
-    if (Object.values(pointRates).some((value) => !Number.isInteger(value) || value < 0)) {
-      toast.error('Point rates must be whole numbers of zero or more.');
-      return;
-    }
     const changedThresholds = stockRows
       .filter((row) => thresholds[row.product_id] !== savedThresholds[row.product_id])
       .map((row) => ({ productId: row.product_id, thresholdQty: Number(thresholds[row.product_id]) }));
@@ -145,20 +104,10 @@ export function BranchConfigurationSettings() {
         void queryClient.invalidateQueries({ queryKey: ['owner-inventory', selectedBranchId] });
       }
 
-      const response = await apiFetch(
-        `/loyalty/settings?branchId=${encodeURIComponent(selectedBranchId)}`,
-        {
-          method: 'PATCH',
-          body: JSON.stringify({ dualAuth: form.dualAuth, pointRates }),
-        },
-      );
-      const data = await response.json();
-      if (!response.ok) throw new Error(apiErrorMessage(data, 'Failed to save loyalty settings'));
       setSavedByBranch((current) => ({ ...current, [selectedBranchId]: form }));
-      void queryClient.invalidateQueries({ queryKey: ['loyalty-settings', selectedBranchId] });
-      toast.success(`Loyalty and low-stock settings saved for ${selectedBranch}.`);
+      toast.success(`Branch settings saved for ${selectedBranch}.`);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to save loyalty settings');
+      toast.error(error instanceof Error ? error.message : 'Failed to save branch settings');
     } finally {
       setSaving(false);
     }
@@ -187,73 +136,16 @@ export function BranchConfigurationSettings() {
             </span>
             <div>
               <h2 id="loyalty-settings-heading" className="text-lg font-semibold text-gray-900">Loyalty Program</h2>
-              <p className="mt-1 text-sm text-gray-500">Configure reward rules for this branch.</p>
+              <p className="mt-1 text-sm text-gray-500">The Franchise Administrator manages the Household rewards catalog and points earned per cylinder.</p>
             </div>
           </div>
-
-          <div className="mt-6">
-            <h3 className="text-sm font-semibold text-gray-900">Commercial rewards</h3>
-            <p className="mt-4 text-sm text-gray-600">30 qualifying purchases earn one free cylinder.</p>
-
-            <div className="mt-5 flex items-start justify-between gap-5">
-              <div>
-                <p className="text-sm font-medium text-gray-700">Require dual authorization for redemptions</p>
-                <p className="mt-1.5 text-xs leading-5 text-gray-500">
-                  Branch Manager approval is required before reward dispatch.
-                </p>
-              </div>
-              <button
-                type="button"
-                role="switch"
-                aria-checked={form.dualAuth}
-                aria-label="Require dual authorization for redemptions"
-                onClick={() => updateField('dualAuth', !form.dualAuth)}
-                className={`relative mt-0.5 inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${form.dualAuth ? 'bg-[#007BC1]' : 'bg-gray-300'
-                  }`}
-              >
-                <span
-                  className={`inline-block h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${form.dualAuth ? 'translate-x-6' : 'translate-x-1'
-                    }`}
-                />
-              </button>
-            </div>
-          </div>
-
-          <div className="mt-6 border-t border-gray-200 pt-5">
-            <h3 className="text-sm font-semibold text-gray-900">Household points</h3>
-            <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
-              {(Object.keys(form.pointRates) as Array<keyof BranchConfiguration['pointRates']>).map((size) => (
-                <label key={size} className="block text-xs font-medium text-gray-600">
-                  {size} rate
-                  <input
-                    type="number"
-                    min="0"
-                    step="1"
-                    value={form.pointRates[size]}
-                    onChange={(event) => setForm((current) => ({
-                      ...current,
-                      pointRates: { ...current.pointRates, [size]: event.target.value },
-                    }))}
-                    className={`${numberFieldClassName} mt-2`}
-                  />
-                </label>
-              ))}
-            </div>
-            <div className="mt-4 flex items-center justify-between gap-4 rounded-lg bg-gray-50 px-4 py-3">
-              <div>
-                <p className="text-sm font-medium text-gray-700">Point expiry</p>
-                <p className="mt-0.5 text-xs text-gray-500">Points expire 12 months after they are earned.</p>
-              </div>
-              <span className="shrink-0 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-700">12 months</span>
-            </div>
-            <button
-              type="button"
-              onClick={openLoyaltyProgram}
-              className="mt-4 h-10 w-full rounded-lg border border-[#007BC1] bg-white px-4 text-sm font-medium text-[#007BC1] transition hover:bg-blue-50"
-            >
-              Open point rates and merchandise catalog
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={openLoyaltyProgram}
+            className="mt-5 h-10 rounded-lg border border-[#007BC1] px-4 text-sm font-medium text-[#007BC1] hover:bg-blue-50"
+          >
+            View rewards
+          </button>
         </section>
 
         <section className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm" aria-labelledby="inventory-alerts-heading">

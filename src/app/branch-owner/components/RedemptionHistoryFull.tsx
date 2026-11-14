@@ -52,6 +52,13 @@ export function RedemptionHistoryFull({ onBack }: { onBack: () => void }) {
     },
   });
 
+  const pickupStatuses = track === 'household_points';
+  const statusLabel = (status: Status) => {
+    if (pickupStatuses && status === 'approved') return 'Ready for Pickup';
+    if (pickupStatuses && status === 'fulfilled') return 'Redeemed';
+    return STATUS_LABELS[status].label;
+  };
+
   const itemsPerPage = 10;
 
   const filteredData = useMemo(() => {
@@ -141,7 +148,7 @@ export function RedemptionHistoryFull({ onBack }: { onBack: () => void }) {
               onChange={(value) => { setFilterStatus(value); setCurrentPage(1); }}
               options={[
                 { value: 'all', label: 'All Status' },
-                ...Object.entries(STATUS_LABELS).map(([value, { label }]) => ({ value, label })),
+                ...(Object.keys(STATUS_LABELS) as Status[]).map((value) => ({ value, label: statusLabel(value) })),
               ]}
             />
             {hasActiveFilters && (
@@ -187,7 +194,7 @@ export function RedemptionHistoryFull({ onBack }: { onBack: () => void }) {
                       <td className="py-3 text-[13px] text-gray-600">{formatDate(row.fulfilled_at)}</td>
                       <td className="py-3">
                         <span className={`inline-block px-3 py-1 rounded-full text-[11px] font-medium ${STATUS_LABELS[row.status].className}`}>
-                          {STATUS_LABELS[row.status].label}
+                          {statusLabel(row.status)}
                         </span>
                       </td>
                     </tr>
