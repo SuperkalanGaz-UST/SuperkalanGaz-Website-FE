@@ -362,3 +362,129 @@ test('unknown destinations return 404 and invitations retain their dedicated flo
     await rider.context.close();
   } finally { await browser.close(); }
 });
+
+test('Branch Manager offers the order without choosing a motorcycle', { timeout: 30_000 }, async () => {
+  const browser = await chromium.launch({ headless: true });
+  const session = sessionFor('branch-manager');
+  session.user.app_metadata.branch_ids = [branches[0].id];
+  session.user.app_metadata.branches = [branches[0].name];
+  const { context } = await createContext(browser, session);
+  try {
+    const riderId = '00000000-0000-4000-8000-000000000014';
+    const requestId = '00000000-0000-4000-8000-000000000015';
+    const row = {
+      id: requestId, sr_code: 'SR-80432', branch_id: branches[0].id, status: 'Pending', order_source: 'Mobile App',
+      customer_name: 'Test customer', customer_contact: '+639171234567', delivery_address: 'Test address',
+      cylinder_size: '11kg', quantity: 1, unit_price: 900, total_amount: 900, requested_at: new Date().toISOString(),
+      dispatched_at: null, rider_id: null, delivery_offer_expires_at: null,
+    };
+    await context.route(`${apiOrigin}/api/branches/assigned`, route => route.fulfill({ json: { branches: [branches[0]] } }));
+    await context.route(`${apiOrigin}/api/riders?*`, route => route.fulfill({ json: {
+      riders: [{ id: riderId, name: 'Available Test Rider', status: 'Available', plate: '', assigned_vehicle: null }],
+    } }));
+    await context.route(`${apiOrigin}/api/service-requests`, route => route.fulfill({ json: { serviceRequests: [row] } }));
+    await context.route(`${apiOrigin}/api/service-requests/${requestId}/dispatch`, route => {
+      assert.deepEqual(route.request().postDataJSON(), { riderId });
+      row.delivery_offer_expires_at = new Date(Date.now() + 300_000).toISOString();
+      return route.fulfill({ json: { serviceRequest: row } });
+    });
+    const page = await context.newPage();
+    page.setDefaultTimeout(5_000);
+    await page.goto(`${baseUrl}/branch-manager/service-requests`);
+    const offer = page.getByRole('button', { name: 'Offer delivery', exact: true });
+    await offer.click();
+    await page.getByRole('combobox', { name: 'Delivery Rider', exact: true }).click();
+    await page.getByRole('option', { name: /^Available Test Rider/ }).click();
+    await page.getByRole('button', { name: 'Send offer', exact: true }).click();
+    await page.getByText('Awaiting Delivery Rider acceptance', { exact: true }).waitFor();
+    assert.equal(await offer.isDisabled(), true);
+    const order = page.getByRole('row').filter({ hasText: 'SR-80432' });
+    assert.equal(await order.getByText('Pending', { exact: true }).count(), 1);
+  } finally {
+    await context.close();
+    await browser.close();
+  }
+});
+
+test('Branch Manager order row lists every cylinder in a mixed order', { timeout: 30_000 }, async () => {
+  const browser = await chromium.launch({ headless: true });
+  const session = sessionFor('branch-manager');
+  session.user.app_metadata.branch_ids = [branches[0].id];
+  session.user.app_metadata.branches = [branches[0].name];
+  const { context } = await createContext(browser, session);
+  try {
+    const row = {
+      id: '00000000-0000-4000-8000-000000000016', sr_code: 'SR-80433', branch_id: branches[0].id, status: 'Pending',
+      order_source: 'Mobile App', customer_name: 'Mixed order customer', customer_contact: '+639171234567',
+      delivery_address: 'Test address', cylinder_size: '2.7kg', quantity: 1, unit_price: 200, total_amount: 550,
+      items: [{ cylinder_size: '2.7kg', quantity: 1, unit_price: 200 }, { cylinder_size: '5kg', quantity: 1, unit_price: 350 }],
+      requested_at: new Date().toISOString(), dispatched_at: null, rider_id: null, delivery_offer_expires_at: null,
+    };
+    await context.route(`${apiOrigin}/api/branches/assigned`, route => route.fulfill({ json: { branches: [branches[0]] } }));
+    await context.route(`${apiOrigin}/api/riders?*`, route => route.fulfill({ json: { riders: [] } }));
+    await context.route(`${apiOrigin}/api/service-requests`, route => route.fulfill({ json: { serviceRequests: [row] } }));
+    const page = await context.newPage();
+    page.setDefaultTimeout(5_000);
+    await page.goto(`${baseUrl}/branch-manager/service-requests`);
+    const order = page.getByRole('row').filter({ hasText: 'SR-80433' });
+    await order.waitFor();
+    const text = await order.innerText();
+    assert.match(text, /2\.7kg/);
+    assert.match(text, /5kg/);
+  } finally {
+    await context.close();
+    await browser.close();
+  }
+});
+
+test('Branch Manager creates one walk-in order with several cylinder sizes', { timeout: 30_000 }, async () => {
+  const browser = await chromium.launch({ headless: true });
+  const session = sessionFor('branch-manager');
+  session.user.app_metadata.branch_ids = [branches[0].id];
+  session.user.app_metadata.branches = [branches[0].name];
+  const { context } = await createContext(browser, session);
+  try {
+    const unitPrices = { '50kg': 3000, '22kg': 1400, '11kg': 659, '5kg': 350, '2.7kg': 200 };
+    let posted = null;
+    await context.route(`${apiOrigin}/api/branches/assigned`, route => route.fulfill({ json: { branches: [branches[0]] } }));
+    await context.route(`${apiOrigin}/api/prices/assigned`, route => route.fulfill({ json: {
+      prices: Object.entries(unitPrices).map(([cylinder_size, unit_price], i) => ({
+        id: `00000000-0000-4000-8000-00000000002${i}`, cylinder_size, unit_price, updated_at: new Date().toISOString(),
+      })),
+    } }));
+    await context.route(`${apiOrigin}/api/riders?*`, route => route.fulfill({ json: { riders: [] } }));
+    await context.route(`${apiOrigin}/api/customers?*`, route => route.fulfill({ json: { customers: [] } }));
+    await context.route(`${apiOrigin}/api/service-requests`, route => {
+      if (route.request().method() === 'POST') {
+        posted = route.request().postDataJSON();
+        return route.fulfill({ status: 201, json: { serviceRequest: { id: '00000000-0000-4000-8000-000000000017' } } });
+      }
+      return route.fulfill({ json: { serviceRequests: [] } });
+    });
+    const page = await context.newPage();
+    page.setDefaultTimeout(5_000);
+    await page.goto(`${baseUrl}/branch-manager/service-requests`);
+    await page.getByRole('button', { name: 'New Request' }).click();
+    await page.getByPlaceholder('Search existing customer or type new name...').fill('Walk-in Buyer');
+    await page.getByPlaceholder('+63 9XX XXX XXXX').fill('9171234567');
+    await page.getByPlaceholder('123 Mabini St, Makati').fill('123 Rizal Street, Manila');
+    await page.locator('#new-request-cylinder').click();
+    await page.getByRole('option', { name: /^2\.7kg/ }).click();
+    await page.getByRole('button', { name: 'Add another cylinder' }).click();
+    await page.locator('#new-request-cylinder-2').click();
+    // A size already on the order is not offered again.
+    assert.equal(await page.getByRole('option', { name: /^2\.7kg/ }).count(), 0);
+    await page.getByRole('option', { name: /^5kg/ }).click();
+    await page.locator('#new-request-quantity-2').fill('3');
+    await page.getByText('Total ₱1,250.00', { exact: true }).waitFor();
+    await page.getByRole('button', { name: 'Create Request' }).click();
+    for (let i = 0; i < 50 && !posted; i += 1) await page.waitForTimeout(100);
+    assert.ok(posted, 'walk-in order was not submitted');
+    assert.deepEqual(posted.items, [{ cylinderSize: '2.7kg', quantity: 1 }, { cylinderSize: '5kg', quantity: 3 }]);
+    assert.equal(posted.cylinderSize, undefined);
+    assert.equal(posted.quantity, undefined);
+  } finally {
+    await context.close();
+    await browser.close();
+  }
+});

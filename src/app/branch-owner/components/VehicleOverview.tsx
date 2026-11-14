@@ -11,6 +11,8 @@ import styles from './VehicleOverview.module.css';
 interface VehicleRow {
   id: string;
   plate_number: string;
+  /** Optional Branch Manager label; Owners see it read-only. */
+  display_name?: string | null;
   vehicle_type: string | null;
   assigned_rider_name: string | null;
   status: 'active' | 'maintenance' | 'inactive';
@@ -68,7 +70,7 @@ function VehicleCard({ vehicle, branchId }: { vehicle: VehicleRow; branchId: str
   return (
     <article className={styles.vehicle} aria-label={`Vehicle ${vehicle.plate_number}`}>
       <div className={styles.cardHeader}>
-        <div><h3>{vehicle.assigned_rider_name ?? 'Unassigned'}</h3><p className={styles.plate}>{vehicle.plate_number}{vehicle.vehicle_type ? ` · ${vehicle.vehicle_type}` : ''}</p></div>
+        <div><h3>{vehicle.display_name || vehicle.plate_number}</h3><p className={styles.plate}>{vehicle.plate_number}{vehicle.vehicle_type ? ` · ${vehicle.vehicle_type}` : ''} · {vehicle.assigned_rider_name ?? 'Unassigned'}</p></div>
         <div className={styles.badges}>
           <span className={due ? styles.due : vehicle.status === 'inactive' ? styles.neutral : styles.healthy}>{status}</span>
           <span className={styles.neutral} title={vehicle.gps_provisioning_status === 'provisioned' ? 'Device registration succeeded; this does not confirm live GPS reception.' : undefined}>{gps.label}</span>

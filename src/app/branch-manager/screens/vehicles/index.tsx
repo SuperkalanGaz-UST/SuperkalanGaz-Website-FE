@@ -18,6 +18,8 @@ interface VehicleRow {
     id: string;
     branch_id: string;
     plate_number: string;
+    /** Optional Branch Manager label, e.g. "Red Yamaha Single Tank". */
+    display_name?: string | null;
     vehicle_type: string | null;
     assigned_rider_id: string | null;
     assigned_rider_name: string | null;
@@ -37,6 +39,20 @@ interface VehicleRow {
     updated_at: string;
 }
 
+/** Mirrors the API limit in superkalan-crm-api fleet/dto/vehicle-display-name.ts. */
+const VEHICLE_NAME_MAX_LENGTH = 60;
+
+/** Trim and collapse whitespace; blank means "no name" (sent as null). */
+function normalizeVehicleName(raw: string): string | null {
+    const trimmed = raw.trim().replace(/\s+/g, ' ');
+    return trimmed === '' ? null : trimmed;
+}
+
+/** Card title: the optional label, falling back to the plate number. */
+function vehicleLabel(vehicle: Pick<VehicleRow, 'display_name' | 'plate_number'>): string {
+    return vehicle.display_name || vehicle.plate_number;
+}
+
 /** A maintenance log entry from GET /vehicles/:id. */
 interface MaintenanceLogRow {
     id: string;
@@ -45,13 +61,6 @@ interface MaintenanceLogRow {
     fuel_liters: number | null;
     logged_by: string;
     logged_at: string;
-}
-
-interface RiderRow {
-    id: string;
-    name: string;
-    plate: string;
-    status: string;
 }
 
 const todayIso = () => new Date().toISOString().slice(0, 10);
@@ -130,10 +139,8 @@ export default function VehicleManagementPage() {
 
     const [registrationOpen, setRegistrationOpen] = useState(false);
     const [plateNumber, setPlateNumber] = useState("");
+    const [vehicleName, setVehicleName] = useState("");
     const [initialOdometerKm, setInitialOdometerKm] = useState("");
-    const [assignedRiderId, setAssignedRiderId] = useState("");
-    const [riders, setRiders] = useState<RiderRow[]>([]);
-    const [ridersLoading, setRidersLoading] = useState(false);
     const [registrationError, setRegistrationError] = useState<string | null>(null);
     const [registering, setRegistering] = useState(false);
 
@@ -153,6 +160,11 @@ export default function VehicleManagementPage() {
     const [resettingId, setResettingId] = useState<string | null>(null);
     const [retryingGpsId, setRetryingGpsId] = useState<string | null>(null);
 
+    const [renameVehicle, setRenameVehicle] = useState<VehicleRow | null>(null);
+    const [renameValue, setRenameValue] = useState("");
+    const [renameError, setRenameError] = useState<string | null>(null);
+    const [renaming, setRenaming] = useState(false);
+
     const [historyVehicleId, setHistoryVehicleId] = useState<string | null>(null);
     const [historyLogs, setHistoryLogs] = useState<MaintenanceLogRow[]>([]);
     const [historyLoading, setHistoryLoading] = useState(false);
@@ -170,29 +182,17 @@ export default function VehicleManagementPage() {
     const healthyVehicles = vehicles.filter(v => v.status !== "maintenance" && v.km_since_last_pms < v.maintenance_threshold_km * 0.8).length;
     const activeSetupStep = vehicleSetupSteps[Math.min(gpsSetupStep, vehicleSetupSteps.length - 1)];
 
-    const openRegistrationDialog = async () => {
+    const openRegistrationDialog = () => {
         setRegistrationOpen(true);
         setRegistrationError(null);
-        setRidersLoading(true);
-        try {
-            const res = await apiFetch('/riders');
-            const data = await res.json();
-            if (!res.ok) throw new Error(apiErrorMessage(data, 'Failed to load riders'));
-            setRiders(data.riders as RiderRow[]);
-        } catch (err) {
-            setRiders([]);
-            setRegistrationError(err instanceof Error ? err.message : 'Failed to load riders');
-        } finally {
-            setRidersLoading(false);
-        }
     };
 
     const closeRegistrationDialog = () => {
         if (registering) return;
         setRegistrationOpen(false);
         setPlateNumber("");
+        setVehicleName("");
         setInitialOdometerKm("");
-        setAssignedRiderId("");
         setRegistrationError(null);
     };
 
@@ -216,6 +216,7 @@ export default function VehicleManagementPage() {
         event.preventDefault();
         const normalizedPlate = plateNumber.trim().toUpperCase().replace(/\s+/g, ' ');
         const odometerKm = Number(initialOdometerKm);
+        const normalizedName = normalizeVehicleName(vehicleName);
 
         if (!/^[A-Z0-9]+(?:[ -][A-Z0-9]+)*$/.test(normalizedPlate) || normalizedPlate.length < 2 || normalizedPlate.length > 20) {
             setRegistrationError('Enter a valid plate number using letters, numbers, spaces, or hyphens.');
@@ -223,6 +224,10 @@ export default function VehicleManagementPage() {
         }
         if (!initialOdometerKm.trim() || !Number.isInteger(odometerKm) || odometerKm < 0) {
             setRegistrationError('Enter a valid non-negative odometer reading.');
+            return;
+        }
+        if (normalizedName && normalizedName.length > VEHICLE_NAME_MAX_LENGTH) {
+            setRegistrationError(`Keep the vehicle name to ${VEHICLE_NAME_MAX_LENGTH} characters or fewer.`);
             return;
         }
 
@@ -234,7 +239,7 @@ export default function VehicleManagementPage() {
                 body: JSON.stringify({
                     plateNumber: normalizedPlate,
                     initialOdometerKm: odometerKm,
-                    ...(assignedRiderId ? { assignedRiderId } : {}),
+                    ...(normalizedName ? { displayName: normalizedName } : {}),
                 }),
             });
             const data = await res.json();
@@ -242,11 +247,11 @@ export default function VehicleManagementPage() {
 
             const created = data.vehicle as VehicleRow;
             void queryClient.invalidateQueries({ queryKey: ['vehicles'] });
-            toast.success(`${created.plate_number} was registered.`);
+            toast.success(`${vehicleLabel(created)} was registered.`);
             setRegistrationOpen(false);
             setPlateNumber("");
+            setVehicleName("");
             setInitialOdometerKm("");
-            setAssignedRiderId("");
             setGpsPromptVehicle(created);
         } catch (err) {
             setRegistrationError(err instanceof Error ? err.message : 'Failed to register vehicle');
@@ -392,6 +397,50 @@ export default function VehicleManagementPage() {
         }
     };
 
+    const openRenameDialog = (vehicle: VehicleRow) => {
+        setRenameVehicle(vehicle);
+        setRenameValue(vehicle.display_name ?? "");
+        setRenameError(null);
+    };
+
+    const closeRenameDialog = () => {
+        if (renaming) return;
+        setRenameVehicle(null);
+        setRenameValue("");
+        setRenameError(null);
+    };
+
+    const handleRenameVehicle = async (event: React.FormEvent<HTMLFormElement>) => {
+        event.preventDefault();
+        if (!renameVehicle) return;
+        const normalizedName = normalizeVehicleName(renameValue);
+        if (normalizedName && normalizedName.length > VEHICLE_NAME_MAX_LENGTH) {
+            setRenameError(`Keep the vehicle name to ${VEHICLE_NAME_MAX_LENGTH} characters or fewer.`);
+            return;
+        }
+
+        setRenaming(true);
+        setRenameError(null);
+        try {
+            const res = await apiFetch(`/vehicles/${renameVehicle.id}/name`, {
+                method: 'PATCH',
+                // null clears the label; the card then falls back to the plate.
+                body: JSON.stringify({ displayName: normalizedName }),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(apiErrorMessage(data, 'Failed to update the vehicle name'));
+            const updated = data.vehicle as VehicleRow;
+            void queryClient.invalidateQueries({ queryKey: ['vehicles'] });
+            toast.success(updated.display_name ? `Vehicle renamed to ${updated.display_name}.` : `Name cleared for ${updated.plate_number}.`);
+            setRenameVehicle(null);
+            setRenameValue("");
+        } catch (err) {
+            setRenameError(err instanceof Error ? err.message : 'Failed to update the vehicle name');
+        } finally {
+            setRenaming(false);
+        }
+    };
+
     const toggleHistory = async (vehicleId: string) => {
         if (historyVehicleId === vehicleId) { setHistoryVehicleId(null); return; }
         setHistoryVehicleId(vehicleId);
@@ -459,8 +508,20 @@ export default function VehicleManagementPage() {
                             <div key={vehicle.id} className={styles.vehicleCard}>
                                 <div className={styles.cardHeader}>
                                     <div className={styles.vehicleIdentity}>
-                                        <div className={styles.vehicleName}>{vehicle.assigned_rider_name ?? 'Unassigned'}</div>
+                                        <div className={styles.vehicleNameRow}>
+                                            <div className={styles.vehicleName}>{vehicleLabel(vehicle)}</div>
+                                            <button
+                                                type="button"
+                                                className={styles.renameButton}
+                                                onClick={() => openRenameDialog(vehicle)}
+                                                aria-label={`Edit name of ${vehicle.plate_number}`}
+                                                title="Edit vehicle name"
+                                            >
+                                                <PenLine size={14} />
+                                            </button>
+                                        </div>
                                         <div className={styles.vehiclePlate}>{vehicle.plate_number}{vehicle.vehicle_type ? ` · ${vehicle.vehicle_type}` : ''}</div>
+                                        <div className={styles.vehicleRider}>{vehicle.assigned_rider_name ? `Delivery Rider: ${vehicle.assigned_rider_name}` : 'No Delivery Rider assigned'}</div>
                                     </div>
                                     <div className={styles.statusStack}>
                                         <Badge variant={isOverdue ? "destructive" : isWarning ? "warning" : "success"}>
@@ -649,6 +710,18 @@ export default function VehicleManagementPage() {
                                     />
                                 </div>
                                 <div>
+                                    <label className={styles.fieldLabel} htmlFor="vehicle-name">Vehicle Name (optional)</label>
+                                    <Input
+                                        id="vehicle-name"
+                                        value={vehicleName}
+                                        onChange={(event) => setVehicleName(event.target.value)}
+                                        placeholder="e.g. Red Yamaha Single Tank"
+                                        autoComplete="off"
+                                        maxLength={VEHICLE_NAME_MAX_LENGTH}
+                                    />
+                                    <div className={styles.fieldHint}>A friendly label to tell motorcycles apart. The plate number stays the official identifier.</div>
+                                </div>
+                                <div>
                                     <label className={styles.fieldLabel} htmlFor="vehicle-odometer">Current Odometer (km)</label>
                                     <Input
                                         id="vehicle-odometer"
@@ -662,32 +735,45 @@ export default function VehicleManagementPage() {
                                     />
                                     <div className={styles.fieldHint}>Enter the vehicle’s actual reading. This becomes the starting PMS baseline.</div>
                                 </div>
-                                <div>
-                                    <label className={styles.fieldLabel} htmlFor="vehicle-rider">Assign Delivery Rider (optional)</label>
-                                    <select
-                                        id="vehicle-rider"
-                                        className={styles.select}
-                                        value={assignedRiderId}
-                                        onChange={(event) => setAssignedRiderId(event.target.value)}
-                                        disabled={ridersLoading}
-                                    >
-                                        <option value="">{ridersLoading ? 'Loading Delivery Riders…' : 'Unassigned'}</option>
-                                        {riders.map(rider => (
-                                            <option key={rider.id} value={rider.id}>
-                                                {rider.name} · {rider.plate} · {rider.status}
-                                            </option>
-                                        ))}
-                                    </select>
-                                </div>
                                 {registrationError && <div className={styles.fieldError} role="alert">{registrationError}</div>}
                             </div>
 
                             <div className={styles.dialogFooter}>
                                 <Button type="button" variant="ghost" onClick={closeRegistrationDialog} disabled={registering}>Cancel</Button>
-                                <Button type="submit" variant="primary" disabled={registering || ridersLoading}>
+                                <Button type="submit" variant="primary" disabled={registering}>
                                     {registering ? 'Registering…' : 'Register Vehicle'}
                                 </Button>
                             </div>
+                        </div>
+                    </form>
+                </div>
+            )}
+
+            {renameVehicle && (
+                <div className={styles.dialogOverlay} role="presentation" onClick={closeRenameDialog}>
+                    <form className={styles.dialogContent} onSubmit={(event) => void handleRenameVehicle(event)} onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="rename-vehicle-title">
+                        <div className={styles.dialogHeader}>
+                            <h2 id="rename-vehicle-title" className={styles.dialogTitle}>Edit Vehicle Name</h2>
+                            <p className={styles.dialogDescription}>Set a friendly label for <strong>{renameVehicle.plate_number}</strong>. Leave it blank to show the plate number instead.</p>
+                        </div>
+                        <div>
+                            <label className={styles.fieldLabel} htmlFor="rename-vehicle-name">Vehicle Name</label>
+                            <Input
+                                id="rename-vehicle-name"
+                                value={renameValue}
+                                onChange={(event) => setRenameValue(event.target.value)}
+                                placeholder="e.g. Red Yamaha Single Tank"
+                                autoComplete="off"
+                                maxLength={VEHICLE_NAME_MAX_LENGTH}
+                                autoFocus
+                            />
+                            {renameError && <div className={styles.fieldError} role="alert">{renameError}</div>}
+                        </div>
+                        <div className={styles.dialogFooter}>
+                            <Button type="button" variant="ghost" onClick={closeRenameDialog} disabled={renaming}>Cancel</Button>
+                            <Button type="submit" variant="primary" disabled={renaming}>
+                                {renaming ? 'Saving…' : 'Save Name'}
+                            </Button>
                         </div>
                     </form>
                 </div>

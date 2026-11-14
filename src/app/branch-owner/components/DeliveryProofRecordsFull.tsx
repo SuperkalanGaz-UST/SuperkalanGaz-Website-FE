@@ -8,6 +8,7 @@ import { fetchJson } from '../../lib/api';
 import { useBranch } from '../contexts/BranchContext';
 import { Header } from './Header';
 import { Pagination } from './Pagination';
+import { serviceRequestCylinderSummary, serviceRequestItems, type ServiceRequestItem } from '../../lib/serviceRequestItems';
 
 interface DeliveryRecord {
   id: string;
@@ -15,6 +16,7 @@ interface DeliveryRecord {
   customer_name: string;
   cylinder_size: string;
   quantity: number;
+  items?: ServiceRequestItem[];
   delivered_at: string | null;
 }
 
@@ -57,7 +59,8 @@ export function DeliveryProofRecordsFull({ onBack }: { onBack: () => void }) {
 
   const filteredData = useMemo(() => {
     return records.filter((row) => {
-      const matchesSize = filterSize === 'all' || row.cylinder_size === filterSize;
+      // A mixed order matches every size it contains, not only its first line.
+      const matchesSize = filterSize === 'all' || serviceRequestItems(row).some((item) => item.cylinder_size === filterSize);
       const q = searchQuery.toLowerCase();
       const matchesSearch =
         !q ||
@@ -74,7 +77,7 @@ export function DeliveryProofRecordsFull({ onBack }: { onBack: () => void }) {
   );
 
   const uniqueSizes = useMemo(() => {
-    const sizes = new Set(records.map((r) => r.cylinder_size).filter(Boolean));
+    const sizes = new Set(records.flatMap((r) => serviceRequestItems(r).map((item) => item.cylinder_size)).filter(Boolean));
     return Array.from(sizes).sort();
   }, [records]);
 
@@ -177,7 +180,7 @@ export function DeliveryProofRecordsFull({ onBack }: { onBack: () => void }) {
                       <tr key={record.id} className="border-b border-gray-100 text-[13px] last:border-0">
                         <td className="py-4 pr-4 font-medium text-gray-900">{record.sr_code}</td>
                         <td className="py-4 pr-4 text-gray-700">{record.customer_name}</td>
-                        <td className="py-4 pr-4 text-gray-600">{record.quantity} × {record.cylinder_size}</td>
+                        <td className="py-4 pr-4 text-gray-600">{serviceRequestCylinderSummary(record)}</td>
                         <td className="py-4 pr-4 text-gray-600">{formatDeliveredAt(record.delivered_at)}</td>
                         <td className="py-4 pr-4 text-left">
                           <DeliveryProofViewer
