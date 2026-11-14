@@ -11,6 +11,7 @@ import { BranchPricingRegionField } from './BranchPricingRegionField';
 import { provinceFocus } from "../lib/phProvinces";
 import { cityMunicipalityFocus } from "../lib/phCitiesMunicipalities";
 import { formatPhMobileNational, normalizePhMobile } from "../lib/phMobile";
+import { BranchOwnerReassignmentForm } from "../franchise-admin/components/BranchOwnerReassignmentForm";
 
 /** The branch's linked owner, as returned by GET /users. */
 interface OwnerProfile {
@@ -52,6 +53,9 @@ export function EditBranchModal({ branch, onClose, onSaved }: EditBranchModalPro
   const [coverage, setCoverage] = useState<BranchGeofence | null>(branch.geofence);
   const [coverageAddress, setCoverageAddress] = useState(addressKey);
   const geofence = coverageAddress === addressKey ? coverage : null;
+  // Coverage drawn for the old address no longer applies, but saving must never
+  // silently send geofence: null and erase it. Require it to be set again first.
+  const coverageNeedsRedo = coverage !== null && coverageAddress !== addressKey;
 
   // --- Linked owner ---
   const [owner, setOwner] = useState<OwnerProfile | null>(null);
@@ -66,6 +70,7 @@ export function EditBranchModal({ branch, onClose, onSaved }: EditBranchModalPro
 
   const [resendingInvitation, setResendingInvitation] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [showReassignment, setShowReassignment] = useState(false);
 
   // owner_id is the canonical association. Directory order and branch labels
   // cannot identify an owner, especially when several accounts retain old scope.
@@ -126,6 +131,7 @@ export function EditBranchModal({ branch, onClose, onSaved }: EditBranchModalPro
       canonicalOwnerPhone !== null);
   const canSave =
     (!geofence || isBranchGeofence(geofence)) &&
+    !coverageNeedsRedo &&
     name.trim() !== "" &&
     canonicalContactNumber !== null &&
     address.trim() !== "" &&
@@ -221,8 +227,15 @@ export function EditBranchModal({ branch, onClose, onSaved }: EditBranchModalPro
           </button>
         </div>
 
+        {showReassignment && owner && (
+          <BranchOwnerReassignmentForm
+            branch={branch}
+            currentOwner={owner}
+            onBack={() => setShowReassignment(false)}
+          />
+        )}
         {/* Body */}
-        <div className="p-6 space-y-6">
+        <div hidden={showReassignment} className="p-6 space-y-6">
           {/* Branch details */}
           <div className="space-y-4">
             <BranchPricingRegionField value={region} onChange={setRegion} disabled={submitting} />
@@ -282,14 +295,14 @@ export function EditBranchModal({ branch, onClose, onSaved }: EditBranchModalPro
             </div>
           </div>
 
-          <p className="text-xs text-[#6B6B67] -mt-2">
-            Branch Owner reassignment is handled through a governance request for Super
-            Administrator approval. This form updates the current owner&apos;s profile only.
-          </p>
-
           {/* Geofence */}
           <div className="space-y-3">
             <h3 className={sectionTitle}>Coverage geofence</h3>
+            {coverageNeedsRedo && (
+              <p role="alert" className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                The address changed, so the saved coverage area no longer applies. Locate the new address and set the coverage again before saving, or restore the original address to keep it.
+              </p>
+            )}
             <BranchGeofenceEditor address={{ address, city, province }} key={addressKey} value={geofence}
               onChange={(value) => { setCoverage(value); setCoverageAddress(addressKey); }}
               focus={cityMunicipalityFocus(province, city) ?? provinceFocus(province)} />
@@ -297,7 +310,19 @@ export function EditBranchModal({ branch, onClose, onSaved }: EditBranchModalPro
 
           {/* Owner details */}
           <div className="space-y-3">
-            <h3 className={sectionTitle}>Current owner profile</h3>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h3 className={sectionTitle}>Current owner profile</h3>
+              {branch.status === "active" && owner && (
+                <button
+                  type="button"
+                  onClick={() => setShowReassignment(true)}
+                  disabled={submitting || resendingInvitation}
+                  className="text-sm font-medium text-[#007BC1] hover:underline disabled:opacity-50"
+                >
+                  Request Branch Owner reassignment
+                </button>
+              )}
+            </div>
             {ownerLoading ? (
               <p className="text-sm text-gray-500">Loading owner…</p>
             ) : ownerError ? (
@@ -401,7 +426,10 @@ export function EditBranchModal({ branch, onClose, onSaved }: EditBranchModalPro
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-gray-100 sticky bottom-0 bg-white">
+        <div className={showReassignment ? "hidden" : "flex items-center justify-end gap-2 px-6 py-4 border-t border-gray-100 sticky bottom-0 bg-white"}>
+          {coverageNeedsRedo && (
+            <span className="mr-auto text-xs text-amber-700">Set the coverage area for the new address to save.</span>
+          )}
           <button
             type="button"
             onClick={onClose}

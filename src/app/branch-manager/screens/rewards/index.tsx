@@ -8,7 +8,6 @@ import { toast } from 'sonner';
 import { Badge } from '../../components/Badge';
 import { Button } from '../../components/Button';
 import { Tabs, TabsList, TabsTrigger } from '../../components/Tabs';
-import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '../../components/Select';
 import { apiFetch, apiErrorMessage, fetchJson } from '../../../lib/api';
 import { formatPHMobile } from '../../../lib/phMobile';
 import styles from './screen.module.css';
@@ -79,20 +78,6 @@ interface LedgerView {
     commercial_purchases: CommercialPurchaseRow[];
 }
 
-/** Active household reward from GET /loyalty/catalog. Used to build a household
- * request (the commercial track has no catalog — the reward is a free cylinder). */
-interface CatalogItemRow {
-    id: string;
-    branch_id: string;
-    name: string;
-    description: string | null;
-    points_cost: number;
-    stock_qty: number;
-    is_active: boolean;
-    created_at: string;
-    updated_at: string;
-}
-
 /** Customer row from CIM search (GET /customers?search=), reused to pick who a new
  * redemption request is for. Same snake_case shape as the Orders screen uses. */
 interface CustomerRow {
@@ -157,7 +142,7 @@ export default function Rewards() {
 
     const queryClient = useQueryClient();
     const [track, setTrack] = useState<Track>(HOUSEHOLD);
-    const [activeTab, setActiveTab] = useState('pending');
+    const [activeTab, setActiveTab] = useState('approved');
 
     const {
         data: redemptionsData,
@@ -184,19 +169,8 @@ export default function Rewards() {
             pending: all.filter((r) => r.status === 'pending').length,
             approved: all.filter((r) => r.status === 'approved').length,
             fulfilled: all.filter((r) => r.status === 'fulfilled').length,
-            pendingPoints: all
-                .filter((r) => r.status === 'pending')
-                .reduce((sum, r) => sum + (r.points_spent ?? 0), 0),
         };
     }, [summaryData]);
-
-    // Active household reward catalog
-    const { data: catalogData } = useQuery({
-        queryKey: ['loyalty-catalog'],
-        queryFn: () => fetchJson<{ catalogItems: CatalogItemRow[] }>('/loyalty/catalog'),
-        staleTime: 30_000,
-    });
-    const catalog = catalogData?.catalogItems ?? [];
 
     // Per-row in-flight guards. Only one action runs per row at a time, so a single
     // id per action is enough (mirrors the Orders screen's dispatchingId).
@@ -211,10 +185,7 @@ export default function Rewards() {
 
     // New redemption request (BM logs a request into the queue). Collapsed by
     // default; customer is chosen via the same CIM search the Orders screen uses.
-    // The household form also needs a reward; the commercial form does not (the
-    // reward is always one free cylinder).
     const [showCreate, setShowCreate] = useState(false);
-    const [selectedItemId, setSelectedItemId] = useState('');
     const [selectedCustomer, setSelectedCustomer] = useState<CustomerRow | null>(null);
     const [customerSearch, setCustomerSearch] = useState('');
     const [customerResults, setCustomerResults] = useState<CustomerRow[] | null>(null);
@@ -230,8 +201,16 @@ export default function Rewards() {
     const [codeSearch, setCodeSearch] = useState('');
     const [codeSearchLoading, setCodeSearchLoading] = useState(false);
     const [codeSearchError, setCodeSearchError] = useState<string | null>(null);
+    const [codeResult, setCodeResult] = useState<RedemptionRow | null>(null);
 
     const isCommercial = track === COMMERCIAL;
+
+    const statusTabs = isCommercial ? STATUS_TABS : [
+        { value: 'approved', label: 'Ready for Pickup' },
+        { value: 'fulfilled', label: 'Redeemed' },
+        { value: 'all', label: 'All' },
+    ];
+    const statusLabel = (status: string) => statusTabs.find((tab) => tab.value === status)?.label ?? status;
 
     // Open (or close) the ledger review panel for a row (BM-014).
     const toggleLedger = async (id: string) => {
@@ -285,7 +264,6 @@ export default function Rewards() {
 
     const resetCreate = () => {
         setShowCreate(false);
-        setSelectedItemId('');
         setSelectedCustomer(null);
         setCustomerSearch('');
         setCustomerResults(null);
@@ -296,23 +274,20 @@ export default function Rewards() {
     const switchTrack = (t: Track) => {
         if (t === track) return;
         setTrack(t);
-        setActiveTab('pending');
+        setActiveTab(t === COMMERCIAL ? 'pending' : 'approved');
+        setCodeResult(null);
         setRejectId(null);
         resetCreate();
     };
 
     const handleCreate = async () => {
         if (!selectedCustomer) { toast.error('Select a customer first'); return; }
-        if (!isCommercial && !selectedItemId) { toast.error('Select a reward'); return; }
         setCreating(true);
         try {
-            // Household: POST /loyalty/redemptions { customerId, catalogItemId }.
-            // Commercial: POST /loyalty/commercial/redemptions { customerId } (no reward).
-            const path = isCommercial ? '/loyalty/commercial/redemptions' : '/loyalty/redemptions';
-            const body = isCommercial
-                ? { customerId: selectedCustomer.id }
-                : { customerId: selectedCustomer.id, catalogItemId: selectedItemId };
-            const res = await apiFetch(path, { method: 'POST', body: JSON.stringify(body) });
+            const res = await apiFetch('/loyalty/commercial/redemptions', {
+                method: 'POST',
+                body: JSON.stringify({ customerId: selectedCustomer.id }),
+            });
             const data = await res.json();
             if (!res.ok) {
                 // 400 (no account / inactive / out of stock / no completed cycle) and
@@ -343,10 +318,7 @@ export default function Rewards() {
         try {
             // Track-specific business action: household debits points + stock; commercial
             // decrements a completed cycle. Distinct endpoints, same 409 semantics.
-            const path = isCommercial
-                ? `/loyalty/commercial/redemptions/${id}/approve`
-                : `/loyalty/redemptions/${id}/approve`;
-            const res = await apiFetch(path, { method: 'POST' });
+            const res = await apiFetch(`/loyalty/commercial/redemptions/${id}/approve`, { method: 'POST' });
             const data = await res.json();
             if (!res.ok) {
                 // 409: no longer pending, insufficient points/stock (household), or no
@@ -414,14 +386,17 @@ export default function Rewards() {
         }
     };
 
-    const handleFulfill = async (id: string) => {
+    const handleFulfill = async (id: string, code?: string) => {
         setFulfillingId(id);
         try {
-            const res = await apiFetch(`/loyalty/redemptions/${id}/fulfill`, { method: 'POST' });
+            const res = await apiFetch(`/loyalty/redemptions/${id}/fulfill`, {
+                method: 'POST',
+                ...(code ? { body: JSON.stringify({ code }) } : {}),
+            });
             const data = await res.json();
             if (!res.ok) {
                 if (res.status === 409) {
-                    toast.error(apiErrorMessage(data, 'This redemption is not approved'));
+                    toast.error(apiErrorMessage(data, 'This reward is no longer ready for pickup'));
                     void queryClient.invalidateQueries({ queryKey: ['loyalty-redemptions'] });
             void queryClient.invalidateQueries({ queryKey: ['loyalty-summary'] });
                     return;
@@ -430,7 +405,8 @@ export default function Rewards() {
                 toast.error(apiErrorMessage(data, 'Failed to mark fulfilled'));
                 return;
             }
-            toast.success('Reward marked as handed over.');
+            toast.success('Reward handed over.');
+            setCodeResult((current) => current?.id === id ? { ...current, status: 'fulfilled' } : current);
             void queryClient.invalidateQueries({ queryKey: ['loyalty-redemptions'] });
             void queryClient.invalidateQueries({ queryKey: ['loyalty-summary'] });
         } catch (err) {
@@ -446,6 +422,7 @@ export default function Rewards() {
         if (!code) return;
         setCodeSearchLoading(true);
         setCodeSearchError(null);
+        setCodeResult(null);
         try {
             const res = await apiFetch(`/loyalty/redemptions/verify/${encodeURIComponent(code)}`);
             const data = await res.json();
@@ -454,10 +431,15 @@ export default function Rewards() {
                 return;
             }
             const found = data.redemption as RedemptionRow;
-            // Switch to "all" so the row is visible, then prepend the found row.
+            // Show the code's own track with every status so its row is visible in the queue.
+            if (found.track === HOUSEHOLD || found.track === COMMERCIAL) {
+                setTrack(found.track);
+                resetCreate();
+            }
+            setRejectId(null);
             setActiveTab('all');
-            void queryClient.invalidateQueries({ queryKey: ['redemptions'] });
-            toast.success(`Found redemption for ${found.customer_name ?? 'customer'} — status: ${found.status}`);
+            void queryClient.invalidateQueries({ queryKey: ['loyalty-redemptions'] });
+            setCodeResult(found);
             setCodeSearch('');
         } catch (err) {
             setCodeSearchError(err instanceof Error ? err.message : 'Failed to look up code');
@@ -501,17 +483,18 @@ export default function Rewards() {
                         {isCommercial ? '30+1 Cycle Overview' : 'Household Points Overview'}
                     </p>
                     <p className={styles.heroLabel}>
-                        {isCommercial ? 'Pending Free-Cylinder Requests' : 'Points Requested (Pending)'}
+                        {isCommercial ? 'Pending Free-Cylinder Requests' : 'Ready for Pickup'}
                     </p>
                     <p className={styles.heroValue}>
                         {trackSummary
-                            ? (isCommercial ? trackSummary.pending : trackSummary.pendingPoints)
+                            ? (isCommercial ? trackSummary.pending : trackSummary.approved)
                             : '—'}
                     </p>
                     <div className={styles.heroIcon}>
                         {isCommercial ? <RotateCw size={26} /> : <Star size={26} fill="currentColor" />}
                     </div>
                 </div>
+                {isCommercial && (
                 <div className={styles.metricCard}>
                     <div className={styles.metricIcon}>
                         {isCommercial ? <Building2 size={22} /> : <UsersRound size={22} />}
@@ -522,129 +505,113 @@ export default function Rewards() {
                         <p className={styles.metricDetail}>Awaiting your review</p>
                     </div>
                 </div>
+                )}
                 <div className={styles.metricCard}>
                     <div className={`${styles.metricIcon} ${styles.metricIconAmber}`}>
                         <Clock3 size={22} />
                     </div>
                     <div>
-                        <p className={styles.metricLabel}>Approved, Awaiting Pickup</p>
-                        <p className={styles.metricValue}>{trackSummary ? trackSummary.approved : '—'}</p>
-                        <p className={`${styles.metricDetail} ${styles.metricDetailAmber}`}>
+                        <p className={styles.metricLabel}>{isCommercial ? 'Approved, Awaiting Pickup' : 'Redeemed'}</p>
+                        <p className={styles.metricValue}>{trackSummary ? (isCommercial ? trackSummary.approved : trackSummary.fulfilled) : '—'}</p>
+                        {isCommercial && <p className={`${styles.metricDetail} ${styles.metricDetailAmber}`}>
                             {trackSummary ? `${trackSummary.fulfilled} fulfilled to date` : ' '}
-                        </p>
+                        </p>}
                     </div>
                 </div>
             </div>
 
-            {/* New redemption request. */}
-            <div className={styles.card}>
-                <div className={styles.cardHeaderFlex}>
-                    <div className={styles.cardTitle}>
-                        {isCommercial ? 'Commercial Free-Cylinder Redemptions' : 'Household Reward Redemptions'}
+            {isCommercial && (
+                <div className={styles.card}>
+                    <div className={styles.cardHeaderFlex}>
+                        <div className={styles.cardTitle}>
+                            Commercial Free-Cylinder Redemptions
+                        </div>
+                        <Button
+                            variant={showCreate ? 'outline' : 'accent'}
+                            size="sm"
+                            onClick={() => (showCreate ? resetCreate() : setShowCreate(true))}
+                        >
+                            {showCreate ? 'Cancel' : 'New Request'}
+                        </Button>
                     </div>
-                    <Button
-                        variant={showCreate ? 'outline' : 'accent'}
-                        size="sm"
-                        onClick={() => (showCreate ? resetCreate() : setShowCreate(true))}
-                    >
-                        {showCreate ? 'Cancel' : 'New Request'}
-                    </Button>
-                </div>
 
-                {showCreate && (
-                    <div className={styles.cardBody}>
-                        <div className={styles.createGrid}>
-                            {/* Customer picker (CIM search) */}
-                            <div>
-                                <label className={styles.fieldLabel}>Customer</label>
-                                {selectedCustomer ? (
-                                    <div className={styles.customerSelected}>
-                                        <div>
-                                            <div className={styles.boldText}>{selectedCustomer.name}</div>
-                                            <div className={styles.mutedText}>{formatPHMobile(selectedCustomer.contact_number)}</div>
-                                        </div>
-                                        <Button variant="ghost" size="sm" onClick={() => { setSelectedCustomer(null); setCustomerSearch(''); }}>
-                                            Change
-                                        </Button>
-                                    </div>
-                                ) : (
-                                    <>
-                                        <input
-                                            className={styles.textInput}
-                                            placeholder="Search name or number…"
-                                            value={customerSearch}
-                                            onChange={(e) => setCustomerSearch(e.target.value)}
-                                        />
-                                        {customerSearchLoading && <div className={styles.mutedText}>Searching…</div>}
-                                        {customerResults && customerResults.length > 0 && (
-                                            <div className={styles.results}>
-                                                {customerResults.map((c) => (
-                                                    <button
-                                                        key={c.id}
-                                                        type="button"
-                                                        className={styles.resultItem}
-                                                        onClick={() => { setSelectedCustomer(c); setCustomerResults(null); setCustomerSearch(''); }}
-                                                    >
-                                                        <span className={styles.boldText}>{c.name}</span>
-                                                        <span className={styles.mutedText}>{formatPHMobile(c.contact_number)}</span>
-                                                    </button>
-                                                ))}
-                                            </div>
-                                        )}
-                                        {customerResults && customerResults.length === 0 && !customerSearchLoading && (
-                                            <div className={styles.mutedText}>No matching customers.</div>
-                                        )}
-                                    </>
-                                )}
-                            </div>
-
-                            {/* Reward picker — household only (commercial reward is a free cylinder). */}
-                            {isCommercial ? (
+                    {showCreate && (
+                        <div className={styles.cardBody}>
+                            <div className={styles.createGrid}>
+                                {/* Customer picker (CIM search) */}
                                 <div>
-                                    <label className={styles.fieldLabel}>Reward</label>
+                                    <label className={styles.fieldLabel}>Customer</label>
+                                    {selectedCustomer ? (
+                                        <div className={styles.customerSelected}>
+                                            <div>
+                                                <div className={styles.boldText}>{selectedCustomer.name}</div>
+                                                <div className={styles.mutedText}>{formatPHMobile(selectedCustomer.contact_number)}</div>
+                                            </div>
+                                            <Button variant="ghost" size="sm" onClick={() => { setSelectedCustomer(null); setCustomerSearch(''); }}>
+                                                Change
+                                            </Button>
+                                        </div>
+                                    ) : (
+                                        <>
+                                            <input
+                                                className={styles.textInput}
+                                                placeholder="Search name or number…"
+                                                value={customerSearch}
+                                                onChange={(e) => setCustomerSearch(e.target.value)}
+                                            />
+                                            {customerSearchLoading && <div className={styles.mutedText}>Searching…</div>}
+                                            {customerResults && customerResults.length > 0 && (
+                                                <div className={styles.results}>
+                                                    {customerResults.map((c) => (
+                                                        <button
+                                                            key={c.id}
+                                                            type="button"
+                                                            className={styles.resultItem}
+                                                            onClick={() => { setSelectedCustomer(c); setCustomerResults(null); setCustomerSearch(''); }}
+                                                        >
+                                                            <span className={styles.boldText}>{c.name}</span>
+                                                            <span className={styles.mutedText}>{formatPHMobile(c.contact_number)}</span>
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            )}
+                                            {customerResults && customerResults.length === 0 && !customerSearchLoading && (
+                                                <div className={styles.mutedText}>No matching customers.</div>
+                                            )}
+                                        </>
+                                    )}
+                                </div>
+
+                                <div>
+                                    <p className={styles.fieldLabel}>Reward</p>
                                     <div className={styles.freeCylinderNote}>
                                         <Gift size={16} /> Free cylinder (30+1) — requires a completed cycle.
                                     </div>
                                 </div>
-                            ) : (
-                                <div>
-                                    <label className={styles.fieldLabel}>Reward</label>
-                                    <Select value={selectedItemId} onValueChange={setSelectedItemId}>
-                                        <SelectTrigger>
-                                            <SelectValue placeholder="Select a reward…" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {catalog.map((c) => (
-                                                <SelectItem key={c.id} value={c.id}>
-                                                    {c.name} — {c.points_cost} pts{c.stock_qty <= 0 ? ' (out of stock)' : ''}
-                                                </SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                            )}
-                        </div>
+                            </div>
 
-                        <div className={styles.createActions}>
-                            <Button
-                                variant="accent"
-                                size="sm"
-                                onClick={handleCreate}
-                                disabled={creating || !selectedCustomer || (!isCommercial && !selectedItemId)}
-                            >
-                                {creating ? 'Logging…' : 'Log Request'}
-                            </Button>
+                            <div className={styles.createActions}>
+                                <Button
+                                    variant="accent"
+                                    size="sm"
+                                    onClick={handleCreate}
+                                    disabled={creating || !selectedCustomer}
+                                >
+                                    {creating ? 'Logging…' : 'Log Request'}
+                                </Button>
+                            </div>
                         </div>
-                    </div>
-                )}
-            </div>
+                    )}
+                </div>
 
-            {/* Approval queue */}
+            )}
+
+            {/* Pickup and redemption history */}
             <div className={styles.card}>
                 <div className={styles.cardHeaderFlex}>
                     <Tabs value={activeTab} onValueChange={setActiveTab}>
                         <TabsList>
-                            {STATUS_TABS.map((t) => (
+                            {statusTabs.map((t) => (
                                 <TabsTrigger key={t.value} value={t.value}>{t.label}</TabsTrigger>
                             ))}
                         </TabsList>
@@ -652,7 +619,8 @@ export default function Rewards() {
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                         <input
                             type="text"
-                            placeholder="Search by code…"
+                            aria-label="Pickup code"
+                            placeholder="Enter pickup code…"
                             value={codeSearch}
                             onChange={(e) => { setCodeSearch(e.target.value); setCodeSearchError(null); }}
                             onKeyDown={(e) => { if (e.key === 'Enter') handleCodeSearch(); }}
@@ -679,7 +647,24 @@ export default function Rewards() {
                     </div>
                 </div>
                 {codeSearchError && (
-                    <div style={{ padding: '8px 16px', color: '#dc2626', fontSize: 13 }}>{codeSearchError}</div>
+                    <div role="alert" style={{ padding: '8px 16px', color: '#dc2626', fontSize: 13 }}>{codeSearchError}</div>
+                )}
+                {codeResult && (
+                    <div role="status" style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', padding: '8px 16px', fontSize: 13, background: '#f0f9ff', borderBottom: '1px solid #e0f2fe' }}>
+                        <strong>Code {codeResult.redemption_code ?? '—'}</strong>
+                        <span>{codeResult.customer_name ?? 'Customer'} · {codeResult.catalog_item_name ?? codeResult.reward_description ?? (codeResult.track === COMMERCIAL ? 'Free cylinder' : 'Reward')}</span>
+                        <Badge variant={getStatusVariant(codeResult.status)}>{statusLabel(codeResult.status)}</Badge>
+                        {codeResult.track === HOUSEHOLD && codeResult.status === 'approved' && codeResult.redemption_code && (
+                            <Button
+                                size="sm"
+                                disabled={fulfillingId !== null}
+                                onClick={() => void handleFulfill(codeResult.id, codeResult.redemption_code ?? undefined)}
+                            >
+                                {fulfillingId === codeResult.id ? 'Confirming…' : 'Confirm pickup'}
+                            </Button>
+                        )}
+                        <button type="button" onClick={() => setCodeResult(null)} style={{ marginLeft: 'auto', color: '#475569' }} aria-label="Dismiss code result">Dismiss</button>
+                    </div>
                 )}
 
                 <div className={styles.tableWrapper}>
@@ -751,8 +736,8 @@ export default function Rewards() {
                                             </td>
                                             <td className={styles.mutedText}>{formatDateTime(r.requested_at)}</td>
                                             <td>
-                                                <Badge variant={getStatusVariant(r.status)}>{r.status}</Badge>
-                                                {r.redemption_code && (
+                                                <Badge variant={getStatusVariant(r.status)}>{statusLabel(r.status)}</Badge>
+                                                {isCommercial && r.redemption_code && (
                                                     <div className={styles.codeBadge} title="System-issued redemption code">{r.redemption_code}</div>
                                                 )}
                                                 {r.status === 'rejected' && r.rejected_reason && (
@@ -761,7 +746,7 @@ export default function Rewards() {
                                             </td>
                                             <td className={styles.actionsCell}>
                                                 <div className={styles.actionButtons}>
-                                                    {/* Review the customer's ledger before deciding (BM-014). */}
+                                                    {/* Ledger investigation is optional for pickup. */}
                                                     <Button
                                                         variant="link"
                                                         size="sm"
@@ -770,7 +755,7 @@ export default function Rewards() {
                                                     >
                                                         {ledgerId === r.id ? 'Hide ledger' : 'View ledger'}
                                                     </Button>
-                                                    {r.status === 'pending' && (
+                                                    {isCommercial && r.status === 'pending' && (
                                                         <>
                                                             <Button
                                                                 variant="accent"
@@ -787,7 +772,7 @@ export default function Rewards() {
                                                             </Button>
                                                         </>
                                                     )}
-                                                    {r.status === 'approved' && (
+                                                    {isCommercial && r.status === 'approved' && (
                                                         <Button variant="secondary" size="sm" onClick={() => handleFulfill(r.id)} disabled={fulfillingId === r.id}>
                                                             {fulfillingId === r.id ? 'Saving…' : 'Mark Fulfilled'}
                                                         </Button>

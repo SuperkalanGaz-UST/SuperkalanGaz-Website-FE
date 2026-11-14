@@ -25,7 +25,8 @@
 
 .orderForm { display: flex; flex-direction: column; gap: 1rem; }
 .formGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; }
-.formFooter { display: flex; justify-content: flex-end; padding-top: 0; }
+.formFooter { display: flex; justify-content: flex-end; align-items: center; gap: 1rem; padding-top: 0; }
+.formTotal { font-size: 0.95rem; font-weight: 600; }
 
 .tabsWrapper { display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; padding: 1rem 1.25rem; border-bottom: 1px solid #f3f4f6; }
 .toolbarTabs { flex: 0 0 auto; }
@@ -182,3 +183,10 @@
 .customerChipClose:hover { background-color: rgba(0,0,0,0.1); color: var(--foreground); }
 @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 .spin { animation: spin 1s linear infinite; }
+
+/* Walk-in intake: additional cylinder lines on the same Service Request. */
+.extraCylinderRow { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 10rem) auto; gap: 1rem; align-items: end; margin-top: 0.75rem; }
+.removeCylinderBtn { margin-bottom: 0.15rem; }
+.addCylinderBtn { margin-top: 0.75rem; align-self: flex-start; }
+.extraCylinderError { margin-top: 0.5rem; font-size: 0.85rem; color: var(--destructive, #dc2626); }
+@media (max-width: 640px) { .extraCylinderRow { grid-template-columns: minmax(0, 1fr) minmax(0, 6rem) auto; } }

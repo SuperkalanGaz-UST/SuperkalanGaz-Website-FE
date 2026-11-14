@@ -19,8 +19,13 @@
 .vehicleCard { background-color: var(--card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 1.25rem; box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 1.25rem; }
 .cardHeader { display: flex; justify-content: space-between; align-items: flex-start; }
 .statusStack { display: flex; flex-direction: column; align-items: flex-end; gap: 0.35rem; }
-.vehicleIdentity { display: flex; flex-direction: column; gap: 0.15rem; }
-.vehicleName { font-size: 1.1rem; font-weight: 600; color: var(--foreground); }
+.vehicleIdentity { display: flex; flex-direction: column; gap: 0.15rem; min-width: 0; }
+.vehicleName { font-size: 1.1rem; font-weight: 600; color: var(--foreground); overflow-wrap: anywhere; }
+.vehicleNameRow { display: flex; align-items: center; gap: 0.35rem; min-width: 0; }
+.renameButton { display: inline-flex; align-items: center; justify-content: center; width: 1.75rem; height: 1.75rem; border: none; border-radius: var(--radius-sm); background: transparent; color: var(--muted-foreground); cursor: pointer; flex-shrink: 0; }
+.renameButton:hover { background: var(--muted); color: var(--foreground); }
+.renameButton:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+.vehicleRider { font-size: 0.8rem; color: var(--muted-foreground); margin-top: 0.15rem; }
 .vehiclePlate { font-family: var(--font-family-monospace); font-size: 0.85rem; color: var(--muted-foreground); background: var(--muted); padding: 0.15rem 0.4rem; border-radius: var(--radius-sm); width: fit-content; }
 
 .metricsRow { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }

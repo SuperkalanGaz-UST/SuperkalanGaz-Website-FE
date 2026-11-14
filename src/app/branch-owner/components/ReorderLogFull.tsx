@@ -1,53 +1,68 @@
 import { useState, useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Header } from './Header';
 import { Pagination } from './Pagination';
 import { Select } from './Select';
 import { ArrowLeft, Search } from 'lucide-react';
+import { fetchJson } from '../../lib/api';
+import { useBranch } from '../contexts/BranchContext';
 
-const fullReorderData = [
-  { requestId: 'ROR-105', dateRequested: 'Apr 28, 2026', qtyRequested: 50, requestedBy: 'Branch Manager: J. Reyes', status: 'Pending', fulfilledDate: 'Apr 30, 2026' },
-  { requestId: 'ROR-104', dateRequested: 'Apr 20, 2026', qtyRequested: 40, requestedBy: 'Branch Manager: J. Reyes', status: 'Fulfilled', fulfilledDate: 'Apr 22, 2026' },
-  { requestId: 'ROR-103', dateRequested: 'Apr 18, 2026', qtyRequested: 35, requestedBy: 'Branch Manager: J. Reyes', status: 'Fulfilled', fulfilledDate: '-' },
-  { requestId: 'ROR-102', dateRequested: 'Apr 12, 2026', qtyRequested: 45, requestedBy: 'Branch Manager: J. Reyes', status: 'Fulfilled', fulfilledDate: 'Apr 14, 2026' },
-  { requestId: 'ROR-101', dateRequested: 'Apr 5, 2026', qtyRequested: 50, requestedBy: 'Branch Manager: J. Reyes', status: 'Fulfilled', fulfilledDate: 'Apr 7, 2026' },
-  { requestId: 'ROR-100', dateRequested: 'Mar 28, 2026', qtyRequested: 60, requestedBy: 'Branch Manager: J. Reyes', status: 'Fulfilled', fulfilledDate: 'Mar 30, 2026' },
-  { requestId: 'ROR-099', dateRequested: 'Mar 20, 2026', qtyRequested: 45, requestedBy: 'Branch Manager: J. Reyes', status: 'Fulfilled', fulfilledDate: 'Mar 22, 2026' },
-  { requestId: 'ROR-098', dateRequested: 'Mar 15, 2026', qtyRequested: 40, requestedBy: 'Branch Manager: J. Reyes', status: 'Fulfilled', fulfilledDate: 'Mar 17, 2026' },
-  { requestId: 'ROR-097', dateRequested: 'Mar 10, 2026', qtyRequested: 55, requestedBy: 'Branch Manager: J. Reyes', status: 'Fulfilled', fulfilledDate: 'Mar 12, 2026' },
-  { requestId: 'ROR-096', dateRequested: 'Mar 5, 2026', qtyRequested: 50, requestedBy: 'Branch Manager: J. Reyes', status: 'Fulfilled', fulfilledDate: 'Mar 7, 2026' },
-  { requestId: 'ROR-095', dateRequested: 'Feb 28, 2026', qtyRequested: 45, requestedBy: 'Branch Manager: J. Reyes', status: 'Fulfilled', fulfilledDate: 'Mar 2, 2026' },
-  { requestId: 'ROR-094', dateRequested: 'Feb 20, 2026', qtyRequested: 40, requestedBy: 'Branch Manager: J. Reyes', status: 'Fulfilled', fulfilledDate: 'Feb 22, 2026' },
-];
+interface ReorderRow {
+  id: string;
+  product_name: string;
+  cylinder_size: string;
+  requested_qty: number;
+  status: 'Pending' | 'Approved' | 'Delivered' | 'Cancelled';
+  requested_by_name: string | null;
+  requested_at: string;
+  decided_at: string | null;
+}
+
+const STATUS_STYLES: Record<ReorderRow['status'], string> = {
+  Pending: 'bg-amber-100 text-amber-700',
+  Approved: 'bg-blue-100 text-blue-700',
+  Delivered: 'bg-green-100 text-green-700',
+  Cancelled: 'bg-gray-100 text-gray-600',
+};
+
+const formatDate = (value: string | null) =>
+  value
+    ? new Date(value).toLocaleDateString('en-PH', { timeZone: 'Asia/Manila', month: 'short', day: 'numeric', year: 'numeric' })
+    : '—';
 
 export function ReorderLogFull({ onBack }: { onBack: () => void }) {
+  const { selectedBranchId } = useBranch();
   const [currentPage, setCurrentPage] = useState(1);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
 
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['owner-reorder-requests', selectedBranchId],
+    enabled: !!selectedBranchId,
+    queryFn: () =>
+      fetchJson<{ reorderRequests: ReorderRow[] }>(
+        `/inventory/reorder-requests/owner?branchId=${encodeURIComponent(selectedBranchId!)}`,
+      ),
+  });
+
   const itemsPerPage = 10;
 
   const filteredData = useMemo(() => {
-    let data = fullReorderData;
-
-    if (searchQuery) {
-      data = data.filter(row =>
-        Object.values(row).some(val =>
-          String(val).toLowerCase().includes(searchQuery.toLowerCase())
-        )
+    let rows = data?.reorderRequests ?? [];
+    const term = searchQuery.trim().toLowerCase();
+    if (term) {
+      rows = rows.filter((row) =>
+        [row.product_name, row.cylinder_size, row.requested_by_name, row.status]
+          .some((value) => String(value ?? '').toLowerCase().includes(term)),
       );
     }
-
-    if (filterStatus !== 'all') {
-      data = data.filter(row => row.status === filterStatus);
-    }
-
-    return data;
-  }, [searchQuery, filterStatus]);
+    if (filterStatus !== 'all') rows = rows.filter((row) => row.status === filterStatus);
+    return rows;
+  }, [data, searchQuery, filterStatus]);
 
   const totalPages = Math.ceil(filteredData.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
-  const endIndex = startIndex + itemsPerPage;
-  const currentData = filteredData.slice(startIndex, endIndex);
+  const currentData = filteredData.slice(startIndex, startIndex + itemsPerPage);
 
   const hasActiveFilters = searchQuery || filterStatus !== 'all';
 
@@ -56,6 +71,11 @@ export function ReorderLogFull({ onBack }: { onBack: () => void }) {
     setFilterStatus('all');
     setCurrentPage(1);
   };
+
+  let emptyMessage = 'No reorder requests have been logged for this branch yet.';
+  if (!selectedBranchId) emptyMessage = 'Select a branch to see its reorder requests.';
+  else if (error) emptyMessage = "Couldn't load reorder requests. Try again in a moment.";
+  else if (hasActiveFilters) emptyMessage = 'No reorder requests match these filters.';
 
   return (
     <div className="flex-1 overflow-y-auto">
@@ -69,7 +89,7 @@ export function ReorderLogFull({ onBack }: { onBack: () => void }) {
           className="flex items-center gap-2 text-sm text-[#007BC1] hover:text-[#005a8f] mb-6 transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
-          Back
+          Back to Inventory
         </button>
 
         <div className="bg-white rounded-lg border border-gray-200 p-6">
@@ -78,7 +98,8 @@ export function ReorderLogFull({ onBack }: { onBack: () => void }) {
               <Search className="w-5 h-5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
-                placeholder="Search..."
+                aria-label="Search reorder requests"
+                placeholder="Search by product or requester..."
                 value={searchQuery}
                 onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
                 className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#007BC1] focus:border-transparent outline-none text-sm"
@@ -90,7 +111,9 @@ export function ReorderLogFull({ onBack }: { onBack: () => void }) {
               options={[
                 { value: 'all', label: 'All Status' },
                 { value: 'Pending', label: 'Pending' },
-                { value: 'Fulfilled', label: 'Fulfilled' },
+                { value: 'Approved', label: 'Approved' },
+                { value: 'Delivered', label: 'Delivered' },
+                { value: 'Cancelled', label: 'Cancelled' },
               ]}
             />
             {hasActiveFilters && (
@@ -103,40 +126,42 @@ export function ReorderLogFull({ onBack }: { onBack: () => void }) {
             )}
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-gray-200">
-                  <th className="text-left text-xs font-semibold text-gray-700 pb-3">Request ID</th>
-                  <th className="text-left text-xs font-semibold text-gray-700 pb-3">Date Requested</th>
-                  <th className="text-left text-xs font-semibold text-gray-700 pb-3">Qty Requested</th>
-                  <th className="text-left text-xs font-semibold text-gray-700 pb-3">Requested By</th>
-                  <th className="text-left text-xs font-semibold text-gray-700 pb-3">Status</th>
-                  <th className="text-left text-xs font-semibold text-gray-700 pb-3">Fulfilled Date</th>
-                </tr>
-              </thead>
-              <tbody>
-                {currentData.map((row) => (
-                  <tr key={row.requestId} className="border-b border-gray-100">
-                    <td className="py-3 text-[13px] text-gray-900">{row.requestId}</td>
-                    <td className="py-3 text-[13px] text-gray-600">{row.dateRequested}</td>
-                    <td className="py-3 text-[13px] text-gray-600">{row.qtyRequested} cylinders</td>
-                    <td className="py-3 text-[13px] text-gray-600">{row.requestedBy}</td>
-                    <td className="py-3">
-                      <span className={`inline-block px-3 py-1 rounded-full text-[11px] font-medium ${
-                        row.status === 'Fulfilled'
-                          ? 'bg-green-100 text-green-700'
-                          : 'bg-amber-100 text-amber-700'
-                      }`}>
-                        {row.status}
-                      </span>
-                    </td>
-                    <td className="py-3 text-[13px] text-gray-600">{row.fulfilledDate}</td>
+          {isLoading ? (
+            <p className="py-10 text-center text-sm text-gray-400">Loading…</p>
+          ) : currentData.length === 0 ? (
+            <p className={`py-10 text-center text-sm ${error ? 'text-red-600' : 'text-gray-500'}`}>{emptyMessage}</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-gray-200">
+                    <th className="text-left text-xs font-semibold text-gray-700 pb-3">Product</th>
+                    <th className="text-left text-xs font-semibold text-gray-700 pb-3">Date Requested</th>
+                    <th className="text-left text-xs font-semibold text-gray-700 pb-3">Qty Requested</th>
+                    <th className="text-left text-xs font-semibold text-gray-700 pb-3">Requested By</th>
+                    <th className="text-left text-xs font-semibold text-gray-700 pb-3">Status</th>
+                    <th className="text-left text-xs font-semibold text-gray-700 pb-3">Last Updated</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {currentData.map((row) => (
+                    <tr key={row.id} className="border-b border-gray-100">
+                      <td className="py-3 text-[13px] text-gray-900">{row.product_name}</td>
+                      <td className="py-3 text-[13px] text-gray-600">{formatDate(row.requested_at)}</td>
+                      <td className="py-3 text-[13px] text-gray-600">{row.requested_qty} cylinders</td>
+                      <td className="py-3 text-[13px] text-gray-600">{row.requested_by_name ?? 'Branch Manager'}</td>
+                      <td className="py-3">
+                        <span className={`inline-block px-3 py-1 rounded-full text-[11px] font-medium ${STATUS_STYLES[row.status]}`}>
+                          {row.status}
+                        </span>
+                      </td>
+                      <td className="py-3 text-[13px] text-gray-600">{formatDate(row.decided_at)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
 
           {totalPages > 1 && (
             <div className="mt-6">

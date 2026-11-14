@@ -4,13 +4,14 @@ import React, { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Target, ShoppingCart, Truck, Star, Gift, AlertCircle, Loader2 } from "lucide-react";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Line, LineChart, Pie, PieChart, ReferenceLine, XAxis, YAxis, Cell } from "recharts";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../components/Select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/app/components/ui/select";
 import { KPICard } from "../../../components/KPICard";
 import { Badge } from "../../components/Badge";
 import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend, ChartLegendContent } from "../../components/Chart";
 import { Tabs, TabsList, TabsTrigger } from "../../components/Tabs";
 import { fetchJson } from "../../../lib/api";
 import styles from "./screen.module.css";
+import { serviceRequestItems, type ServiceRequestCylinderFields } from '../../../lib/serviceRequestItems';
 
 const orderChartConfig = { orders: { label: "Total Orders", color: "var(--primary)" } };
 const csatChartConfig = { csat: { label: "Avg CSAT Score", color: "#f59e0b" } };
@@ -25,14 +26,12 @@ const CHART_TABS = [
 ] as const;
 type ChartCategory = (typeof CHART_TABS)[number]["value"];
 
-interface SRRow {
+interface SRRow extends ServiceRequestCylinderFields {
     id: string;
     status: string;
     requested_at: string;
     dispatched_at: string | null;
     delivered_at: string | null;
-    cylinder_size: string;
-    quantity: number;
     total_amount: number;
 }
 interface RatingRow { stars: number; submitted_at: string; resolution_status?: string; resolved_at?: string | null; }
@@ -209,8 +208,11 @@ export default function AnalyticsPage() {
         });
 
         const prodMap = new Map();
+        // Count every line of a mixed order, not only its first cylinder size.
         for (const r of curReq) {
-            prodMap.set(r.cylinder_size, (prodMap.get(r.cylinder_size) || 0) + r.quantity);
+            for (const item of serviceRequestItems(r)) {
+                prodMap.set(item.cylinder_size, (prodMap.get(item.cylinder_size) || 0) + item.quantity);
+            }
         }
         const colors = ['var(--primary)', '#0ea5e9', '#f59e0b', '#10b981', '#8b5cf6'];
         const prodArr = Array.from(prodMap.entries()).map(([name, value], i) => ({

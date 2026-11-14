@@ -17,7 +17,6 @@ import { BranchSettings } from './components/BranchSettings';
 import { DeliveryCompletionFull } from './components/DeliveryCompletionFull';
 import { DeliveryProofRecordsFull } from './components/DeliveryProofRecordsFull';
 import { ComplaintLogFull } from './components/ComplaintLogFull';
-import { PurchaseTrackerFull } from './components/PurchaseTrackerFull';
 import { RedemptionHistoryFull } from './components/RedemptionHistoryFull';
 import { ReorderLogFull } from './components/ReorderLogFull';
 import { CustomerRatingsFull } from './components/CustomerRatingsFull';
@@ -72,7 +71,6 @@ export function BranchOwnerApp() {
           {activeScreen === 'delivery-completion-full' && <DeliveryCompletionFull onBack={() => setActiveScreen('order-analytics')} />}
           {activeScreen === 'delivery-proof-full' && <DeliveryProofRecordsFull onBack={() => setActiveScreen('order-analytics')} />}
           {activeScreen === 'complaint-log-full' && <ComplaintLogFull onBack={() => setActiveScreen('csat')} />}
-          {activeScreen === 'purchase-tracker-full' && <PurchaseTrackerFull onBack={() => setActiveScreen('loyalty')} />}
           {activeScreen === 'redemption-history-full' && <RedemptionHistoryFull onBack={() => setActiveScreen('loyalty')} />}
           {activeScreen === 'reorder-log-full' && <ReorderLogFull onBack={() => setActiveScreen('inventory')} />}
           {activeScreen === 'customer-ratings-full' && <CustomerRatingsFull onBack={() => setActiveScreen('csat')} />}

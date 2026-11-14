@@ -37,8 +37,6 @@ export function BranchSettings() {
   const [editingBranch, setEditingBranch] = useState<BranchRow | null>(null);
   const [deletingBranch, setDeletingBranch] = useState<BranchRow | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
-  const [rewardThreshold, setRewardThreshold] = useState("30");
-  const [dualAuth, setDualAuth] = useState(true);
   const [stock11kg, setStock11kg] = useState("10");
   const [stock22kg, setStock22kg] = useState("5");
   const [stock50kg, setStock50kg] = useState("3");
@@ -52,8 +50,6 @@ export function BranchSettings() {
   };
 
   const handleDiscard = () => {
-    setRewardThreshold("30");
-    setDualAuth(true);
     setStock11kg("10");
     setStock22kg("5");
     setStock50kg("3");
@@ -276,52 +272,6 @@ export function BranchSettings() {
           </div>
 
           <div className={styles.policyGrid}>
-          {/* System-Wide Loyalty Policy */}
-          <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">
-              System-Wide Loyalty Policy
-            </h3>
-
-            <div className="mb-6">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Reward Threshold (applies to all branches)
-              </label>
-              <input
-                type="number"
-                value={rewardThreshold}
-                onChange={(e) =>
-                  setRewardThreshold(e.target.value)
-                }
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#007BC1] focus:border-transparent outline-none"
-              />
-              <p className="text-xs text-gray-500 mt-1.5">
-                Number of purchases before a free tank reward is flagged. Branch Owners cannot change this value.
-              </p>
-            </div>
-
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <label className="text-sm font-medium text-gray-700">
-                  Require dual authorization for all redemptions
-                </label>
-                <button
-                  onClick={() => setDualAuth(!dualAuth)}
-                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                    dualAuth ? "bg-[#007BC1]" : "bg-gray-300"
-                  }`}
-                >
-                  <span
-                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                      dualAuth
-                        ? "translate-x-6"
-                        : "translate-x-1"
-                    }`}
-                  />
-                </button>
-              </div>
-            </div>
-          </div>
-
           {/* System-Wide Low-Stock Policy */}
           <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">

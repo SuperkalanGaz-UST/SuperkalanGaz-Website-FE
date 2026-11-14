@@ -17,3 +17,8 @@ export function serviceRequestItems(request: ServiceRequestCylinderFields): Serv
 export function serviceRequestCylinderSummary(request: ServiceRequestCylinderFields): string {
     return serviceRequestItems(request).map(item => `${item.quantity}× ${item.cylinder_size}`).join(', ');
 }
+
+/** Total cylinders across every line, for "Qty" columns beside a mixed-size summary. */
+export function serviceRequestTotalQuantity(request: ServiceRequestCylinderFields): number {
+    return serviceRequestItems(request).reduce((sum, item) => sum + item.quantity, 0);
+}

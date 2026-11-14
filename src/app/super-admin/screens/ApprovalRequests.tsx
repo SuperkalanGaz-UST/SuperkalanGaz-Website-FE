@@ -65,7 +65,6 @@ export function ApprovalRequests() {
   const [search, setSearch] = useState('');
   const [reason, setReason] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const [temporaryPassword, setTemporaryPassword] = useState<string | null>(null);
 
   const { data: requests, error: queryError, refetch: load } = useQuery({
     queryKey: ['approval-requests'],
@@ -92,10 +91,8 @@ export function ApprovalRequests() {
       return;
     }
     setSubmitting(true);
-    setTemporaryPassword(null);
     try {
       const result = await governanceApi.decide(selected.id, decision, reason.trim());
-      if (result.temporary_password) setTemporaryPassword(result.temporary_password);
       toast.success(`Request ${humanize(result.request.status).toLowerCase()}.`);
       setReason('');
       await load();
@@ -151,7 +148,7 @@ export function ApprovalRequests() {
                   <button
                     key={request.id}
                     type="button"
-                    onClick={() => { setSelectedId(request.id); setTemporaryPassword(null); }}
+                    onClick={() => setSelectedId(request.id)}
                     className={`grid w-full grid-cols-[1fr_auto] items-start gap-4 px-6 py-5 text-left transition ${selected?.id === request.id ? 'border-l-[3px] border-l-[#007BC1] bg-blue-50/50' : 'hover:bg-gray-50'}`}
                   >
                     <div className="min-w-0">
@@ -195,16 +192,6 @@ export function ApprovalRequests() {
                     )}
                   </div>
 
-                  {temporaryPassword && (
-                    <div className="mb-5 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-                      <p className="font-semibold">One-time temporary password</p>
-                      <div className="mt-2 flex items-center justify-between gap-3 rounded-lg bg-white px-3 py-2 font-mono">
-                        <span>{temporaryPassword}</span>
-                        <button type="button" onClick={() => void navigator.clipboard.writeText(temporaryPassword)} className="font-sans text-xs font-semibold text-[#007BC1]">Copy</button>
-                      </div>
-                      <p className="mt-2 text-xs">Copy it now. It is not stored in the CRM or audit log.</p>
-                    </div>
-                  )}
 
                   {selected.status === 'pending' ? (
                     <>

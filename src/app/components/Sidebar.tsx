@@ -1,6 +1,6 @@
 'use client';
 
-import { Building2, ClipboardCheck, FileCheck2, LayoutDashboard, Settings, Star, TrendingUp, Users } from 'lucide-react';
+import { Building2, ClipboardCheck, Gift, LayoutDashboard, Settings, Star, TrendingUp, Users } from 'lucide-react';
 import { AppSidebar, SidebarNavEntry } from './AppSidebar';
 
 const PesoIcon = ({ className }: { className?: string }) => (
@@ -29,11 +29,11 @@ const NAV_ENTRIES: SidebarNavEntry[] = [
   { icon: LayoutDashboard, label: 'Dashboard',           id: 'dashboard' },
   { icon: TrendingUp,      label: 'Branch Accounts',     id: 'order-analytics' },
   { icon: Users,           label: 'Customers',           id: 'customers' },
+  { icon: Gift,            label: 'Household Rewards',    id: 'loyalty' },
   { icon: Star,            label: 'System CSAT',         id: 'csat' },
   { icon: Building2,       label: 'Franchise Registry',  id: 'franchise-registry' },
   { icon: PesoIcon,        label: 'Price Configuration', id: 'price-config' },
   { icon: ClipboardCheck,  label: 'Governance Requests', id: 'governance-requests' },
-  { icon: FileCheck2,      label: 'Account Reviews',     id: 'account-reviews' },
   { icon: Settings,        label: 'Settings',            id: 'account-settings' },
 ];
 

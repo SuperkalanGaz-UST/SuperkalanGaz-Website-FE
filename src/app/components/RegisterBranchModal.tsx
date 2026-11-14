@@ -171,6 +171,7 @@ export function RegisterBranchModal({ isOpen, onClose }: RegisterBranchModalProp
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [ownerInvitationSent, setOwnerInvitationSent] = useState(false);
+  const [ownerInvitationUnconfirmed, setOwnerInvitationUnconfirmed] = useState(false);
   // The real branch reference/code the API assigned, shown on the success modal.
   const [branchReference, setBranchReference] = useState('');
 
@@ -227,10 +228,9 @@ export function RegisterBranchModal({ isOpen, onClose }: RegisterBranchModalProp
         return;
       }
 
-      if (ownerType === 'new' && data?.owner?.invitationSent !== true) {
-        toast.error('The branch was created, but invitation sending could not be confirmed. Check its owner invitation before retrying.');
-        return;
-      }
+      // The branch exists from here on. Always leave the wizard so "Confirm & Create"
+      // can't be clicked again and create a duplicate branch.
+      setOwnerInvitationUnconfirmed(ownerType === 'new' && data?.owner?.invitationSent !== true);
       setOwnerInvitationSent(data?.owner?.invitationSent === true);
       setBranchReference(data?.code ?? '');
       setShowSuccess(true);
@@ -241,17 +241,21 @@ export function RegisterBranchModal({ isOpen, onClose }: RegisterBranchModalProp
     }
   };
 
+  // After a successful create, the next registration must start empty.
   const handleSuccessClose = () => {
-    setShowSuccess(false);
+    handleRegisterAnother();
     onClose();
-    setCurrentStep(1);
   };
 
   const handleRegisterAnother = () => {
     setShowSuccess(false);
     setOwnerInvitationSent(false);
+    setOwnerInvitationUnconfirmed(false);
+    setSubmitError(null);
     setBranchReference('');
     setCurrentStep(1);
+    setOwnerType('existing');
+    setRegion('');
     setSelectedOwnerId(null);
     setOwnerSearch('');
     setBranchName('');
@@ -311,6 +315,7 @@ export function RegisterBranchModal({ isOpen, onClose }: RegisterBranchModalProp
         ownerName={resolvedOwnerName}
         ownerEmail={resolvedOwnerEmail}
         ownerInvitationSent={ownerInvitationSent}
+        ownerInvitationUnconfirmed={ownerInvitationUnconfirmed}
         onClose={handleSuccessClose}
         onRegisterAnother={handleRegisterAnother}
       />

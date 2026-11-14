@@ -10,6 +10,7 @@ import { Pagination } from '../../../components/Pagination';
 import { apiErrorMessage, fetchJson } from '../../../lib/api';
 import { formatPHMobile } from '../../../lib/phMobile';
 import { useBranch } from '../../contexts/BranchContext';
+import { serviceRequestCylinderSummary, serviceRequestTotalQuantity, type ServiceRequestCylinderFields } from '../../../lib/serviceRequestItems';
 import { Header } from '../Header';
 import styles from './screen.module.css';
 import '../../../branch-manager/bm-theme.css';
@@ -38,11 +39,9 @@ interface CustomerRow {
 /** One order from GET /service-requests/customers/:id — trimmed to what the
  * detail view's order-history table shows (the full row also carries payment
  * and SLA fields the orders screen uses, not needed here). */
-interface OrderHistoryRow {
+interface OrderHistoryRow extends ServiceRequestCylinderFields {
     id: string;
     status: string;
-    cylinder_size: string;
-    quantity: number;
     total_amount: number | null;
     requested_at: string;
     delivered_at: string | null;
@@ -398,8 +397,8 @@ export default function Customers(_props: CustomersProps = {}) {
                                                 {orders.slice(0, 7).map((o) => (
                                                     <tr key={o.id}>
                                                         <td className={styles.mutedText}>{formatDate(o.requested_at)}</td>
-                                                        <td>{o.cylinder_size}</td>
-                                                        <td>{o.quantity}</td>
+                                                        <td>{serviceRequestCylinderSummary(o)}</td>
+                                                        <td>{serviceRequestTotalQuantity(o)}</td>
                                                         <td>{formatCurrency(o.total_amount)}</td>
                                                         <td><Badge variant={getStatusVariant(o.status)}>{o.status}</Badge></td>
                                                     </tr>

@@ -15,6 +15,7 @@ const SCREEN_PATHS: Record<Role, Readonly<Record<string, string>>> = {
     settings: 'settings',
   },
   'franchise-admin': {
+    loyalty: 'loyalty',
     dashboard: 'dashboard',
     'order-analytics': 'order-analytics',
     customers: 'customers',
@@ -23,7 +24,6 @@ const SCREEN_PATHS: Record<Role, Readonly<Record<string, string>>> = {
     'franchise-registry': 'franchise-registry',
     'price-config': 'price-configuration',
     'governance-requests': 'governance-requests',
-    'account-reviews': 'account-reviews',
     'account-settings': 'settings',
     'delivery-completion-full': 'delivery-completion',
     'complaint-log-full': 'complaint-log',
@@ -48,7 +48,6 @@ const SCREEN_PATHS: Record<Role, Readonly<Record<string, string>>> = {
     'delivery-completion-full': 'delivery-completion',
     'delivery-proof-full': 'delivery-proof',
     'complaint-log-full': 'complaint-log',
-    'purchase-tracker-full': 'purchase-tracker',
     'redemption-history-full': 'redemption-history',
     'reorder-log-full': 'reorder-log',
     'customer-ratings-full': 'customer-ratings',

@@ -1,6 +1,6 @@
 'use client';
 
-import { serviceRequestCylinderSummary, type ServiceRequestCylinderFields } from '../../../lib/serviceRequestItems';
+import { serviceRequestCylinderSummary, serviceRequestTotalQuantity, type ServiceRequestCylinderFields } from '../../../lib/serviceRequestItems';
 import React, { useMemo, useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { RefreshCw, Search, UserRound, X, Coins, Boxes, Users } from 'lucide-react';
@@ -408,7 +408,7 @@ export default function Customers({ onViewOrders }: CustomersProps = {}) {
                                                     <tr key={o.id}>
                                                         <td className={styles.mutedText}>{formatDate(o.requested_at)}</td>
                                                         <td>{serviceRequestCylinderSummary(o)}</td>
-                                                        <td>{o.quantity}</td>
+                                                        <td>{serviceRequestTotalQuantity(o)}</td>
                                                         <td>{formatCurrency(o.total_amount)}</td>
                                                         <td><Badge variant={getStatusVariant(o.status)}>{o.status}</Badge></td>
                                                     </tr>

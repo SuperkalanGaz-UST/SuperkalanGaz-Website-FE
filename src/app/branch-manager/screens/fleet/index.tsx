@@ -13,6 +13,7 @@ import {
 import { useAccount } from "../../../contexts/AccountContext";
 import { DeliveryRiderLocations } from '../orders/DeliveryRiderLocations';
 import type { DispatchRider } from '../../../lib/deliveryRiderLocation';
+import { serviceRequestCylinderSummary, type ServiceRequestCylinderFields } from '../../../lib/serviceRequestItems';
 
 /** Rider status as returned by the NestJS Fleet API. */
 type ApiRiderStatus = 'Available' | 'On Delivery' | 'Maintenance Due' | 'Offline';
@@ -27,11 +28,10 @@ interface ApiRiderRow extends DispatchRider {
     updated_at: string;
 }
 
-interface SRRow {
+interface SRRow extends ServiceRequestCylinderFields {
     id: string;
     rider_id: string | null;
     status: string;
-    cylinder_size: string;
 }
 
 /** Presentation status for the Fleet UI. */
@@ -115,7 +115,7 @@ export default function FleetPage() {
         const activeOrders = new Map<string, string>();
         for (const sr of serviceRequests) {
             if (sr.rider_id && (sr.status === 'Dispatched' || sr.status === 'En Route')) {
-                activeOrders.set(sr.rider_id, `${sr.cylinder_size} delivery`);
+                activeOrders.set(sr.rider_id, `${serviceRequestCylinderSummary(sr)} delivery`);
             }
         }
 

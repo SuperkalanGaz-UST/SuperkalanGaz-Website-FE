@@ -139,10 +139,11 @@ export function Dashboard() {
     [csatSeries, activeBranchIds],
   );
 
-  // ── 4. Governance dashboard (for pending approvals KPI) ──────────────────
-  const { data: govData, isLoading: govLoading } = useQuery({
-    queryKey: ['governance-dashboard'],
-    queryFn: () => governanceApi.dashboard(),
+  // ── 4. The FA's own governance requests still awaiting SA approval ───────
+  // (/governance/dashboard is Super Administrator-only; this list is FA-scoped.)
+  const { data: myRequests, isLoading: govLoading, error: govError } = useQuery({
+    queryKey: ['governance-requests'],
+    queryFn: () => governanceApi.requests(),
     staleTime: 30_000,
   });
 
@@ -168,7 +169,9 @@ export function Dashboard() {
     return Math.round((weightedSum / totalWeight) * 10) / 10;
   }, [filteredCsatSeries]);
 
-  const pendingApprovals = govData?.metrics.pendingApprovals ?? null;
+  const pendingApprovals = myRequests
+    ? myRequests.filter((request) => request.status === 'pending').length
+    : null;
 
   const chartsLoading = orderLoading || branchesLoading;
   const csatChartLoading = csatLoading || branchesLoading;
@@ -241,8 +244,9 @@ export function Dashboard() {
             accentColor="#f59e0b"
           />
           <KPICard
-            title="Pending Branch Approvals"
+            title="My Requests Awaiting Approval"
             value={govLoading ? '…' : pendingApprovals !== null ? String(pendingApprovals) : '—'}
+            subtitle={govError ? "Couldn't load your requests" : 'Sent to the Super Administrator'}
             icon={<ClipboardCheck className="w-4 h-4 text-[#9333EA]" />}
             accentColor="#9333EA"
           />
@@ -264,7 +268,7 @@ export function Dashboard() {
           />
         </div>
 
-        <SLATable />
+        <SLATable from={dateRange.from} to={dateRange.to} branchIds={activeBranchIds} />
       </div>
     </div>
   );

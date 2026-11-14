@@ -27,7 +27,7 @@ import { toast } from 'sonner';
 import * as z from 'zod';
 import { Badge } from '../../components/Badge';
 import { Button } from '../../components/Button';
-import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '../../components/Select';
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/app/components/ui/select';
 import { RowActionsMenu } from '../../components/RowActionsMenu';
 import { Popover, PopoverTrigger, PopoverContent } from '../../../components/ui/popover';
 import { Tabs, TabsList, TabsTrigger } from '../../components/Tabs';
@@ -74,6 +74,7 @@ interface SRRow extends ServiceRequestCylinderFields {
     rider_id: string | null;
     requested_at: string;
     dispatched_at: string | null;
+    delivery_offer_expires_at?: string | null;
     in_transit_at: string | null;
     delivered_at: string | null;
     // Delayed-delivery journey (BM-US-02).
@@ -217,7 +218,7 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
     const { data: requestsData, error: queryError, isLoading: requestsLoading, refetch: loadRequests } = useQuery({
         queryKey: ['service-requests'],
         queryFn: () => fetchJson<{ serviceRequests: SRRow[] }>('/service-requests'),
-        refetchInterval: 10000, // Background polling every 10s
+        refetchInterval: 10000,
     });
     
     useEffect(() => {
@@ -292,7 +293,7 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
         retry: false,
     });
     const rosterMap: Record<string, string> = Object.fromEntries(
-        (rosterData?.riders ?? []).map(rider => [rider.id, `${rider.name} (${rider.plate})`]),
+        (rosterData?.riders ?? []).map(rider => [rider.id, rider.plate ? `${rider.name} (${rider.plate})` : rider.name]),
     );
     const [availableRiders, setAvailableRiders] = useState<RiderRow[] | null>(null);
     const [ridersLoading, setRidersLoading] = useState(false);
@@ -352,10 +353,30 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
     const form = useForm({
         defaultValues: {
             customerName: '', customerContact: '', deliveryAddress: '',
-            cylinderSize: '', quantity: 1, specialInstructions: '',
+            cylinderSize: '', quantity: 1 as number | '', specialInstructions: '',
         },
         schema: newRequestSchema,
     });
+    // Additional cylinder sizes on the same walk-in order. The first line stays in
+    // the validated form fields; each extra line is one more size + quantity.
+    const [extraLines, setExtraLines] = useState<{ cylinderSize: string; quantity: number | '' }[]>([]);
+    const [extraLinesError, setExtraLinesError] = useState<string | null>(null);
+    const orderLines = [{ cylinderSize: form.values.cylinderSize, quantity: form.values.quantity }, ...extraLines];
+    const chosenSizes = new Set(orderLines.map(line => line.cylinderSize).filter(Boolean));
+    const sortedCatalogPrices = [...catalogPrices].sort((a, b) => parseFloat(a.cylinder_size) - parseFloat(b.cylinder_size));
+    // Live order total across every line (prices are still snapshotted server-side
+    // at creation). Shown only once every line has a priced size and a quantity.
+    const linePrices = orderLines.map(line => {
+        const price = catalogPrices.find(p => p.cylinder_size === line.cylinderSize);
+        return price && typeof line.quantity === 'number' && line.quantity > 0 ? price.unit_price * line.quantity : null;
+    });
+    const newRequestTotal = linePrices.every(value => value !== null)
+        ? linePrices.reduce<number>((sum, value) => sum + (value ?? 0), 0)
+        : null;
+    const updateExtraLine = (index: number, change: Partial<{ cylinderSize: string; quantity: number | '' }>) => {
+        setExtraLines(lines => lines.map((line, i) => (i === index ? { ...line, ...change } : line)));
+        setExtraLinesError(null);
+    };
 
     // Debounced customer search (BM-024). Fires only when the trimmed term is >= 2
     // chars (the API 400s below that) and never while a customer is already locked
@@ -489,6 +510,8 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
             customerName: '', customerContact: '', deliveryAddress: '',
             cylinderSize: '', quantity: 1, specialInstructions: '',
         });
+        setExtraLines([]);
+        setExtraLinesError(null);
         setSelectedCustomer(null);
         setCustomerSearch('');
         setCustomerResults(null);
@@ -557,7 +580,7 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
             if (!res.ok) {
                 // 409: another user already dispatched this — reconcile the queue.
                 if (res.status === 409) {
-                    toast.error('This request was already dispatched');
+                    toast.error(apiErrorMessage(data, 'The request changed. Refresh and try again.'));
                     closeAssign();
                     await loadRequests();
                     return;
@@ -568,14 +591,14 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                 }
                 // 400 "Rider is not assignable" (rider no longer Available) and
                 // malformed-uuid errors are surfaced as-is from the API.
-                toast.error(apiErrorMessage(data, 'Failed to dispatch request'));
+                toast.error(apiErrorMessage(data, 'Could not send delivery offer'));
                 return;
             }
-            toast.success('Rider assigned and request dispatched.');
+            toast.success('Offer sent. Dispatch starts when the Delivery Rider accepts.');
             closeAssign();
             await loadRequests();
         } catch (err) {
-            toast.error(err instanceof Error ? err.message : 'Failed to dispatch request');
+            toast.error(err instanceof Error ? err.message : 'Could not send delivery offer');
         } finally {
             setDispatchingId(null);
         }
@@ -817,7 +840,7 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                 // 409: the request's status changed before the complaint could be
                 // logged (race) — surface + reconcile the queue.
                 if (res.status === 409) {
-                    toast.error(apiErrorMessage(data, 'Request status changed — please retry'));
+                    toast.error(apiErrorMessage(data, 'Request status changed  — please retry'));
                     closeLogComplaint();
                     await loadRequests();
                     return;
@@ -885,7 +908,7 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
             if (!res.ok) {
                 // 409: a concurrent reassign/deliver already won — reconcile the queue.
                 if (res.status === 409) {
-                    toast.error(apiErrorMessage(data, 'Request changed — please retry'));
+                    toast.error(apiErrorMessage(data, 'Request changed  — please retry'));
                     closeReassign();
                     await loadRequests();
                     return;
@@ -895,14 +918,14 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                     return;
                 }
                 // 400 (not out for delivery / rider not assignable / same rider).
-                toast.error(apiErrorMessage(data, 'Failed to reassign rider'));
+                toast.error(apiErrorMessage(data, 'Could not offer reassignment'));
                 return;
             }
-            toast.success('Rider reassigned.');
+            toast.success('Reassignment offered. The current delivery stays with its Delivery Rider until acceptance.');
             closeReassign();
             await Promise.all([loadRequests(), loadRoster()]);
         } catch (err) {
-            toast.error(err instanceof Error ? err.message : 'Failed to reassign rider');
+            toast.error(err instanceof Error ? err.message : 'Could not offer reassignment');
         } finally {
             setReassigningId(null);
         }
@@ -960,6 +983,24 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
             form.validateField('customerContact');
             return;
         }
+        // The first line is validated by the form schema; extra lines are checked
+        // here. The API re-validates every line and prices it from the catalog.
+        if (extraLines.some(line => !line.cylinderSize || typeof line.quantity !== 'number' || line.quantity < 1)) {
+            setExtraLinesError('Choose a size and a quantity of at least 1 for every added cylinder.');
+            return;
+        }
+        if (new Set([values.cylinderSize, ...extraLines.map(line => line.cylinderSize)]).size !== extraLines.length + 1) {
+            setExtraLinesError('List each cylinder size only once.');
+            return;
+        }
+        const cylinderPayload = extraLines.length === 0
+            ? { cylinderSize: values.cylinderSize, quantity: values.quantity }
+            : {
+                items: [
+                    { cylinderSize: values.cylinderSize, quantity: values.quantity },
+                    ...extraLines.map(line => ({ cylinderSize: line.cylinderSize, quantity: Number(line.quantity) })),
+                ],
+            };
         setSubmitting(true);
         try {
             const res = await apiFetch('/service-requests', {
@@ -968,8 +1009,7 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                     customerName: values.customerName,
                     customerContact: contactE164,
                     deliveryAddress: values.deliveryAddress,
-                    cylinderSize: values.cylinderSize,
-                    quantity: values.quantity,
+                    ...cylinderPayload,
                     // Link the order to the selected/created CIM customer. Optional
                     // server-side: if the BM somehow has no customer selected, the
                     // snapshot-only path still works (pre-CIM behaviour preserved).
@@ -1204,14 +1244,14 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                                 </div>
                                 <div className={styles.formGrid}>
                                     <FormItem name="cylinderSize">
-                                        <FormLabel>Cylinder Size</FormLabel>
+                                        <FormLabel htmlFor="new-request-cylinder">Cylinder Size</FormLabel>
                                         <Select value={form.values.cylinderSize} onValueChange={(val: string) => { form.setValues(prev => ({ ...prev, cylinderSize: val })); form.validateField('cylinderSize', val); }}>
                                             <FormControl>
-                                                <SelectTrigger><SelectValue placeholder="Select size..." /></SelectTrigger>
+                                                <SelectTrigger id="new-request-cylinder"><SelectValue placeholder="Select size..." /></SelectTrigger>
                                             </FormControl>
                                             <SelectContent>
-                                                {[...catalogPrices]
-                                                    .sort((a, b) => parseFloat(a.cylinder_size) - parseFloat(b.cylinder_size))
+                                                {sortedCatalogPrices
+                                                    .filter(price => price.cylinder_size === form.values.cylinderSize || !extraLines.some(line => line.cylinderSize === price.cylinder_size))
                                                     .map(price => (
                                                     <SelectItem key={price.id} value={price.cylinder_size}>
                                                         {price.cylinder_size} — {formatPeso(price.unit_price)}
@@ -1225,11 +1265,12 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                                         <FormMessage />
                                     </FormItem>
                                     <FormItem name="quantity">
-                                        <FormLabel>Quantity</FormLabel>
+                                        <FormLabel htmlFor="new-request-quantity">Quantity</FormLabel>
                                         <FormControl>
-                                            <Input type="number" min="1" value={form.values.quantity}
+                                            <Input id="new-request-quantity" type="number" min="1" value={form.values.quantity}
                                                 onChange={e => {
-                                                    const n = e.target.value === '' ? 1 : parseInt(e.target.value, 10);
+                                                    // Keep an empty field empty while typing; the schema enforces >= 1 on blur/submit.
+                                                    const n = e.target.value === '' ? '' : parseInt(e.target.value, 10);
                                                     form.setValues(p => ({ ...p, quantity: n }));
                                                 }}
                                                 onBlur={() => form.validateField('quantity')} />
@@ -1245,7 +1286,46 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                                         <FormMessage />
                                     </FormItem>
                                 </div>
+                                {extraLines.map((line, index) => (
+                                    <div key={index} className={styles.extraCylinderRow}>
+                                        <div className={styles.editorField}>
+                                            <label className={styles.fieldLabel} htmlFor={`new-request-cylinder-${index + 2}`}>Cylinder Size {index + 2}</label>
+                                            <Select value={line.cylinderSize} onValueChange={(val: string) => updateExtraLine(index, { cylinderSize: val })}>
+                                                <SelectTrigger id={`new-request-cylinder-${index + 2}`}><SelectValue placeholder="Select size..." /></SelectTrigger>
+                                                <SelectContent>
+                                                    {sortedCatalogPrices
+                                                        .filter(price => price.cylinder_size === line.cylinderSize || !chosenSizes.has(price.cylinder_size))
+                                                        .map(price => (
+                                                        <SelectItem key={price.id} value={price.cylinder_size}>
+                                                            {price.cylinder_size} — {formatPeso(price.unit_price)}
+                                                        </SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                        <div className={styles.editorField}>
+                                            <label className={styles.fieldLabel} htmlFor={`new-request-quantity-${index + 2}`}>Quantity</label>
+                                            <Input id={`new-request-quantity-${index + 2}`} type="number" min="1" value={line.quantity}
+                                                onChange={e => updateExtraLine(index, { quantity: e.target.value === '' ? '' : parseInt(e.target.value, 10) })} />
+                                        </div>
+                                        <Button type="button" variant="ghost" size="sm" className={styles.removeCylinderBtn}
+                                            aria-label={`Remove cylinder ${index + 2}`}
+                                            onClick={() => { setExtraLines(lines => lines.filter((_, i) => i !== index)); setExtraLinesError(null); }}>
+                                            <X size={16} />
+                                        </Button>
+                                    </div>
+                                ))}
+                                {extraLinesError && <p className={styles.extraCylinderError} role="alert">{extraLinesError}</p>}
+                                {chosenSizes.size < catalogPrices.length && extraLines.length + 1 < catalogPrices.length && (
+                                    <Button type="button" variant="outline" size="sm" className={styles.addCylinderBtn}
+                                        onClick={() => { setExtraLines(lines => [...lines, { cylinderSize: '', quantity: 1 }]); setExtraLinesError(null); }}>
+                                        <Plus size={16} /> Add another cylinder
+                                    </Button>
+                                )}
                                 <div className={styles.formFooter}>
+                                    {newRequestTotal !== null && (
+                                        <span className={styles.formTotal} aria-live="polite">Total {formatPeso(newRequestTotal)}</span>
+                                    )}
                                     <Button type="submit" size="default" variant="primary" disabled={submitting || pricesLoading || catalogPrices.length === 0}>
                                         {submitting ? 'Creating…' : 'Create Request'}
                                     </Button>
@@ -1392,6 +1472,7 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                                                     <ChevronDown size={10} style={{ color: '#64748b', flexShrink: 0, minWidth: '10px', display: 'block' }} />
                                                 )}
                                                 <Badge variant={getStatusVariant(req.status)} className={styles.statusBadge}>{req.status}</Badge>
+                                                {req.delivery_offer_expires_at && <span className={styles.subText}>Awaiting Delivery Rider acceptance</span>}
                                             </div>
                                         </td>
                                         {/* order_source is a mandatory tag on every row (SRD channel-level SLA reporting) */}
@@ -1471,22 +1552,22 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                                                 <div className={styles.actionButtons}>
                                                     <Popover open={assigningId === req.id} onOpenChange={(open) => { if (!open) closeAssign(); }}>
                                                         <PopoverTrigger asChild>
-                                                            <Button size="sm" variant="primary" onClick={() => openAssign(req.id)}>Assign &amp; Dispatch</Button>
+                                                            <Button size="sm" variant="primary" disabled={Boolean(req.delivery_offer_expires_at)} onClick={() => openAssign(req.id)}>Offer delivery</Button>
                                                         </PopoverTrigger>
                                                         <PopoverContent align="end" side="top" sideOffset={8} className={styles.assignPopover}>
-                                                            <div className={styles.popoverHeader}>Assign/Dispatch Rider</div>
+                                                            <div className={styles.popoverHeader}>Offer to a Delivery Rider</div>
                                                             <div className={styles.popoverBody}>
                                                                 {ridersLoading || availableRiders === null ? (
-                                                                    <span className={styles.mutedText}>Loading riders…</span>
+                                                                    <span className={styles.mutedText}>Loading Delivery Riders…</span>
                                                                 ) : availableRiders.length === 0 ? (
-                                                                    <span className={styles.mutedText}>No available riders</span>
+                                                                    <span className={styles.mutedText}>No available Delivery Riders</span>
                                                                 ) : (
-                                                                    <Select 
-                                                                        value={availableRiders.find(r => r.id === selectedRiderId)?.name || ''} 
+                                                                    <Select
+                                                                        value={selectedRiderId}
                                                                         onValueChange={setSelectedRiderId}
                                                                     >
-                                                                        <SelectTrigger style={{ height: '2.25rem', borderRadius: '0.375rem', borderColor: 'rgba(0,0,0,0.15)', color: selectedRiderId ? 'inherit' : '#64748b' }}>
-                                                                            <SelectValue placeholder="Select rider…" />
+                                                                        <SelectTrigger aria-label="Delivery Rider" style={{ height: '2.25rem', borderRadius: '0.375rem', borderColor: 'rgba(0,0,0,0.15)', color: selectedRiderId ? 'inherit' : '#64748b' }}>
+                                                                            <SelectValue placeholder="Select Delivery Rider…">{availableRiders.find(r => r.id === selectedRiderId)?.name}</SelectValue>
                                                                         </SelectTrigger>
                                                                         <SelectContent>
                                                                             {availableRiders.map(r => (
@@ -1494,7 +1575,7 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                                                                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.1rem' }}>
                                                                                         <span style={{ fontWeight: 500, color: 'var(--foreground)' }}>{r.name}</span>
                                                                                         <span style={{ fontSize: '0.7rem', color: 'var(--muted-foreground)' }}>
-                                                                                            {r.plate} &middot; {operationalLocationLabel(r)}
+                                                                                            {operationalLocationLabel(r)}
                                                                                         </span>
                                                                                     </div>
                                                                                 </SelectItem>
@@ -1512,7 +1593,7 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                                                                     onClick={() => handleDispatch(req.id)}
                                                                     style={{ backgroundColor: '#0074bc', color: 'white', opacity: (!selectedRiderId || dispatchingId === req.id) ? 0.6 : 1 }}
                                                                 >
-                                                                    {dispatchingId === req.id ? 'Dispatching…' : 'Dispatch'}
+                                                                    {dispatchingId === req.id ? 'Sending…' : 'Send offer'}
                                                                 </Button>
                                                             </div>
                                                         </PopoverContent>
@@ -1536,7 +1617,7 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                                                         {deliveringId === req.id ? 'Delivering…' : 'Mark Delivered'}
                                                     </Button>}
                                                     <RowActionsMenu items={[
-                                                        { label: 'Reassign', onClick: () => openReassign(req.id), icon: <RefreshCw size={16} /> },
+                                                        ...(!req.delivery_offer_expires_at ? [{ label: 'Offer reassignment', onClick: () => openReassign(req.id), icon: <RefreshCw size={16} /> }] : []),
                                                         { label: 'Delay Reason', onClick: () => openDelayReason(req.id), icon: <Clock size={16} /> },
                                                         { label: 'Log Complaint', onClick: () => openLogComplaint(req.id), danger: true, icon: <AlertTriangle size={16} /> },
                                                     ]} />
@@ -1765,7 +1846,7 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                                                     </span>
                                                     <label className={styles.fieldLabel} htmlFor={`reassign-rider-${req.id}`}>New rider</label>
                                                     {ridersLoading || availableRiders === null ? (
-                                                        <span className={styles.mutedText}>Loading riders…</span>
+                                                        <span className={styles.mutedText}>Loading Delivery Riders…</span>
                                                     ) : availableRiders.length === 0 ? (
                                                         <span className={styles.mutedText}>No other available riders</span>
                                                     ) : (
@@ -1776,9 +1857,9 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                                                             onChange={(e) => setSelectedRiderId(e.target.value)}
                                                             aria-label="Select new rider"
                                                         >
-                                                            <option value="" disabled>Select rider…</option>
+                                                            <option value="" disabled>Select Delivery Rider…</option>
                                                             {availableRiders.map(r => (
-                                                                <option key={r.id} value={r.id}>{r.name} ({r.plate}) · {operationalLocationLabel(r)}</option>
+                                                                <option key={r.id} value={r.id}>{r.name} · {operationalLocationLabel(r)}</option>
                                                             ))}
                                                         </select>
                                                     )}
@@ -1793,7 +1874,7 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                                                             disabled={!selectedRiderId || reassigningId === req.id}
                                                             onClick={() => handleReassign(req.id)}
                                                         >
-                                                            {reassigningId === req.id ? 'Reassigning…' : 'Confirm Reassign'}
+                                                            {reassigningId === req.id ? 'Sending…' : 'Send reassignment offer'}
                                                         </Button>
                                                     </div>
                                                 </div>

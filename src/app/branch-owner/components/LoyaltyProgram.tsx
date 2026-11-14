@@ -1,5 +1,6 @@
 'use client';
 
+import { HouseholdRewardDetails } from './HouseholdRewardDetails';
 import { Header } from './Header';
 import { useBranch } from '../contexts/BranchContext';
 import { LoyaltyTrackDashboard } from '../../components/LoyaltyTrackDashboard';
@@ -14,6 +15,16 @@ export function LoyaltyProgram() {
       </div>
 
       <div className="p-8">
+        <div className="mb-4 flex justify-end">
+          <button
+            type="button"
+            onClick={() => window.dispatchEvent(new CustomEvent('navigate', { detail: 'redemption-history-full' }))}
+            className="text-sm font-semibold text-[#007BC1] hover:text-[#005a8f]"
+          >
+            View redemption history
+          </button>
+        </div>
+        {selectedBranchId && <HouseholdRewardDetails branchId={selectedBranchId} />}
         <LoyaltyTrackDashboard branchId={selectedBranchId} branchOwnerView />
       </div>
     </div>

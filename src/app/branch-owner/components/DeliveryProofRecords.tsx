@@ -6,6 +6,7 @@ import { Loader2, RefreshCw } from 'lucide-react';
 import { DeliveryProofViewer } from '../../components/DeliveryProofViewer';
 import { fetchJson } from '../../lib/api';
 import { useBranch } from '../contexts/BranchContext';
+import { serviceRequestCylinderSummary, type ServiceRequestItem } from '../../lib/serviceRequestItems';
 
 interface DeliveryRecord {
   id: string;
@@ -13,6 +14,7 @@ interface DeliveryRecord {
   customer_name: string;
   cylinder_size: string;
   quantity: number;
+  items?: ServiceRequestItem[];
   delivered_at: string | null;
   rider_id: string | null;
 }
@@ -110,7 +112,7 @@ export function DeliveryProofRecords() {
                 <tr key={record.id} className="border-b border-gray-100 text-[13px] last:border-0">
                   <td className="py-4 pr-4 font-medium text-gray-900">{record.sr_code}</td>
                   <td className="py-4 pr-4 text-gray-700">{record.customer_name}</td>
-                  <td className="py-4 pr-4 text-gray-600">{record.quantity} × {record.cylinder_size}</td>
+                  <td className="py-4 pr-4 text-gray-600">{serviceRequestCylinderSummary(record)}</td>
                   <td className="py-4 pr-4 text-gray-600">{formatDeliveredAt(record.delivered_at)}</td>
                   <td className="py-4 pr-4 text-left">
                     <DeliveryProofViewer

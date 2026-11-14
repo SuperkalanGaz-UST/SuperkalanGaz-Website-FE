@@ -13,6 +13,8 @@ interface BranchCreatedModalProps {
   ownerName: string;
   ownerEmail: string;
   ownerInvitationSent?: boolean;
+  /** New owner, but the API could not confirm the invitation email went out. */
+  ownerInvitationUnconfirmed?: boolean;
   onClose: () => void;
   onRegisterAnother: () => void;
 }
@@ -24,6 +26,7 @@ export function BranchCreatedModal({
   ownerName,
   ownerEmail,
   ownerInvitationSent,
+  ownerInvitationUnconfirmed,
   onClose,
   onRegisterAnother,
 }: BranchCreatedModalProps) {
@@ -94,6 +97,15 @@ export function BranchCreatedModal({
                 An invitation email was sent to <span className="font-semibold">{ownerEmail}</span>.
                 {' '}The Branch Owner follows the link and sets their own password. The account
                 stays pending until setup is complete. If the link expires, resend it from Edit branch.
+              </p>
+            </div>
+          ) : ownerInvitationUnconfirmed ? (
+            <div role="alert" className="flex items-start gap-2.5 bg-amber-50 border border-amber-200 rounded-xl px-3.5 py-3">
+              <User className="w-4 h-4 text-amber-700 flex-shrink-0 mt-0.5" />
+              <p className="text-sm text-amber-800 leading-relaxed">
+                The branch was created, but the invitation email to{' '}
+                <span className="font-semibold">{ownerEmail}</span> could not be confirmed.
+                Do not register the branch again. Resend the invitation from Edit branch.
               </p>
             </div>
           ) : (
