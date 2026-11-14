@@ -15,6 +15,7 @@ import { Input } from '../../components/Input';
 import { apiFetch, apiErrorMessage, fetchJson } from '../../../lib/api';
 import styles from './screen.module.css';
 import { useAccount } from '../../../contexts/AccountContext';
+import { catalogPhotoUrl } from '../../../lib/household-rewards';
 import { fetchRewardStock, intakeRewardStock } from '../../../lib/reward-inventory';
 import rewardTabStyles from '../rewards/screen.module.css';
 
@@ -227,13 +228,13 @@ export default function Inventory() {
         {
             key: 'lpg', label: 'LPG Cylinders', loading: stockLoading, error: stockError,
             items: visibleLpgStock.map(item => ({ ...item, id: item.product_id, name: item.product_name,
-                detail: '', image: CYLINDER_IMAGES[`${cylinderSize(item.product_name)}kg`], sortOrder: cylinderSize(item.product_name) })),
+                detail: '', image: CYLINDER_IMAGES[`${cylinderSize(item.product_name)}kg`], uploadedPhoto: false, sortOrder: cylinderSize(item.product_name) })),
         },
         {
             key: 'rewards', label: 'Reward Merchandise', loading: rewardQuery.isFetching,
             error: !managerBranchId ? 'A single assigned branch is required for reward inventory.' : rewardQuery.isError ? rewardQuery.error.message : null,
             items: rewardStock.map(item => ({ ...item, id: `reward:${item.catalog_item_id}`, name: item.item_name,
-                detail: `Household reward · ${item.points_cost} points`, image: REWARD_IMAGES[item.item_name.toLowerCase()], sortOrder: item.points_cost })),
+                detail: `Household reward · ${item.points_cost} points`, image: catalogPhotoUrl(item.photo_path) ?? REWARD_IMAGES[item.item_name.toLowerCase()], uploadedPhoto: !!item.photo_path, sortOrder: item.points_cost })),
         },
     ] as const;
     const activeGroup = stockGroups.find(group => group.key === activeStockTab)!;
@@ -429,7 +430,7 @@ export default function Inventory() {
                                                     <td className={styles.inventoryItemCell}>
                                                     <div className={styles.rowIdentity}>
                                                         <span className={styles.itemImageSlot}>
-                                                            {item.image ? <Image src={item.image} alt={item.name} width={52} height={52} className={styles.itemImage} />
+                                                            {item.image ? <Image src={item.image} alt={item.name} width={52} height={52} className={styles.itemImage} unoptimized={item.uploadedPhoto} />
                                                                 : <span className={styles.neutralPlaceholder} role="img" aria-label={`No matching image for ${item.name}`}>{activeStockTab === 'lpg' ? <Cylinder size={25} aria-hidden="true" /> : <Gift size={25} aria-hidden="true" />}</span>}
                                                         </span>
                                                         <div><h3>{item.name}</h3>{item.detail && <p>{item.detail}</p>}</div>
