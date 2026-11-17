@@ -74,7 +74,7 @@ export default function VehicleRouteHistory({ vehicle, scope, branchId, onClose,
                 <div className={styles.panelHeader}>
                     <div>
                         <DialogTitle className={styles.panelTitle}>Route history · {vehicle.plate_number}</DialogTitle>
-                        <DialogDescription className={styles.subtitle}>Philippine time · up to 24 hours per search</DialogDescription>
+                        <DialogDescription className={styles.subtitle}>Movement only · minimum 10 seconds between points · Philippine time · up to 24 hours per search</DialogDescription>
                     </div>
                 </div>
                 <form className={styles.routeFilters} onSubmit={showRoute}>
@@ -92,7 +92,7 @@ export default function VehicleRouteHistory({ vehicle, scope, branchId, onClose,
                 {matchesSearch && query.isError && <p className={styles.notice} role="alert">{query.error.message}</p>}
                 {query.isFetching && <p className={styles.notice} role="status">Loading recorded GPS positions…</p>}
                 {!submitted && <p className={styles.notice}>Choose a period to view this vehicle’s recorded GPS trail.</p>}
-                {route && route.points.length === 0 && <p className={styles.notice} role="status">No recorded GPS positions for this vehicle in the selected period.</p>}
+                {route && route.points.length === 0 && <p className={styles.notice} role="status">No movement recorded for this vehicle in the selected period.</p>}
                 {route && point && (
                     <>
                         <FleetMap vehicles={[]} geofence={null} selection={null} route={route} routePoint={point} />

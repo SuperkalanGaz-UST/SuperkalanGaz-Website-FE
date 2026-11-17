@@ -162,7 +162,7 @@ test('manager dispatch and Fleet show independent phone and vehicle fixes, refre
     await recoveredVehicleRead;
     routeState = 'empty';
     await showRoute.click();
-    await history.getByText('No recorded GPS positions for this vehicle in the selected period.').waitFor();
+    await history.getByText('No movement recorded for this vehicle in the selected period.').waitFor();
     assert.equal(await history.getByLabel('Vehicle route history map', { exact: true }).count(), 0);
     routeState = 'error';
     await showRoute.click();
