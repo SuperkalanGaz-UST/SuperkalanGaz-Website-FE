@@ -16,9 +16,10 @@ interface RouteSearch {
     to: string;
 }
 
-export default function VehicleRouteHistory({ vehicle, scope, onClose, onReturnFocus }: {
+export default function VehicleRouteHistory({ vehicle, scope, branchId, onClose, onReturnFocus }: {
     vehicle: FleetVehicle;
     scope: string;
+    branchId?: string;
     onClose: () => void;
     onReturnFocus: () => void;
 }) {
@@ -32,13 +33,14 @@ export default function VehicleRouteHistory({ vehicle, scope, onClose, onReturnF
     const vehicleId = vehicle.id;
     const matchesSearch = submitted?.vehicleId === vehicleId && submitted.from === range.from && submitted.to === range.to;
     const query = useQuery({
-        queryKey: ['fleet-route-history', scope, submitted],
+        queryKey: ['fleet-route-history', scope, branchId, submitted],
         queryFn: ({ signal }) => {
             if (!submitted) throw new Error('Select a vehicle and period');
             const params = new URLSearchParams({
                 from: new Date(`${submitted.from}:00+08:00`).toISOString(),
                 to: new Date(`${submitted.to}:00+08:00`).toISOString(),
             });
+            if (branchId) params.set('branchId', branchId);
             return fetchJson<VehicleRouteResponse>(`/vehicles/${encodeURIComponent(submitted.vehicleId)}/route?${params}`, { signal });
         },
         enabled: !!submitted && matchesSearch && vehicle.tracker_connected,

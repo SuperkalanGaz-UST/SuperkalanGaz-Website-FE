@@ -26,6 +26,9 @@ test('Owner Vehicles stays view-only and scopes roster/history across branch swi
   const writes = [];
   let rosterMode = 'success';
   let historyMode = 'error';
+  let gpsMode = 'success';
+  const gpsRequests = [];
+  const routeRequests = [];
   const browser = await chromium.launch({ headless: true });
   try {
     const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
@@ -37,10 +40,37 @@ test('Owner Vehicles stays view-only and scopes roster/history across branch swi
       const url = new URL(route.request().url());
       if (url.origin === new URL(baseUrl).origin) return route.continue();
       if (url.origin === new URL(supabaseUrl).origin && url.pathname === '/auth/v1/user') return route.fulfill({ json: user });
+      if (url.hostname === 'tiles.openfreemap.org') return route.fulfill({ json: {
+        version: 8, sources: {}, layers: [{ id: 'background', type: 'background', paint: { 'background-color': '#edf5fa' } }],
+      } });
       if (url.origin !== apiOrigin) return route.abort();
       if (route.request().method() !== 'GET') writes.push(url.pathname);
       if (url.pathname === '/api/branches/assigned') return route.fulfill({ json: { branches } });
       if (url.pathname === '/api/users/me') return route.fulfill({ json: { user: { ...user.app_metadata, id: user.id, email: user.email, phone: null } } });
+      if (url.pathname === '/api/riders') {
+        const branchId = url.searchParams.get('branchId');
+        assert.ok(branches.some(branch => branch.id === branchId));
+        return route.fulfill({ json: { riders: [{ id: 'rider', branch_id: branchId, name: 'Test Delivery Rider',
+          plate: 'Assigned vehicle', status: 'Available', created_at: new Date().toISOString(), updated_at: new Date().toISOString(), current_order: null }] } });
+      }
+      if (url.pathname === '/api/vehicles/locations') {
+        gpsRequests.push(url);
+        const branchId = url.searchParams.get('branchId');
+        assert.ok(branches.some(branch => branch.id === branchId));
+        if (gpsMode === 'error') return route.fulfill({ status: 503, json: { message: 'GPS unavailable' } });
+        const first = branchId === branches[0].id;
+        return route.fulfill({ json: { refresh_interval_ms: 120_000, gps_unavailable: false, vehicles: gpsMode === 'empty' ? [] : [{
+          id: first ? 'vehicle-a' : 'vehicle-b', plate_number: first ? 'OWNER-A' : 'OWNER-B', display_name: 'Branch motorcycle', tracker_connected: true,
+          position: { latitude: first ? 14.6 : 14.7, longitude: 121, captured_at: new Date().toISOString(), stale: false, moving: false },
+        }] } });
+      }
+      if (/^\/api\/vehicles\/vehicle-[ab]\/route$/.test(url.pathname)) {
+        routeRequests.push(url);
+        const first = url.pathname.includes('vehicle-a');
+        assert.equal(url.searchParams.get('branchId'), branches[first ? 0 : 1].id);
+        return route.fulfill({ json: { vehicle: { id: first ? 'vehicle-a' : 'vehicle-b', plate_number: first ? 'OWNER-A' : 'OWNER-B', display_name: null },
+          from: url.searchParams.get('from'), to: url.searchParams.get('to'), points: [{ latitude: first ? 14.6 : 14.7, longitude: 121, captured_at: new Date().toISOString() }] } });
+      }
       if (url.pathname.startsWith('/api/vehicles')) {
         requests.push(url);
         const branchId = url.searchParams.get('branchId');
@@ -65,7 +95,7 @@ test('Owner Vehicles stays view-only and scopes roster/history across branch swi
     assert.equal(requests.length, 0, 'No automatic first-branch selection');
     await page.getByRole('button', { name: 'Select branch', exact: true }).click();
     await page.getByRole('button', { name: branches[0].name, exact: true }).click();
-    await page.getByText('OWNER-A · motorcycle', { exact: true }).waitFor();
+    await page.getByText('OWNER-A · motorcycle · Test Delivery Rider', { exact: true }).waitFor();
     await page.getByText('View-only', { exact: true }).waitFor();
     await page.getByText('Maintenance Due', { exact: true }).waitFor();
     assert.equal(await page.getByRole('button', { name: /Register Vehicle|Reset PMS|Update Odo|Connect SinoTrack|Retry SinoTrack/ }).count(), 0);
@@ -76,8 +106,8 @@ test('Owner Vehicles stays view-only and scopes roster/history across branch swi
     await page.getByRole('cell', { name: '1,234 km', exact: true }).waitFor();
     await page.getByRole('button', { name: branches[0].name, exact: true }).click();
     await page.getByRole('button', { name: branches[1].name, exact: true }).click();
-    await page.getByText('OWNER-B · motorcycle', { exact: true }).waitFor();
-    assert.equal(await page.getByText('OWNER-A · motorcycle', { exact: true }).count(), 0);
+    await page.getByText('OWNER-B · motorcycle · Test Delivery Rider', { exact: true }).waitFor();
+    assert.equal(await page.getByText('OWNER-A · motorcycle · Test Delivery Rider', { exact: true }).count(), 0);
     assert.equal(await page.getByRole('cell', { name: '1,234 km', exact: true }).count(), 0, 'History closes on branch switch');
     await page.getByRole('button', { name: 'View History', exact: true }).click();
     await page.getByRole('cell', { name: '1,234 km', exact: true }).waitFor();
@@ -96,6 +126,53 @@ test('Owner Vehicles stays view-only and scopes roster/history across branch swi
     rosterMode = 'empty';
     await page.getByRole('button', { name: 'Try again', exact: true }).click();
     await page.getByText("No vehicles on this branch's roster yet.", { exact: true }).waitFor();
+    rosterMode = 'success';
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.goto(`${baseUrl}/branch-owner/fleet`);
+    const roster = page.getByRole('region', { name: 'Fleet roster', exact: true });
+    const mapPanel = page.getByRole('region', { name: 'Vehicle locations', exact: true });
+    assert.equal(gpsRequests.length, 0, 'Fleet GPS requires a selected branch');
+    await page.getByRole('button', { name: 'Select branch', exact: true }).click();
+    await page.getByRole('button', { name: branches[0].name, exact: true }).click();
+    await mapPanel.getByRole('button', { name: 'Vehicle OWNER-A location', exact: true }).waitFor();
+    await roster.getByText('Test Delivery Rider', { exact: true }).waitFor();
+    await roster.getByLabel('Roster view').selectOption('vehicles');
+    await roster.getByText('14.600000, 121.000000', { exact: true }).waitFor();
+    assert.equal(routeRequests.length, 0);
+    const historyTrigger = roster.getByRole('button', { name: 'View route history for OWNER-A', exact: true });
+    await historyTrigger.click();
+    const routeDialogA = page.getByRole('dialog', { name: 'Route history · OWNER-A', exact: true });
+    await routeDialogA.getByRole('button', { name: 'Show route', exact: true }).click();
+    await routeDialogA.getByText(/recorded GPS points/).waitFor();
+    await routeDialogA.getByRole('button', { name: 'Close', exact: true }).click();
+    await routeDialogA.waitFor({ state: 'detached' });
+    await page.getByRole('button', { name: branches[0].name, exact: true }).click();
+    await page.getByRole('button', { name: branches[1].name, exact: true }).click();
+    await roster.getByRole('button', { name: 'Show vehicle OWNER-B on map', exact: true }).waitFor();
+    assert.equal(await mapPanel.getByRole('button', { name: 'Vehicle OWNER-A location', exact: true }).count(), 0);
+    assert.equal(await roster.getByRole('button', { name: 'Show vehicle OWNER-A on map', exact: true }).count(), 0);
+    await roster.getByRole('button', { name: 'View route history for OWNER-B', exact: true }).click();
+    const routeDialogB = page.getByRole('dialog', { name: 'Route history · OWNER-B', exact: true });
+    await routeDialogB.getByRole('button', { name: 'Show route', exact: true }).click();
+    await routeDialogB.getByText(/14.700000, 121.000000/).waitFor();
+    await routeDialogB.getByRole('button', { name: 'Close', exact: true }).click();
+    await routeDialogB.waitFor({ state: 'detached' });
+    gpsMode = 'error';
+    await mapPanel.getByRole('button', { name: 'Refresh vehicle locations', exact: true }).click();
+    await mapPanel.getByRole('alert').waitFor();
+    assert.equal(await mapPanel.getByRole('button', { name: 'Vehicle OWNER-B location', exact: true }).count(), 0);
+    gpsMode = 'empty';
+    await mapPanel.getByRole('button', { name: 'Refresh vehicle locations', exact: true }).click();
+    await roster.getByText('No registered vehicles in this branch.', { exact: true }).waitFor();
+    gpsMode = 'success';
+    await mapPanel.getByRole('button', { name: 'Refresh vehicle locations', exact: true }).click();
+    await roster.getByRole('button', { name: 'Show vehicle OWNER-B on map', exact: true }).waitFor();
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.getByRole('button', { name: 'Minimize sidebar', exact: true }).click();
+    await page.getByRole('button', { name: 'Expand sidebar', exact: true }).waitFor();
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+    await roster.getByLabel('Roster view').selectOption('riders');
+    await roster.getByText('Test Delivery Rider', { exact: true }).waitFor();
     assert.deepEqual(writes, [], 'Owner interactions must never send API writes');
   } finally {
     await browser.close();
