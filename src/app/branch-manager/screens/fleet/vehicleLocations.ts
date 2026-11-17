@@ -3,6 +3,7 @@ export interface VehicleLocation {
     longitude: number;
     captured_at: string;
     stale: boolean;
+    moving?: boolean | null;
 }
 
 export interface FleetVehicle {
@@ -19,7 +20,7 @@ export interface VehicleLocationsResponse {
     refresh_interval_ms: number;
 }
 
-export type RoutePoint = Omit<VehicleLocation, 'stale'>;
+export type RoutePoint = Omit<VehicleLocation, 'stale' | 'moving'>;
 
 export interface VehicleRouteResponse {
     vehicle: Pick<FleetVehicle, 'id' | 'plate_number' | 'display_name'>;

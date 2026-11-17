@@ -64,7 +64,7 @@ export default function FleetPage() {
     }
 
     const vehicles = vehicleQuery.isError ? [] : vehicleQuery.data?.vehicles ?? [];
-    const historyVehicle = vehicles.find(vehicle => vehicle.id === historyVehicleId && vehicle.tracker_connected);
+    const historyVehicle = vehicleQuery.data?.vehicles.find(vehicle => vehicle.id === historyVehicleId && vehicle.tracker_connected);
     const riders = riderQuery.isError ? [] : riderQuery.data?.riders ?? [];
     const activeRiders = riders.filter(rider => rider.status === 'Available' || rider.status === 'On Delivery').length;
     const geofence = branchQuery.isError ? null : branch?.geofence ?? null;
@@ -127,6 +127,7 @@ export default function FleetPage() {
                                 ) : <span>{vehicle.tracker_connected ? 'GPS position unavailable' : 'Tracker setup incomplete'}</span>}
                                 {vehicle.tracker_connected && (
                                     <button className={styles.refreshButton} type="button" aria-label={`View route history for ${vehicle.plate_number}`}
+                                        ref={element => { if (element && vehicle.id === historyVehicleId) historyTriggerRef.current = element; }}
                                         onClick={event => { historyTriggerRef.current = event.currentTarget; setHistoryVehicleId(vehicle.id); }}>Route history</button>
                                 )}
                             </div>

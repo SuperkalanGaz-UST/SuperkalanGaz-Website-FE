@@ -77,10 +77,10 @@ export default function VehicleRouteHistory({ vehicle, scope, onClose, onReturnF
                 </div>
                 <form className={styles.routeFilters} onSubmit={showRoute}>
                     <label>From
-                        <input type="datetime-local" value={range.from} onChange={event => setRange({ ...range, from: event.target.value })} required />
+                        <input type="datetime-local" value={range.from} onChange={event => { const from = event.target.value; setRange(current => ({ ...current, from })); }} required />
                     </label>
                     <label>To
-                        <input type="datetime-local" value={range.to} onChange={event => setRange({ ...range, to: event.target.value })} required />
+                        <input type="datetime-local" value={range.to} onChange={event => { const to = event.target.value; setRange(current => ({ ...current, to })); }} required />
                     </label>
                     <button className={styles.refreshButton} type="submit" disabled={!vehicle.tracker_connected || query.isFetching}>
                         {query.isFetching ? 'Loading route…' : 'Show route'}

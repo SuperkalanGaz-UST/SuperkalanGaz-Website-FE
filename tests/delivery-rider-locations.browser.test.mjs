@@ -32,8 +32,10 @@ test('manager dispatch and Fleet show independent phone and vehicle fixes, refre
   riders[0].assigned_vehicle = { id: 'vehicle-1', plate_number: 'SAVED VEHICLE', status: 'active' };
   let unavailable = false;
   let vehicleGpsUnavailable = false;
+  let vehicleRequestFailed = false;
   let riderReads = 0;
   let vehicleReads = 0;
+  let vehicleInterval = 30_000;
   let routeState = 'positions';
   let routeReads = 0;
   const vehicleFix = { latitude: 14.47, longitude: 120.97, captured_at: new Date().toISOString(), stale: false };
@@ -63,7 +65,8 @@ test('manager dispatch and Fleet show independent phone and vehicle fixes, refre
         }
         if (url.pathname === '/api/vehicles/locations') {
           vehicleReads++;
-          return route.fulfill({ json: { gps_unavailable: vehicleGpsUnavailable, refresh_interval_ms: 30_000, vehicles: [
+          if (vehicleRequestFailed) return route.fulfill({ status: 503, json: { message: 'Vehicle locations temporarily unavailable' } });
+          return route.fulfill({ json: { gps_unavailable: vehicleGpsUnavailable, refresh_interval_ms: vehicleInterval, vehicles: [
             { id: 'unassigned-vehicle', plate_number: 'HW 123', display_name: 'Branch motorcycle', tracker_connected: true, position: vehicleGpsUnavailable ? null : vehicleFix },
             { id: 'untracked-vehicle', plate_number: 'NO GPS', display_name: null, tracker_connected: false, position: null },
           ] } });
@@ -148,6 +151,15 @@ test('manager dispatch and Fleet show independent phone and vehicle fixes, refre
     await history.getByText(/14.620000, 121.010000/).waitFor();
     await page.clock.fastForward(60_100);
     assert.equal(routeReads, readsBeforeScrubbing, 'Scrubbing and elapsed time do not refetch route history');
+    vehicleRequestFailed = true;
+    const failedVehicleRead = page.waitForResponse(response => new URL(response.url()).pathname === '/api/vehicles/locations' && response.status() === 503);
+    await page.clock.fastForward(30_100);
+    await failedVehicleRead;
+    await history.getByText(/14.620000, 121.010000/).waitFor();
+    vehicleRequestFailed = false;
+    const recoveredVehicleRead = page.waitForResponse(response => new URL(response.url()).pathname === '/api/vehicles/locations' && response.status() === 200);
+    await page.clock.fastForward(30_100);
+    await recoveredVehicleRead;
     routeState = 'empty';
     await showRoute.click();
     await history.getByText('No recorded GPS positions for this vehicle in the selected period.').waitFor();
@@ -172,7 +184,7 @@ test('manager dispatch and Fleet show independent phone and vehicle fixes, refre
     await history.getByText(/3 recorded GPS points/).waitFor();
     await history.getByRole('button', { name: 'Close', exact: true }).click();
     await history.waitFor({ state: 'detached' });
-    assert.equal(await historyTrigger.evaluate(element => element === document.activeElement), true);
+    await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === 'View route history for HW 123');
     await vehiclePanel.getByText('14.470000, 120.970000', { exact: true }).waitFor();
     await vehiclePanel.getByText('Tracker setup incomplete', { exact: true }).waitFor();
     await stalePin.waitFor();
@@ -196,6 +208,16 @@ test('manager dispatch and Fleet show independent phone and vehicle fixes, refre
     vehicleGpsUnavailable = false;
     await refreshVehicles.click();
     await vehiclePin.waitFor();
+    vehicleInterval = 120_000;
+    await refreshVehicles.click();
+    await vehiclePanel.getByText(/refreshes every 120 seconds/).waitFor();
+    const readsBeforeParked = vehicleReads;
+    await page.clock.fastForward(30_100);
+    assert.equal(vehicleReads, readsBeforeParked, 'Parked vehicles use the slower refresh interval');
+    const parkedRefresh = page.waitForResponse(response => new URL(response.url()).pathname === '/api/vehicles/locations');
+    await page.clock.fastForward(90_100);
+    await parkedRefresh;
+    assert.ok(vehicleReads > readsBeforeParked, 'Parked vehicles still check for movement');
     await page.setViewportSize({ width: 390, height: 844 });
     await page.getByRole('button', { name: 'Minimize sidebar', exact: true }).click();
     await page.getByRole('button', { name: 'Expand sidebar', exact: true }).waitFor();
