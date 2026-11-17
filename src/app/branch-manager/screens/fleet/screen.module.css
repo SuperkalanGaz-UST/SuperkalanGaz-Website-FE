@@ -30,6 +30,13 @@
 .staleFix { color: #945500; }
 .vehiclePin { display: inline-flex; align-items: center; gap: 0.35rem; border: 2px solid white; border-radius: 0.35rem; padding: 0.25rem 0.45rem; background: #285e58; color: white; font-size: 0.75rem; font-weight: 700; white-space: nowrap; box-shadow: 0 2px 7px #0005; cursor: pointer; }
 .vehiclePin[data-stale='true'] { background: #945500; }
+.routeFilters { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 0.75rem; padding: 1rem 1.25rem; }
+.routeFilters label { display: flex; flex: 1 1 180px; min-width: 0; flex-direction: column; gap: 0.35rem; font-size: 0.8rem; }
+.routeFilters input, .routeFilters select { width: 100%; min-width: 0; border: 1px solid var(--border); border-radius: 0.4rem; padding: 0.5rem; background: var(--card); color: var(--foreground); font: inherit; }
+.routeTimeline { display: flex; flex-direction: column; gap: 0.65rem; padding: 1rem 1.25rem; font-size: 0.8rem; }
+.routeTimeline input { width: 100%; accent-color: #0073ad; }
+.routeSummary { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0.5rem; color: var(--muted-foreground); }
+.routeEndpoint { border: 2px solid white; border-radius: 0.35rem; padding: 0.2rem 0.4rem; background: #0073ad; color: white; font-size: 0.75rem; font-weight: 600; }
 .bottomLayout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: 1.5rem; }
 .operatingHours { display: flex; align-items: center; gap: 0.5rem; padding: 1.25rem; font-size: 0.875rem; }
 .tableWrapper { overflow-x: auto; }

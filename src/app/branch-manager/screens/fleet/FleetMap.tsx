@@ -4,13 +4,15 @@ import { useEffect, useRef, useState } from 'react';
 import { AttributionControl, LngLatBounds, Map as MapLibreMap, Marker, NavigationControl, Popup } from 'maplibre-gl';
 import type { BranchGeofence } from '../../../lib/branchGeofence';
 import { OPENFREEMAP_STYLE_URL, toLngLat } from '../../../lib/mapConfig';
-import { vehicleFixTime, type FleetVehicle, type VehicleLocation } from './vehicleLocations';
+import { routeFixTime, vehicleFixTime, type FleetVehicle, type RoutePoint, type VehicleLocation, type VehicleRouteResponse } from './vehicleLocations';
 import styles from './screen.module.css';
 
 interface Props {
     vehicles: FleetVehicle[];
     geofence: BranchGeofence | null;
     selection: { id: string } | null;
+    route?: VehicleRouteResponse;
+    routePoint?: RoutePoint;
 }
 
 function vehicleMarker(vehicle: FleetVehicle, position: VehicleLocation) {
@@ -38,7 +40,7 @@ function vehicleMarker(vehicle: FleetVehicle, position: VehicleLocation) {
         .setPopup(new Popup({ offset: 16 }).setDOMContent(content));
 }
 
-export default function FleetMap({ vehicles, geofence, selection }: Props) {
+export default function FleetMap({ vehicles, geofence, selection, route, routePoint }: Props) {
     const containerRef = useRef<HTMLDivElement>(null);
     const mapRef = useRef<MapLibreMap | null>(null);
     const markersRef = useRef(new Map<string, Marker>());
@@ -147,12 +149,66 @@ export default function FleetMap({ vehicles, geofence, selection }: Props) {
         if (!marker.getPopup()?.isOpen()) marker.togglePopup();
     }, [selection, retry]);
 
+    useEffect(() => {
+        const map = mapRef.current;
+        if (!map || !route || route.points.length === 0) return;
+        const points = route.points.map(point => toLngLat([point.latitude, point.longitude]));
+        const endpoints: Marker[] = [];
+        const bounds = new LngLatBounds();
+        points.forEach(point => bounds.extend(point));
+        map.fitBounds(bounds, { padding: 55, maxZoom: 16, duration: 0 });
+
+        for (const [index, label] of [[0, 'Start'], [points.length - 1, 'End']] as const) {
+            const element = document.createElement('span');
+            element.className = styles.routeEndpoint;
+            element.textContent = label;
+            endpoints.push(new Marker({ element, anchor: label === 'Start' ? 'right' : 'left' }).setLngLat(points[index]).addTo(map));
+        }
+        const addRoute = () => {
+            if (points.length < 2) return;
+            map.addSource('vehicle-route', {
+                type: 'geojson',
+                data: { type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: points } },
+            });
+            map.addLayer({
+                id: 'vehicle-route-line', type: 'line', source: 'vehicle-route',
+                layout: { 'line-join': 'round', 'line-cap': 'round' },
+                paint: { 'line-color': '#0073ad', 'line-width': 4 },
+            });
+        };
+        if (map.isStyleLoaded()) addRoute();
+        else map.once('load', addRoute);
+        return () => {
+            endpoints.forEach(marker => marker.remove());
+            map.off('load', addRoute);
+            if (mapRef.current !== map || !map.getSource('vehicle-route')) return;
+            map.removeLayer('vehicle-route-line');
+            map.removeSource('vehicle-route');
+        };
+    }, [route, retry]);
+
+    useEffect(() => {
+        const map = mapRef.current;
+        if (!map || !route || !routePoint) return;
+        const element = document.createElement('button');
+        element.type = 'button';
+        element.className = styles.vehiclePin;
+        element.textContent = `🏍 ${route.vehicle.plate_number}`;
+        element.setAttribute('aria-label', 'Recorded vehicle position');
+        const popup = document.createElement('div');
+        popup.textContent = routeFixTime.format(new Date(routePoint.captured_at));
+        const marker = new Marker({ element })
+            .setLngLat(toLngLat([routePoint.latitude, routePoint.longitude]))
+            .setPopup(new Popup({ offset: 16 }).setDOMContent(popup)).addTo(map);
+        return () => { marker.remove(); };
+    }, [route, routePoint, retry]);
+
     return (
         <div className={styles.mapFrame}>
-            <div ref={containerRef} className={styles.map} aria-label="Vehicle hardware GPS map" />
+            <div ref={containerRef} className={styles.map} aria-label={route ? 'Vehicle route history map' : 'Vehicle hardware GPS map'} />
             {mapError && (
                 <div className={styles.mapError} role="status">
-                    <span>Map unavailable. Vehicle coordinates are listed in the roster.</span>
+                    <span>{route ? 'Map unavailable. Recorded coordinates remain available below.' : 'Map unavailable. Vehicle coordinates are listed in the roster.'}</span>
                     <button className={styles.refreshButton} type="button" onClick={() => {
                         setMapError(false);
                         setRetry(value => value + 1);

@@ -13,6 +13,7 @@ import type { DispatchRider } from '../../../lib/deliveryRiderLocation';
 import { serviceRequestCylinderSummary, type ServiceRequestCylinderFields } from '../../../lib/serviceRequestItems';
 import { vehicleFixTime, type VehicleLocationsResponse } from './vehicleLocations';
 import styles from './screen.module.css';
+import VehicleRouteHistory from './VehicleRouteHistory';
 
 interface SRRow extends ServiceRequestCylinderFields {
     id: string;
@@ -127,6 +128,8 @@ export default function FleetPage() {
                 </div>
                 {branchQuery.isError && <p className={styles.notice} role="status">Branch boundary unavailable.</p>}
             </section>
+
+            <VehicleRouteHistory key={`${account.id}:${account.branchIds[0]}`} vehicles={vehicles} scope={`${account.id}:${account.branchIds[0]}`} />
 
             <DeliveryRiderLocations
                 riders={riders}

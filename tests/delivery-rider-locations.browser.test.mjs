@@ -34,6 +34,8 @@ test('manager dispatch and Fleet show independent phone and vehicle fixes, refre
   let vehicleGpsUnavailable = false;
   let riderReads = 0;
   let vehicleReads = 0;
+  let routeState = 'positions';
+  let routeReads = 0;
   const vehicleFix = { latitude: 14.47, longitude: 120.97, captured_at: new Date().toISOString(), stale: false };
   const browser = await chromium.launch({ headless: true });
   try {
@@ -65,6 +67,22 @@ test('manager dispatch and Fleet show independent phone and vehicle fixes, refre
             { id: 'unassigned-vehicle', plate_number: 'HW 123', display_name: 'Branch motorcycle', tracker_connected: true, position: vehicleGpsUnavailable ? null : vehicleFix },
             { id: 'untracked-vehicle', plate_number: 'NO GPS', display_name: null, tracker_connected: false, position: null },
           ] } });
+        }
+        if (url.pathname === '/api/vehicles/unassigned-vehicle/route') {
+          routeReads++;
+          assert.equal(url.searchParams.get('from'), '2026-01-01T00:00:00.000Z');
+          assert.equal(url.searchParams.get('to'), '2026-01-01T01:00:00.000Z');
+          if (routeState === 'error') return route.fulfill({ status: 503, json: { message: 'Route history is unavailable. Retry or choose a shorter period' } });
+          const points = [
+            { latitude: 14.6, longitude: 120.99, captured_at: '2026-01-01T00:10:00Z' },
+            { latitude: 14.61, longitude: 121, captured_at: '2026-01-01T00:20:00Z' },
+            { latitude: 14.62, longitude: 121.01, captured_at: '2026-01-01T00:40:00Z' },
+          ];
+          return route.fulfill({ json: {
+            vehicle: { id: 'unassigned-vehicle', plate_number: 'HW 123', display_name: 'Branch motorcycle' },
+            from: url.searchParams.get('from'), to: url.searchParams.get('to'),
+            points: routeState === 'empty' ? [] : routeState === 'single' ? points.slice(0, 1) : points,
+          } });
         }
         if (url.pathname === '/api/prices') return route.fulfill({ json: { prices: [] } });
         return route.fulfill({ json: { serviceRequests: [], customers: [], notifications: [], unreadCount: 0 } });
@@ -112,6 +130,39 @@ test('manager dispatch and Fleet show independent phone and vehicle fixes, refre
     const vehiclePanel = page.getByRole('region', { name: 'Vehicle locations', exact: true });
     const vehiclePin = vehiclePanel.getByRole('button', { name: 'Vehicle HW 123 location', exact: true });
     await vehiclePin.waitFor();
+    const history = page.getByRole('region', { name: 'Route history', exact: true });
+    assert.equal(routeReads, 0, 'History is fetched on deliberate search');
+    await history.getByLabel('From', { exact: true }).fill('2026-01-01T08:00');
+    await history.getByLabel('To', { exact: true }).fill('2026-01-01T09:00');
+    const showRoute = history.getByRole('button', { name: 'Show route', exact: true });
+    await showRoute.click();
+    await history.getByText(/3 recorded GPS points/).waitFor();
+    await history.getByLabel('Vehicle route history map', { exact: true }).waitFor();
+    await history.getByRole('button', { name: 'Recorded vehicle position', exact: true }).waitFor();
+    await history.getByRole('slider').press('End');
+    await history.getByText(/14.620000, 121.010000/).waitFor();
+    routeState = 'empty';
+    await showRoute.click();
+    await history.getByText('No recorded GPS positions for this vehicle in the selected period.').waitFor();
+    assert.equal(await history.getByLabel('Vehicle route history map', { exact: true }).count(), 0);
+    routeState = 'error';
+    await showRoute.click();
+    await history.getByRole('alert').filter({ hasText: 'Route history is unavailable' }).waitFor();
+    await vehiclePin.waitFor();
+    routeState = 'single';
+    await showRoute.click();
+    await history.getByText(/1 recorded GPS points/).waitFor();
+    assert.equal(await history.getByRole('slider').isDisabled(), true);
+    await history.getByLabel('From', { exact: true }).fill('2026-01-03T08:00');
+    const readsBeforeInvalid = routeReads;
+    await showRoute.click();
+    await history.getByRole('alert').filter({ hasText: 'within 24 hours' }).waitFor();
+    assert.equal(routeReads, readsBeforeInvalid);
+    assert.equal(await history.getByLabel('Vehicle route history map', { exact: true }).count(), 0);
+    await history.getByLabel('From', { exact: true }).fill('2026-01-01T08:00');
+    routeState = 'positions';
+    await showRoute.click();
+    await history.getByText(/3 recorded GPS points/).waitFor();
     await vehiclePanel.getByText('14.470000, 120.970000', { exact: true }).waitFor();
     await vehiclePanel.getByText('Tracker setup incomplete', { exact: true }).waitFor();
     await stalePin.waitFor();
@@ -139,8 +190,8 @@ test('manager dispatch and Fleet show independent phone and vehicle fixes, refre
     await page.getByRole('button', { name: 'Minimize sidebar', exact: true }).click();
     await page.getByRole('button', { name: 'Expand sidebar', exact: true }).waitFor();
     await page.waitForFunction(() => {
-      const panel = document.querySelector('[aria-labelledby="vehicle-locations-title"]');
-      return panel && panel.scrollWidth <= panel.clientWidth;
+      const panels = [...document.querySelectorAll('[aria-labelledby="vehicle-locations-title"], [aria-labelledby="route-history-title"]')];
+      return panels.length === 2 && panels.every(panel => panel.scrollWidth <= panel.clientWidth);
     }, null, { timeout: 4000 });
     assert.deepEqual(errors, []);
     if (process.env.TEST_ARTIFACT_DIR) await panel.screenshot({ path: `${process.env.TEST_ARTIFACT_DIR}/manager-rider-locations.png` });
