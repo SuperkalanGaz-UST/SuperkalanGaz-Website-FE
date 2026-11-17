@@ -4,7 +4,7 @@ import test from 'node:test';
 import { chromium } from 'playwright';
 
 // Synthetic locations and accounts only. No service receives a real GPS sample.
-test('manager dispatch shows actual phone pins, refreshes, clears Offline positions and handles outages', { timeout: 90_000 }, async () => {
+test('manager dispatch and Fleet show independent phone and vehicle fixes, refresh and handle outages', { timeout: 90_000 }, async () => {
   const env = await readFile(new URL('../.env.local', import.meta.url), 'utf8');
   const baseUrl = process.env.TEST_BASE_URL ?? 'http://localhost:3000';
   const supabaseUrl = env.match(/^NEXT_PUBLIC_SUPABASE_URL=(.+)$/m)?.[1]?.trim();
@@ -31,7 +31,10 @@ test('manager dispatch shows actual phone pins, refreshes, clears Offline positi
   ];
   riders[0].assigned_vehicle = { id: 'vehicle-1', plate_number: 'SAVED VEHICLE', status: 'active' };
   let unavailable = false;
+  let vehicleGpsUnavailable = false;
   let riderReads = 0;
+  let vehicleReads = 0;
+  const vehicleFix = { latitude: 14.47, longitude: 120.97, captured_at: new Date().toISOString(), stale: false };
   const browser = await chromium.launch({ headless: true });
   try {
     const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
@@ -55,6 +58,13 @@ test('manager dispatch shows actual phone pins, refreshes, clears Offline positi
         if (url.pathname === '/api/riders') {
           riderReads++;
           return unavailable ? route.fulfill({ status: 503, json: { message: 'Dispatch service unavailable' } }) : route.fulfill({ json: { riders } });
+        }
+        if (url.pathname === '/api/vehicles/locations') {
+          vehicleReads++;
+          return route.fulfill({ json: { gps_unavailable: vehicleGpsUnavailable, refresh_interval_ms: 60_000, vehicles: [
+            { id: 'unassigned-vehicle', plate_number: 'HW 123', display_name: 'Branch motorcycle', tracker_connected: true, position: vehicleGpsUnavailable ? null : vehicleFix },
+            { id: 'untracked-vehicle', plate_number: 'NO GPS', display_name: null, tracker_connected: false, position: null },
+          ] } });
         }
         if (url.pathname === '/api/prices') return route.fulfill({ json: { prices: [] } });
         return route.fulfill({ json: { serviceRequests: [], customers: [], notifications: [], unreadCount: 0 } });
@@ -99,13 +109,39 @@ test('manager dispatch shows actual phone pins, refreshes, clears Offline positi
     await panel.getByRole('button', { name: 'Show map', exact: true }).click();
     await stalePin.waitFor();
     await page.goto(`${baseUrl}/branch-manager/fleet`);
-    await page.getByRole('heading', { name: 'Vehicle GPS coverage', exact: true }).waitFor();
-    await page.getByText('Vehicle positions unavailable. This map shows the branch boundary only. Delivery Rider phone locations appear separately below.', { exact: true }).waitFor();
+    const vehiclePanel = page.getByRole('region', { name: 'Vehicle locations', exact: true });
+    const vehiclePin = vehiclePanel.getByRole('button', { name: 'Vehicle HW 123 location', exact: true });
+    await vehiclePin.waitFor();
+    await vehiclePanel.getByText('14.470000, 120.970000', { exact: true }).waitFor();
+    await vehiclePanel.getByText('Tracker setup incomplete', { exact: true }).waitFor();
     await stalePin.waitFor();
-    assert.equal(await page.getByRole('heading', { name: 'Live GPS Tracking', exact: true }).count(), 0);
-    // The hardware coverage map must not invent vehicle positions from the
-    // geofence or reuse phone coordinates as vehicle telemetry.
-    assert.equal(await page.getByRole('button', { name: /Stale Test —/ }).count(), 0);
+    assert.equal(await vehiclePanel.getByRole('button', { name: 'Vehicle NO GPS location', exact: true }).count(), 0);
+    assert.equal(await vehiclePanel.getByRole('button', { name: 'Show location of Stale Test', exact: true }).count(), 0);
+    assert.equal(await panel.getByRole('button', { name: 'Vehicle HW 123 location', exact: true }).count(), 0);
+    await vehiclePanel.getByRole('button', { name: 'Show vehicle HW 123 on map', exact: true }).click();
+    await vehiclePanel.getByText('Branch motorcycle · HW 123', { exact: true }).waitFor();
+    const beforeVehicleRefresh = vehicleReads;
+    vehicleFix.stale = true;
+    await page.clock.fastForward(60_100);
+    await vehiclePanel.getByText(/Last known fix/).first().waitFor();
+    assert.ok(vehicleReads > beforeVehicleRefresh);
+    assert.equal(await vehiclePin.getAttribute('data-stale'), 'true');
+    vehicleGpsUnavailable = true;
+    const refreshVehicles = vehiclePanel.getByRole('button', { name: 'Refresh vehicle locations', exact: true });
+    await refreshVehicles.click();
+    await vehiclePanel.getByText(/vehicle GPS data could not be loaded/).waitFor();
+    await vehiclePin.waitFor({ state: 'detached' });
+    await stalePin.waitFor();
+    vehicleGpsUnavailable = false;
+    await refreshVehicles.click();
+    await vehiclePin.waitFor();
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.getByRole('button', { name: 'Minimize sidebar', exact: true }).click();
+    await page.getByRole('button', { name: 'Expand sidebar', exact: true }).waitFor();
+    await page.waitForFunction(() => {
+      const panel = document.querySelector('[aria-labelledby="vehicle-locations-title"]');
+      return panel && panel.scrollWidth <= panel.clientWidth;
+    }, null, { timeout: 4000 });
     assert.deepEqual(errors, []);
     if (process.env.TEST_ARTIFACT_DIR) await panel.screenshot({ path: `${process.env.TEST_ARTIFACT_DIR}/manager-rider-locations.png` });
   } finally { await browser.close(); }

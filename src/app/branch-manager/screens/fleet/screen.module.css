@@ -1,60 +1,45 @@
 .pageWrapper { display: flex; flex-direction: column; gap: 1.5rem; }
-.header { }
-.pageTitle { font-size: 1.5rem; font-weight: 700; color: var(--foreground); margin-bottom: 0.25rem; }
-.pageDescription { font-size: 0.9rem; color: var(--muted-foreground); }
 .statsGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 1rem; }
-.statCard { background-color: var(--card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 1.25rem; box-shadow: var(--shadow); }
-.statHeader { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
-.statLabel { composes: ownerMetricTitle from '../../../components/FranchiseReports.module.css'; color: var(--muted-foreground); text-transform: uppercase; margin-top: 0.5px; }
-.statIcon { color: var(--muted-foreground); }
+.statCard { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 1.25rem; box-shadow: var(--shadow); }
+.statHeader { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; margin-bottom: 6px; }
+.statLabel { composes: ownerMetricTitle from '../../../components/FranchiseReports.module.css'; color: var(--muted-foreground); text-transform: uppercase; }
+.statIcon { color: var(--muted-foreground); flex-shrink: 0; }
 .statValue { composes: managerMetricValue from '../../../components/FranchiseReports.module.css'; color: var(--foreground); }
-.statLabel, .statValue { transform: translateY(-4px); }
-.mainLayout { display: grid; grid-template-columns: 1fr 300px; gap: 1.5rem; height: 480px; }
-@media (max-width: 900px) { .mainLayout { grid-template-columns: 1fr; height: auto; } }
-.mapPanel { background-color: var(--card); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow); overflow: hidden; display: flex; flex-direction: column; }
-.listPanel { background-color: var(--card); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow); overflow: hidden; display: flex; flex-direction: column; }
-.panelHeader { display: flex; align-items: center; justify-content: space-between; padding: 0.875rem 1.25rem; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.mainLayout { display: grid; grid-template-columns: minmax(0, 1fr) 290px; }
+.mapPanel, .listPanel { min-width: 0; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow); overflow: hidden; }
+.panelHeader { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.75rem; padding: 0.875rem 1.25rem; border-bottom: 1px solid var(--border); }
 .panelTitle { font-size: 0.9375rem; font-weight: 600; color: var(--foreground); }
-.liveIndicator { display: flex; align-items: center; gap: 0.4rem; }
-.pulseDot { width: 8px; height: 8px; border-radius: 50%; background-color: var(--success); animation: pulse 2s infinite; }
-@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
-.mapContainer { flex: 1; min-height: 0; }
-.mapState { height: 100%; display: flex; align-items: center; justify-content: center; padding: 2rem; text-align: center; font-size: 0.875rem; color: var(--muted-foreground); background: var(--muted); }
-.mapStateError { color: var(--error); }
-.riderList { flex: 1; overflow-y: auto; padding: 0.5rem; display: flex; flex-direction: column; gap: 0.25rem; }
-.riderCard { width: 100%; background: transparent; border: 1px solid transparent; border-radius: var(--radius-md); padding: 0.75rem; text-align: left; cursor: pointer; transition: background-color 150ms, border-color 150ms; }
-.riderCard:hover { background-color: var(--muted); }
-.riderCardSelected { background-color: hsl(203, 60%, 95%); border-color: var(--primary); }
-.riderCardHeader { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 0.4rem; gap: 0.5rem; }
-.riderIdentity { display: flex; flex-direction: column; gap: 0.1rem; }
-.riderName { font-size: 0.875rem; font-weight: 600; color: var(--foreground); }
-.riderPlate { font-size: 0.75rem; font-family: var(--font-family-monospace); color: var(--muted-foreground); }
-.riderMeta { display: flex; flex-direction: column; gap: 0.2rem; }
-.riderOrder { display: flex; align-items: center; gap: 0.35rem; font-size: 0.8rem; color: var(--foreground); }
-.riderOrderPlaceholder { font-size: 0.8rem; color: var(--muted-foreground); }
-.riderTime { display: flex; align-items: center; gap: 0.35rem; font-size: 0.75rem; color: var(--muted-foreground); }
-.riderAlert { display: flex; align-items: center; gap: 0.35rem; margin-top: 0.35rem; font-size: 0.8rem; color: var(--warning); font-weight: 500; }
-.bottomLayout { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
-@media (max-width: 768px) { .bottomLayout { grid-template-columns: 1fr; } }
-.alertsPanel { background-color: var(--card); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow); overflow: hidden; }
-.logsPanel { background-color: var(--card); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow); overflow: hidden; }
-.alertsContent { padding: 1rem 1.25rem; display: flex; flex-direction: column; gap: 1rem; }
-.operatingHours { display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem 1rem; background-color: var(--muted); border-radius: var(--radius-md); }
-.operatingHoursIcon { color: var(--muted-foreground); flex-shrink: 0; }
-.operatingHoursTitle { font-size: 0.8rem; color: var(--muted-foreground); }
-.operatingHoursTime { font-size: 0.9375rem; font-weight: 600; color: var(--foreground); }
-.alertList { display: flex; flex-direction: column; gap: 0.5rem; }
-.criticalAlert { display: flex; align-items: flex-start; gap: 0.75rem; padding: 0.75rem; background-color: hsla(35, 85%, 50%, 0.1); border: 1px solid hsla(35, 85%, 50%, 0.2); border-radius: var(--radius-md); }
-.criticalAlertIcon { color: var(--warning); flex-shrink: 0; margin-top: 0.1rem; }
-.criticalAlertTitle { font-size: 0.875rem; font-weight: 600; color: var(--warning); margin-bottom: 0.2rem; }
-.criticalAlertDesc { font-size: 0.8rem; color: var(--foreground); }
-.allClear { font-size: 0.875rem; color: var(--muted-foreground); text-align: center; padding: 1rem; }
+.subtitle { margin-top: 0.25rem; color: var(--muted-foreground); font-size: 0.75rem; }
+.mapFrame, .mapState { height: 380px; }
+.mapFrame { position: relative; min-width: 0; }
+.map { height: 100%; width: 100%; }
+.mapState { display: grid; place-items: center; padding: 1.5rem; text-align: center; font-size: 0.875rem; color: var(--muted-foreground); background: var(--muted); }
+.mapError { position: absolute; inset: auto 1rem 2rem; display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; padding: 0.75rem; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-md); font-size: 0.75rem; }
+.refreshButton { display: inline-flex; align-items: center; gap: 0.4rem; border: 1px solid var(--border); border-radius: 0.4rem; padding: 0.45rem 0.65rem; color: #0073ad; background: var(--card); font-size: 0.75rem; cursor: pointer; }
+.refreshButton:disabled { opacity: 0.6; cursor: wait; }
+.notice { padding: 0.75rem 1.25rem; background: var(--muted); font-size: 0.8rem; color: var(--foreground); }
+.vehicleRoster { max-height: 380px; overflow-y: auto; border-left: 1px solid var(--border); padding: 0.75rem; }
+.rosterTitle { padding: 0.25rem 0.5rem; font-size: 0.8rem; font-weight: 600; }
+.rosterMessage { padding: 0.75rem 0.5rem; font-size: 0.8rem; color: var(--muted-foreground); }
+.vehicleCard { display: flex; align-items: flex-start; flex-direction: column; gap: 0.25rem; padding: 0.65rem 0.5rem; border-radius: var(--radius-md); font-size: 0.75rem; color: var(--muted-foreground); overflow-wrap: anywhere; }
+.vehicleCard + .vehicleCard { border-top: 1px solid var(--border); }
+.vehicleCard[data-selected='true'] { background: var(--muted); }
+.vehicleCard strong, .focusVehicle { font-size: 0.85rem; font-weight: 600; color: var(--foreground); }
+.focusVehicle { color: #0073ad; background: none; text-decoration: underline; text-underline-offset: 0.15em; cursor: pointer; }
+.coordinates { font-variant-numeric: tabular-nums; }
+.staleFix { color: #945500; }
+.vehiclePin { display: inline-flex; align-items: center; gap: 0.35rem; border: 2px solid white; border-radius: 0.35rem; padding: 0.25rem 0.45rem; background: #285e58; color: white; font-size: 0.75rem; font-weight: 700; white-space: nowrap; box-shadow: 0 2px 7px #0005; cursor: pointer; }
+.vehiclePin[data-stale='true'] { background: #945500; }
+.bottomLayout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: 1.5rem; }
+.operatingHours { display: flex; align-items: center; gap: 0.5rem; padding: 1.25rem; font-size: 0.875rem; }
 .tableWrapper { overflow-x: auto; }
 .logTable { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
-.logTable th { padding: 0.75rem 1rem; text-align: left; font-size: 0.75rem; font-weight: 600; color: var(--muted-foreground); text-transform: uppercase; letter-spacing: 0.04em; border-bottom: 1px solid var(--border); background-color: hsl(40, 15%, 98%); white-space: nowrap; }
+.logTable th { padding: 0.75rem 1rem; text-align: left; font-size: 0.7rem; color: var(--muted-foreground); text-transform: uppercase; border-bottom: 1px solid var(--border); background: var(--muted); white-space: nowrap; }
 .logTable td { padding: 0.65rem 1rem; border-bottom: 1px solid var(--border); }
-.logTable tbody tr:last-child td { border-bottom: none; }
-.logTable tbody tr:hover { background-color: var(--muted); }
-.logTime { font-family: var(--font-family-monospace); font-size: 0.8125rem; color: var(--muted-foreground); white-space: nowrap; }
+.logTable tbody tr:last-child td { border-bottom: 0; }
 .logRider { font-weight: 600; white-space: nowrap; }
-.logEvent { color: var(--foreground); }
+@media (max-width: 900px) {
+    .mainLayout, .bottomLayout { grid-template-columns: minmax(0, 1fr); }
+    .mapFrame, .mapState { height: 280px; }
+    .vehicleRoster { max-height: 240px; border-left: 0; border-top: 1px solid var(--border); }
+}
