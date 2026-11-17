@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import dynamic from 'next/dynamic';
 import { Clock, Navigation, RefreshCw, Truck, Users } from 'lucide-react';
@@ -29,6 +29,8 @@ const FleetMap = dynamic(() => import('./FleetMap'), {
 export default function FleetPage() {
     const account = useAccount();
     const [vehicleSelection, setVehicleSelection] = useState<{ id: string } | null>(null);
+    const [historyVehicleId, setHistoryVehicleId] = useState<string | null>(null);
+    const historyTriggerRef = useRef<HTMLButtonElement | null>(null);
     const branchQuery = useQuery({
         queryKey: ['assigned-branches'],
         queryFn: ({ signal }) => fetchJson<unknown>('/branches/assigned', { signal }),
@@ -38,7 +40,7 @@ export default function FleetPage() {
     const vehicleQuery = useQuery({
         queryKey: ['fleet-vehicle-locations', account.id, account.branchIds[0]],
         queryFn: ({ signal }) => fetchJson<VehicleLocationsResponse>('/vehicles/locations', { signal }),
-        refetchInterval: query => query.state.data?.refresh_interval_ms ?? 60_000,
+        refetchInterval: query => query.state.data?.refresh_interval_ms ?? 30_000,
         refetchIntervalInBackground: false,
         retry: false,
     });
@@ -62,6 +64,7 @@ export default function FleetPage() {
     }
 
     const vehicles = vehicleQuery.isError ? [] : vehicleQuery.data?.vehicles ?? [];
+    const historyVehicle = vehicles.find(vehicle => vehicle.id === historyVehicleId && vehicle.tracker_connected);
     const riders = riderQuery.isError ? [] : riderQuery.data?.riders ?? [];
     const activeRiders = riders.filter(rider => rider.status === 'Available' || rider.status === 'On Delivery').length;
     const geofence = branchQuery.isError ? null : branch?.geofence ?? null;
@@ -79,7 +82,7 @@ export default function FleetPage() {
                 <div className={styles.panelHeader}>
                     <div>
                         <h2 className={styles.panelTitle} id="vehicle-locations-title">Vehicle locations</h2>
-                        <p className={styles.subtitle}>SinoTrack ST-901 via Traccar</p>
+                        <p className={styles.subtitle}>SinoTrack ST-901 via Traccar · refreshes every {(vehicleQuery.data?.refresh_interval_ms ?? 30_000) / 1000} seconds</p>
                     </div>
                     <button className={styles.refreshButton} type="button" disabled={vehicleQuery.isFetching} aria-label="Refresh vehicle locations" onClick={() => { void vehicleQuery.refetch(); }}>
                         <RefreshCw size={15} />Refresh
@@ -122,6 +125,10 @@ export default function FleetPage() {
                                         <span className={styles.coordinates}>{vehicle.position.latitude.toFixed(6)}, {vehicle.position.longitude.toFixed(6)}</span>
                                     </>
                                 ) : <span>{vehicle.tracker_connected ? 'GPS position unavailable' : 'Tracker setup incomplete'}</span>}
+                                {vehicle.tracker_connected && (
+                                    <button className={styles.refreshButton} type="button" aria-label={`View route history for ${vehicle.plate_number}`}
+                                        onClick={event => { historyTriggerRef.current = event.currentTarget; setHistoryVehicleId(vehicle.id); }}>Route history</button>
+                                )}
                             </div>
                         ))}
                     </div>
@@ -129,7 +136,9 @@ export default function FleetPage() {
                 {branchQuery.isError && <p className={styles.notice} role="status">Branch boundary unavailable.</p>}
             </section>
 
-            <VehicleRouteHistory key={`${account.id}:${account.branchIds[0]}`} vehicles={vehicles} scope={`${account.id}:${account.branchIds[0]}`} />
+            {historyVehicle && <VehicleRouteHistory key={`${account.id}:${account.branchIds[0]}:${historyVehicle.id}`}
+                vehicle={historyVehicle} scope={`${account.id}:${account.branchIds[0]}`} onClose={() => setHistoryVehicleId(null)}
+                onReturnFocus={() => historyTriggerRef.current?.focus()} />}
 
             <DeliveryRiderLocations
                 riders={riders}
