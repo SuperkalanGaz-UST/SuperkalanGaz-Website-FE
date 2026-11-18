@@ -10,6 +10,7 @@ export interface RewardStockRow {
   current_qty: number;
   threshold_qty: number;
   capacity_qty: number;
+  photo_path?: string | null;
 }
 
 export async function fetchRewardStock(branchId: string, owner: boolean, signal?: AbortSignal): Promise<RewardStockRow[]> {

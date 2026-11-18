@@ -20,9 +20,11 @@ interface AppHeaderProps {
   badge?: ReactNode;
   /** Optional page-level action rendered below the persona controls. */
   actions?: ReactNode;
+  notificationBranchId?: string;
+  requireNotificationBranch?: boolean;
 }
 
-export function AppHeader({ title, description, badge, actions }: AppHeaderProps) {
+export function AppHeader({ title, description, badge, actions, notificationBranchId, requireNotificationBranch }: AppHeaderProps) {
   const account = useAccount();
   const logout = useLogout();
 
@@ -70,7 +72,7 @@ export function AppHeader({ title, description, badge, actions }: AppHeaderProps
         <div className="flex items-center gap-3">
           {badge}
 
-          <NotificationCenter />
+          <NotificationCenter branchId={notificationBranchId} requireBranch={requireNotificationBranch} />
 
           {/* Account menu — keeps the confirmed logout path available in the header. */}
           <div className="relative" ref={accountRef}>

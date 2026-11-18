@@ -9,6 +9,7 @@ import { Badge } from '../../components/Badge';
 import { Button } from '../../components/Button';
 import { Tabs, TabsList, TabsTrigger } from '../../components/Tabs';
 import { apiFetch, apiErrorMessage, fetchJson } from '../../../lib/api';
+import { catalogPhotoUrl } from '../../../lib/household-rewards';
 import { formatPHMobile } from '../../../lib/phMobile';
 import styles from './screen.module.css';
 
@@ -40,6 +41,7 @@ interface RedemptionRow {
     // Enrichments appended by GET /loyalty/redemptions.
     customer_name: string | null;
     catalog_item_name: string | null;
+    photo_path?: string | null;
     points_balance: number | null;
     completed_cycles: number | null;
     current_cycle_count: number | null;
@@ -697,7 +699,8 @@ export default function Rewards() {
                                 const reward = isCommercial
                                     ? (r.reward_description ?? 'Free cylinder (30+1)')
                                     : (r.catalog_item_name ?? r.reward_description ?? '—');
-                                const rewardImage = REWARD_IMAGES[reward] ?? null;
+                                const photoUrl = catalogPhotoUrl(r.photo_path);
+                                const rewardImage = photoUrl ?? REWARD_IMAGES[reward] ?? null;
                                 // Household: can't afford if balance < cost. Commercial: can't
                                 // redeem without a completed cycle.
                                 const cannotAct = isCommercial
@@ -718,6 +721,7 @@ export default function Rewards() {
                                                             width={40}
                                                             height={40}
                                                             className={styles.rewardImg}
+                                                            unoptimized={!!photoUrl}
                                                         />
                                                     </div>
                                                 ) : (

@@ -1,207 +1,220 @@
 'use client';
 
-import { useEffect, useRef } from "react";
-import {
-    AttributionControl,
-    GeoJSONSource,
-    LngLatBounds,
-    Map as MapLibreMap,
-    Marker,
-    NavigationControl,
-    Popup,
-} from "maplibre-gl";
-import type { Feature, Polygon } from "geojson";
-import { OPENFREEMAP_STYLE_URL, toLngLat } from "../../../lib/mapConfig";
-import type { BranchGeofence } from "../../../lib/branchGeofence";
-import type {
-    FleetRiderStatus,
-    PositionedFleetRider as Rider,
-} from "../../../lib/fleetPresentationData";
-
-const riderColor = (status: FleetRiderStatus): string => {
-    const colorVar =
-        status === "active" ? "hsl(150, 60%, 30%)" :
-        status === "outside-geofence" ? "hsl(35, 85%, 45%)" :
-        "hsl(203, 10%, 45%)";
-    return colorVar;
-};
-
-const formatStatusText = (status: FleetRiderStatus) => {
-    switch (status) {
-        case "active": return "Active";
-        case "outside-geofence": return "Outside geofence";
-        default: return "Inactive";
-    }
-};
-
-function popupRow(label: string, value: string): HTMLDivElement {
-    const row = document.createElement("div");
-    row.style.fontSize = "0.8rem";
-    row.append(`${label}: `);
-    const strong = document.createElement("strong");
-    strong.textContent = value;
-    row.append(strong);
-    return row;
-}
-
-function createPopupContent(rider: Rider): HTMLDivElement {
-    const content = document.createElement("div");
-    content.style.minWidth = "180px";
-
-    const header = document.createElement("div");
-    header.style.cssText = "display:flex;align-items:center;justify-content:space-between;margin-bottom:.5rem;gap:.5rem";
-    const name = document.createElement("strong");
-    name.textContent = rider.name;
-    const status = document.createElement("span");
-    status.textContent = formatStatusText(rider.status);
-    status.style.cssText = `background:${riderColor(rider.status)};color:white;border-radius:999px;padding:2px 7px;font-size:.7rem;white-space:nowrap`;
-    header.append(name, status);
-    content.append(header, popupRow("Plate", rider.plateNumber));
-    if (rider.currentOrder) content.append(popupRow("Order", rider.currentOrder));
-    content.append(popupRow("Updated", rider.lastUpdated));
-    return content;
-}
-
-function createRiderMarker(rider: Rider): Marker {
-    const element = document.createElement("button");
-    element.type = "button";
-    element.title = `${rider.name} — ${formatStatusText(rider.status)}`;
-    element.setAttribute("aria-label", element.title);
-    element.style.cssText = `width:20px;height:20px;padding:0;border-radius:50%;border:3px solid white;background:${riderColor(rider.status)};box-shadow:0 2px 7px rgba(0,0,0,.4);cursor:pointer`;
-
-    return new Marker({ element, anchor: "center" })
-        .setLngLat(toLngLat([rider.lat, rider.lng]))
-        .setPopup(new Popup({ offset: 14 }).setDOMContent(createPopupContent(rider)));
-}
-
-function syncRiderMarkers(
-    map: MapLibreMap,
-    riders: Rider[],
-    markers: Map<string, Marker>,
-): void {
-    markers.forEach((marker) => marker.remove());
-    markers.clear();
-    riders.forEach((rider) => {
-        const marker = createRiderMarker(rider).addTo(map);
-        markers.set(rider.id, marker);
-    });
-}
-
-function toGeofenceFeature(geofence: BranchGeofence): Feature<Polygon> {
-    return {
-        type: "Feature",
-        properties: {},
-        geometry: {
-            type: "Polygon",
-            coordinates: [[
-                ...geofence.points.map(toLngLat),
-                toLngLat(geofence.points[0]),
-            ]],
-        },
-    };
-}
-
-function fitGeofence(map: MapLibreMap, geofence: BranchGeofence, duration: number): void {
-    const firstPoint = toLngLat(geofence.points[0]);
-    const bounds = geofence.points.reduce(
-        (current, point) => current.extend(toLngLat(point)),
-        new LngLatBounds(firstPoint, firstPoint),
-    );
-    map.fitBounds(bounds, { padding: 55, maxZoom: 16, duration });
-}
+import { useEffect, useRef, useState } from 'react';
+import { AttributionControl, LngLatBounds, Map as MapLibreMap, Marker, NavigationControl, Popup } from 'maplibre-gl';
+import type { BranchGeofence } from '../../../lib/branchGeofence';
+import { OPENFREEMAP_STYLE_URL, toLngLat } from '../../../lib/mapConfig';
+import { routeFixTime, vehicleFixTime, type FleetVehicle, type RoutePoint, type VehicleLocation, type VehicleRouteResponse } from './vehicleLocations';
+import styles from './screen.module.css';
 
 interface Props {
-    riders: Rider[];
-    geofence: BranchGeofence;
-    mapCenter: [number, number] | null;
+    vehicles: FleetVehicle[];
+    geofence: BranchGeofence | null;
+    selection: { id: string } | null;
+    route?: VehicleRouteResponse;
+    routePoint?: RoutePoint;
 }
 
-export default function FleetMap({ riders, geofence, mapCenter }: Props) {
+function vehicleMarker(vehicle: FleetVehicle, position: VehicleLocation) {
+    const element = document.createElement('button');
+    element.type = 'button';
+    element.className = styles.vehiclePin;
+    element.dataset.stale = String(position.stale);
+    element.setAttribute('aria-label', `Vehicle ${vehicle.plate_number} location`);
+    const icon = document.createElement('span');
+    icon.textContent = '🏍';
+    icon.setAttribute('aria-hidden', 'true');
+    const plate = document.createElement('span');
+    plate.textContent = vehicle.plate_number;
+    element.append(icon, plate);
+
+    const content = document.createElement('div');
+    const label = document.createElement('strong');
+    label.textContent = vehicle.display_name ? `${vehicle.display_name} · ${vehicle.plate_number}` : vehicle.plate_number;
+    const time = document.createElement('div');
+    time.textContent = `${position.stale ? 'Last known fix' : 'GPS fix'} · ${vehicleFixTime.format(new Date(position.captured_at))}`;
+    content.append(label, time);
+
+    return new Marker({ element })
+        .setLngLat(toLngLat([position.latitude, position.longitude]))
+        .setPopup(new Popup({ offset: 16 }).setDOMContent(content));
+}
+
+export default function FleetMap({ vehicles, geofence, selection, route, routePoint }: Props) {
     const containerRef = useRef<HTMLDivElement>(null);
     const mapRef = useRef<MapLibreMap | null>(null);
-    const ridersRef = useRef(riders);
-    const geofenceRef = useRef(geofence);
     const markersRef = useRef(new Map<string, Marker>());
-    ridersRef.current = riders;
-    geofenceRef.current = geofence;
+    const fittedVehicles = useRef(false);
+    const fittedGeofence = useRef(false);
+    const [mapError, setMapError] = useState(false);
+    const [retry, setRetry] = useState(0);
 
     useEffect(() => {
         if (!containerRef.current) return;
-
-        const map = new MapLibreMap({
-            container: containerRef.current,
-            style: OPENFREEMAP_STYLE_URL,
-            center: toLngLat(geofenceRef.current.points[0]),
-            zoom: 13,
-            attributionControl: false,
-        });
-
-        const onMissingImage = (e: { id: string }) => {
-            if (!map.hasImage(e.id)) {
-                map.addImage(e.id, new ImageData(1, 1));
-            }
-        };
-        map.on('styleimagemissing', onMissingImage);
-
-        const markers = markersRef.current;
+        let map: MapLibreMap;
+        try {
+            map = new MapLibreMap({
+                container: containerRef.current,
+                style: OPENFREEMAP_STYLE_URL,
+                attributionControl: false,
+            });
+        } catch {
+            setMapError(true);
+            return;
+        }
         mapRef.current = map;
-        map.addControl(new NavigationControl({ showCompass: false }), "top-right");
-        map.addControl(
-            new AttributionControl({ compact: true }),
-            "bottom-right",
-        );
-        map.on("load", () => {
-            map.addSource("fleet-geofence", {
-                type: "geojson",
-                data: toGeofenceFeature(geofenceRef.current),
-            });
-            map.addLayer({
-                id: "fleet-geofence-fill",
-                type: "fill",
-                source: "fleet-geofence",
-                paint: { "fill-color": "hsl(203, 50%, 45%)", "fill-opacity": 0.15 },
-            });
-            map.addLayer({
-                id: "fleet-geofence-outline",
-                type: "line",
-                source: "fleet-geofence",
-                paint: {
-                    "line-color": "hsl(203, 50%, 45%)",
-                    "line-width": 2,
-                    "line-dasharray": [2.5, 2.5],
-                },
-            });
-            fitGeofence(map, geofenceRef.current, 0);
-            syncRiderMarkers(map, ridersRef.current, markers);
+        fittedVehicles.current = false;
+        fittedGeofence.current = false;
+        map.addControl(new NavigationControl({ showCompass: false }), 'top-right');
+        map.addControl(new AttributionControl({ compact: true }), 'bottom-right');
+        map.on('styleimagemissing', ({ id }) => {
+            if (!map.hasImage(id)) map.addImage(id, new ImageData(1, 1));
         });
+        map.on('error', () => setMapError(true));
+        map.on('load', () => setMapError(false));
 
         return () => {
-            markers.forEach((marker) => marker.remove());
-            markers.clear();
-            map.off('styleimagemissing', onMissingImage);
             mapRef.current = null;
             map.remove();
         };
-    }, []);
+    }, [retry]);
 
     useEffect(() => {
         const map = mapRef.current;
-        if (map?.isStyleLoaded()) syncRiderMarkers(map, riders, markersRef.current);
-    }, [riders]);
+        if (!map || !geofence) return;
+
+        const points = geofence.points.map(toLngLat);
+        const addGeofence = () => {
+            map.addSource('fleet-geofence', {
+                type: 'geojson',
+                data: {
+                    type: 'Feature',
+                    properties: {},
+                    geometry: { type: 'Polygon', coordinates: [[...points, points[0]]] },
+                },
+            });
+            map.addLayer({
+                id: 'fleet-geofence-fill',
+                type: 'fill',
+                source: 'fleet-geofence',
+                paint: { 'fill-color': '#397fa4', 'fill-opacity': 0.15 },
+            });
+            map.addLayer({
+                id: 'fleet-geofence-outline',
+                type: 'line',
+                source: 'fleet-geofence',
+                paint: { 'line-color': '#397fa4', 'line-width': 2, 'line-dasharray': [2.5, 2.5] },
+            });
+        };
+        if (map.isStyleLoaded()) addGeofence();
+        else map.once('load', addGeofence);
+
+        return () => {
+            map.off('load', addGeofence);
+            if (mapRef.current !== map || !map.getSource('fleet-geofence')) return;
+            map.removeLayer('fleet-geofence-outline');
+            map.removeLayer('fleet-geofence-fill');
+            map.removeSource('fleet-geofence');
+        };
+    }, [geofence, retry]);
 
     useEffect(() => {
         const map = mapRef.current;
-        if (!map?.isStyleLoaded()) return;
-        const source = map.getSource("fleet-geofence") as GeoJSONSource | undefined;
-        source?.setData(toGeofenceFeature(geofence));
-        fitGeofence(map, geofence, 900);
-    }, [geofence]);
-
-    useEffect(() => {
-        if (mapCenter) {
-            mapRef.current?.flyTo({ center: toLngLat(mapCenter), zoom: 15, duration: 1500 });
+        if (!map) return;
+        const markers = markersRef.current;
+        const bounds = new LngLatBounds();
+        geofence?.points.forEach(point => bounds.extend(toLngLat(point)));
+        for (const vehicle of vehicles) {
+            if (!vehicle.position) continue;
+            const marker = vehicleMarker(vehicle, vehicle.position).addTo(map);
+            markers.set(vehicle.id, marker);
+            bounds.extend(marker.getLngLat());
         }
-    }, [mapCenter]);
+        if ((!fittedVehicles.current && markers.size > 0) || (!fittedGeofence.current && geofence)) {
+            map.fitBounds(bounds, { padding: 40, maxZoom: 16, duration: 0 });
+            fittedVehicles.current = markers.size > 0;
+            fittedGeofence.current = geofence !== null;
+        }
 
-    return <div ref={containerRef} style={{ height: "100%", width: "100%" }} />;
+        return () => {
+            markers.forEach(marker => marker.remove());
+            markers.clear();
+        };
+    }, [vehicles, geofence, retry]);
+
+    useEffect(() => {
+        const marker = selection ? markersRef.current.get(selection.id) : undefined;
+        if (!marker) return;
+        mapRef.current?.easeTo({ center: marker.getLngLat(), zoom: 16, duration: 300 });
+        if (!marker.getPopup()?.isOpen()) marker.togglePopup();
+    }, [selection, retry]);
+
+    useEffect(() => {
+        const map = mapRef.current;
+        if (!map || !route || route.points.length === 0) return;
+        const points = route.points.map(point => toLngLat([point.latitude, point.longitude]));
+        const endpoints: Marker[] = [];
+        const bounds = new LngLatBounds();
+        points.forEach(point => bounds.extend(point));
+        map.fitBounds(bounds, { padding: 55, maxZoom: 16, duration: 0 });
+
+        for (const [index, label] of [[0, 'Start'], [points.length - 1, 'End']] as const) {
+            const element = document.createElement('span');
+            element.className = styles.routeEndpoint;
+            element.textContent = label;
+            endpoints.push(new Marker({ element, anchor: label === 'Start' ? 'right' : 'left' }).setLngLat(points[index]).addTo(map));
+        }
+        const addRoute = () => {
+            if (points.length < 2) return;
+            map.addSource('vehicle-route', {
+                type: 'geojson',
+                data: { type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: points } },
+            });
+            map.addLayer({
+                id: 'vehicle-route-line', type: 'line', source: 'vehicle-route',
+                layout: { 'line-join': 'round', 'line-cap': 'round' },
+                paint: { 'line-color': '#0073ad', 'line-width': 4 },
+            });
+        };
+        if (map.isStyleLoaded()) addRoute();
+        else map.once('load', addRoute);
+        return () => {
+            endpoints.forEach(marker => marker.remove());
+            map.off('load', addRoute);
+            if (mapRef.current !== map || !map.getSource('vehicle-route')) return;
+            map.removeLayer('vehicle-route-line');
+            map.removeSource('vehicle-route');
+        };
+    }, [route, retry]);
+
+    useEffect(() => {
+        const map = mapRef.current;
+        if (!map || !route || !routePoint) return;
+        const element = document.createElement('button');
+        element.type = 'button';
+        element.className = styles.vehiclePin;
+        element.textContent = `🏍 ${route.vehicle.plate_number}`;
+        element.setAttribute('aria-label', 'Recorded vehicle position');
+        const popup = document.createElement('div');
+        popup.textContent = routeFixTime.format(new Date(routePoint.captured_at));
+        const marker = new Marker({ element })
+            .setLngLat(toLngLat([routePoint.latitude, routePoint.longitude]))
+            .setPopup(new Popup({ offset: 16 }).setDOMContent(popup)).addTo(map);
+        return () => { marker.remove(); };
+    }, [route, routePoint, retry]);
+
+    return (
+        <div className={styles.mapFrame}>
+            <div ref={containerRef} className={styles.map} aria-label={route ? 'Vehicle route history map' : 'Vehicle hardware GPS map'} />
+            {mapError && (
+                <div className={styles.mapError} role="status">
+                    <span>{route ? 'Map unavailable. Recorded coordinates remain available below.' : 'Map unavailable. Vehicle coordinates are listed in the roster.'}</span>
+                    <button className={styles.refreshButton} type="button" onClick={() => {
+                        setMapError(false);
+                        setRetry(value => value + 1);
+                    }}>Retry map</button>
+                </div>
+            )}
+        </div>
+    );
 }

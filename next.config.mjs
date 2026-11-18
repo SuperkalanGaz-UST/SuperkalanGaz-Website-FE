@@ -5,7 +5,7 @@
 // framing, locks connections/images/styles down to known hosts, and removes
 // plugin/object embedding, on top of the app's already-clean XSS surface.
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
-const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? ''
+const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
 const connectSrc = [
   "'self'",
   'https://tiles.openfreemap.org',
@@ -20,7 +20,7 @@ const csp = [
   "default-src 'self'",
   "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob: https:",
+  `img-src 'self' data: blob: https: ${apiUrl}`,
   "font-src 'self' data:",
   `connect-src ${connectSrc}`,
   "worker-src 'self' blob:",

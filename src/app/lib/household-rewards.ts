@@ -8,8 +8,15 @@ export interface RewardItem {
   description: string | null;
   points_cost: number;
   is_active: boolean;
+  photo_path?: string | null;
 }
 
 export interface BranchRewardItem extends RewardItem {
   stock_qty: number;
+}
+
+export function catalogPhotoUrl(path?: string | null): string | undefined {
+  if (!path?.startsWith('/loyalty/catalog/photos/')) return undefined;
+  const baseUrl = (process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001').replace(/\/$/, '');
+  return `${baseUrl}/api${path}`;
 }
