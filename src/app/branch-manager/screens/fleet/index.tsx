@@ -1,5 +1,7 @@
 'use client';
 
+import VehicleGeofenceAlerts from './VehicleGeofenceAlerts';
+
 import { useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import dynamic from 'next/dynamic';
@@ -93,6 +95,7 @@ export default function FleetPage() {
                 ) : vehicleQuery.data?.gps_unavailable && (
                     <p className={styles.notice} role="status">Some vehicle GPS data could not be loaded from Traccar. Use Refresh to retry.</p>
                 )}
+                <VehicleGeofenceAlerts vehicles={vehicles} unavailable={vehicleQuery.isError || vehicleQuery.data?.gps_unavailable} />
                 <div className={styles.mainLayout}>
                     {mapAvailable ? (
                         <FleetMap vehicles={vehicles} geofence={geofence} selection={vehicleSelection} />

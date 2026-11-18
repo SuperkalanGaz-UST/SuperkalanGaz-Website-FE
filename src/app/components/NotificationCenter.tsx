@@ -11,7 +11,9 @@ import {
   Package,
   Tag,
 } from 'lucide-react';
-import { apiErrorMessage, apiFetch, fetchJson } from '../lib/api';
+import { toast } from 'sonner';
+import { useAccount } from '../contexts/AccountContext';
+import { apiFetch, fetchJson } from '../lib/api';
 
 type NotificationType =
   | 'price-update'
@@ -20,6 +22,7 @@ type NotificationType =
   | 'service-request'
   | 'loyalty-redemption'
   | 'inventory-alert'
+  | 'vehicle-geofence'
   | 'system';
 
 interface NotificationItem {
@@ -44,6 +47,7 @@ const TYPE_ICONS: Record<NotificationType, ComponentType<{ className?: string }>
   'service-request': ClipboardCheck,
   'loyalty-redemption': Gift,
   'inventory-alert': Package,
+  'vehicle-geofence': MessageSquareWarning,
   system: Bell,
 };
 
@@ -71,31 +75,35 @@ function relativeTime(value: string): string {
  * Shared SA/FA/BO/BM notification control. Audience filtering is intentionally not
  * done here: the NestJS API derives role + branch scope from the verified JWT.
  */
-export function NotificationCenter() {
+export function NotificationCenter({ branchId, requireBranch = false }: { branchId?: string; requireBranch?: boolean }) {
+  const account = useAccount();
   const queryClient = useQueryClient();
   const [isOpen, setIsOpen] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
+  const notificationKey = ['notifications', account.id, account.role, branchId ?? null];
+  const branchQuery = branchId ? `&branchId=${encodeURIComponent(branchId)}` : '';
   const { data: notificationsData, isLoading, error: queryError } = useQuery({
-    queryKey: ['notifications'],
-    queryFn: () => fetchJson<NotificationsResponse>('/notifications?limit=50'),
+    queryKey: notificationKey,
+    queryFn: () => fetchJson<NotificationsResponse>(`/notifications?limit=50${branchQuery}`),
+    enabled: !requireBranch || !!branchId,
     refetchInterval: 60_000,
+    refetchIntervalInBackground: false,
     staleTime: 30_000,
   });
 
-  const [localNotifications, setLocalNotifications] = useState<NotificationItem[] | null>(null);
-
+  const notifications = useMemo(() => notificationsData?.notifications ?? [], [notificationsData]);
+  const unreadCount = notificationsData?.unread_count ?? 0;
+  const shownAlerts = useRef(new Set<string>());
   useEffect(() => {
-    if (notificationsData) {
-      setLocalNotifications(notificationsData.notifications);
-    }
-  }, [notificationsData]);
-
-  const notifications = localNotifications ?? [];
-  const unreadCount = localNotifications 
-    ? localNotifications.filter(n => !n.is_read).length 
-    : (notificationsData?.unread_count ?? 0);
+    const latest = notifications.find(item => item.type === 'vehicle-geofence' && !item.is_read && !shownAlerts.current.has(item.id));
+    if (!latest) return;
+    shownAlerts.current.add(latest.id);
+    const toastId = `geofence-${account.id}-${branchId ?? ''}-${latest.id}`;
+    toast.warning(latest.title, { id: toastId, description: latest.message, duration: 10_000 });
+    return () => { toast.dismiss(toastId); };
+  }, [notifications, account.id, branchId]);
   const error = queryError ? (queryError.message || 'Could not load notifications.') : null;
 
   const refreshNotifications = useCallback(() => {
@@ -140,7 +148,10 @@ export function NotificationCenter() {
   async function markRead(notification: NotificationItem) {
     if (notification.is_read) return;
 
-    setLocalNotifications((items) => items ? items.map((item) => (item.id === notification.id ? { ...item, is_read: true } : item)) : items);
+    queryClient.setQueryData<NotificationsResponse>(notificationKey, current => current ? {
+      ...current, unread_count: Math.max(0, current.unread_count - 1),
+      notifications: current.notifications.map(item => item.id === notification.id ? { ...item, is_read: true } : item),
+    } : current);
 
     const response = await apiFetch(`/notifications/${notification.id}/read`, { method: 'POST' });
     if (!response.ok) refreshNotifications();
@@ -149,9 +160,11 @@ export function NotificationCenter() {
   async function markAllRead() {
     if (unreadCount === 0) return;
 
-    setLocalNotifications((items) => items ? items.map((item) => ({ ...item, is_read: true })) : items);
+    queryClient.setQueryData<NotificationsResponse>(notificationKey, current => current ? {
+      unread_count: 0, notifications: current.notifications.map(item => ({ ...item, is_read: true })),
+    } : current);
 
-    const response = await apiFetch('/notifications/read-all', { method: 'POST' });
+    const response = await apiFetch(`/notifications/read-all${branchId ? `?branchId=${encodeURIComponent(branchId)}` : ''}`, { method: 'POST' });
     if (!response.ok) {
       refreshNotifications();
     }

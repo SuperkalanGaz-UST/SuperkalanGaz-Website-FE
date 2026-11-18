@@ -123,5 +123,6 @@ interface HeaderProps {
 
 /** BO page header: the shared AppHeader with the branch selector as its badge. */
 export function Header({ title, description }: HeaderProps) {
-  return <AppHeader title={title} description={description} badge={<BranchBadge />} />;
+  const { selectedBranchId } = useBranch();
+  return <AppHeader notificationBranchId={selectedBranchId ?? undefined} requireNotificationBranch title={title} description={description} badge={<BranchBadge />} />;
 }

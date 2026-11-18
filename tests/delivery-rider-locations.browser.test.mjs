@@ -67,7 +67,7 @@ test('manager dispatch and Fleet show independent phone and vehicle fixes, refre
           vehicleReads++;
           if (vehicleRequestFailed) return route.fulfill({ status: 503, json: { message: 'Vehicle locations temporarily unavailable' } });
           return route.fulfill({ json: { gps_unavailable: vehicleGpsUnavailable, refresh_interval_ms: vehicleInterval, vehicles: [
-            { id: 'unassigned-vehicle', plate_number: 'HW 123', display_name: 'Branch motorcycle', tracker_connected: true, position: vehicleGpsUnavailable ? null : vehicleFix },
+            { id: 'unassigned-vehicle', plate_number: 'HW 123', display_name: 'Branch motorcycle', tracker_connected: true, geofence_status: 'outside', position: vehicleGpsUnavailable ? null : vehicleFix },
             { id: 'untracked-vehicle', plate_number: 'NO GPS', display_name: null, tracker_connected: false, position: null },
           ] } });
         }
@@ -133,6 +133,7 @@ test('manager dispatch and Fleet show independent phone and vehicle fixes, refre
     const vehiclePanel = page.getByRole('region', { name: 'Vehicle locations', exact: true });
     const vehiclePin = vehiclePanel.getByRole('button', { name: 'Vehicle HW 123 location', exact: true });
     await vehiclePin.waitFor();
+    await vehiclePanel.getByRole('alert', { name: 'Vehicles outside assigned area', exact: true }).waitFor();
     const history = page.getByRole('dialog', { name: 'Route history · HW 123', exact: true });
     assert.equal(await history.count(), 0, 'Route history is opened from the vehicle roster');
     const historyTrigger = vehiclePanel.getByRole('button', { name: 'View route history for HW 123', exact: true });
@@ -146,6 +147,19 @@ test('manager dispatch and Fleet show independent phone and vehicle fixes, refre
     await history.getByText(/3 recorded GPS points/).waitFor();
     await history.getByLabel('Vehicle route history map', { exact: true }).waitFor();
     await history.getByRole('button', { name: 'Recorded vehicle position', exact: true }).waitFor();
+    const play = history.getByRole('button', { name: 'Play route playback', exact: true });
+    await play.click();
+    await page.clock.fastForward(550);
+    assert.equal(await history.getByRole('slider').inputValue(), '1');
+    await history.getByRole('button', { name: 'Pause route playback', exact: true }).click();
+    await page.clock.fastForward(1_100);
+    assert.equal(await history.getByRole('slider').inputValue(), '1', 'Pause stops local playback');
+    await play.click();
+    await page.clock.fastForward(550);
+    await play.waitFor();
+    assert.equal(await history.getByRole('slider').inputValue(), '2', 'Playback stops at the end');
+    await play.click();
+    assert.equal(await history.getByRole('slider').inputValue(), '0', 'Play restarts a completed route');
     const readsBeforeScrubbing = routeReads;
     await history.getByRole('slider').press('End');
     await history.getByText(/14.620000, 121.010000/).waitFor();

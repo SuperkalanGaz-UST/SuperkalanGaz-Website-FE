@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
+import { Pause, Play } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import dynamic from 'next/dynamic';
 import { fetchJson } from '../../../lib/api';
@@ -30,6 +31,7 @@ export default function VehicleRouteHistory({ vehicle, scope, branchId, onClose,
     const [submitted, setSubmitted] = useState<RouteSearch | null>(null);
     const [validationError, setValidationError] = useState('');
     const [pointIndex, setPointIndex] = useState(0);
+    const [playing, setPlaying] = useState(false);
     const vehicleId = vehicle.id;
     const matchesSearch = submitted?.vehicleId === vehicleId && submitted.from === range.from && submitted.to === range.to;
     const query = useQuery({
@@ -54,6 +56,21 @@ export default function VehicleRouteHistory({ vehicle, scope, branchId, onClose,
     const route = matchesSearch && vehicle.tracker_connected && !query.isError && !query.isFetching ? query.data : undefined;
     const point = route?.points[Math.min(pointIndex, route.points.length - 1)];
 
+    useEffect(() => {
+        if (!playing || !route || route.points.length < 2) return;
+        const timer = window.setTimeout(() => {
+            const next = Math.min(pointIndex + 1, route.points.length - 1);
+            setPointIndex(next);
+            if (next === route.points.length - 1) setPlaying(false);
+        }, 500);
+        const pauseWhenHidden = () => { if (document.hidden) setPlaying(false); };
+        document.addEventListener('visibilitychange', pauseWhenHidden);
+        return () => {
+            window.clearTimeout(timer);
+            document.removeEventListener('visibilitychange', pauseWhenHidden);
+        };
+    }, [playing, pointIndex, route]);
+
     function showRoute(event: FormEvent<HTMLFormElement>) {
         event.preventDefault();
         const from = new Date(`${range.from}:00+08:00`).getTime();
@@ -63,6 +80,7 @@ export default function VehicleRouteHistory({ vehicle, scope, branchId, onClose,
             return;
         }
         setValidationError('');
+        setPlaying(false);
         setPointIndex(0);
         if (matchesSearch) void query.refetch();
         else setSubmitted({ vehicleId, ...range });
@@ -79,10 +97,10 @@ export default function VehicleRouteHistory({ vehicle, scope, branchId, onClose,
                 </div>
                 <form className={styles.routeFilters} onSubmit={showRoute}>
                     <label>From
-                        <input type="datetime-local" value={range.from} onChange={event => { const from = event.target.value; setRange(current => ({ ...current, from })); }} required />
+                        <input type="datetime-local" value={range.from} onChange={event => { const from = event.target.value; setPlaying(false); setRange(current => ({ ...current, from })); }} required />
                     </label>
                     <label>To
-                        <input type="datetime-local" value={range.to} onChange={event => { const to = event.target.value; setRange(current => ({ ...current, to })); }} required />
+                        <input type="datetime-local" value={range.to} onChange={event => { const to = event.target.value; setPlaying(false); setRange(current => ({ ...current, to })); }} required />
                     </label>
                     <button className={styles.refreshButton} type="submit" disabled={!vehicle.tracker_connected || query.isFetching}>
                         {query.isFetching ? 'Loading route…' : 'Show route'}
@@ -101,9 +119,17 @@ export default function VehicleRouteHistory({ vehicle, scope, branchId, onClose,
                                 <span>Start · {routeFixTime.format(new Date(route.points[0].captured_at))}</span>
                                 <span>End · {routeFixTime.format(new Date(route.points[route.points.length - 1].captured_at))}</span>
                             </div>
+                            <button type="button" className={styles.refreshButton} disabled={route.points.length < 2}
+                                aria-label={playing ? 'Pause route playback' : 'Play route playback'}
+                                onClick={() => {
+                                    if (!playing && pointIndex >= route.points.length - 1) setPointIndex(0);
+                                    setPlaying(current => !current);
+                                }}>
+                                {playing ? <Pause size={16} /> : <Play size={16} />}{playing ? 'Pause' : 'Play'}
+                            </button>
                             <label htmlFor="route-position">Recorded position · {routeFixTime.format(new Date(point.captured_at))}</label>
                             <input id="route-position" type="range" min="0" max={route.points.length - 1} value={Math.min(pointIndex, route.points.length - 1)}
-                                disabled={route.points.length === 1} onChange={event => setPointIndex(Number(event.target.value))} />
+                                disabled={route.points.length === 1} onChange={event => { setPlaying(false); setPointIndex(Number(event.target.value)); }} />
                             <p className={styles.coordinates}>{point.latitude.toFixed(6)}, {point.longitude.toFixed(6)} · {route.points.length} recorded GPS points</p>
                         </div>
                     </>

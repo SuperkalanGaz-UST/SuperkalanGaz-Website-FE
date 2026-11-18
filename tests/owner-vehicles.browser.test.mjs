@@ -60,7 +60,7 @@ test('Owner Vehicles stays view-only and scopes roster/history across branch swi
         if (gpsMode === 'error') return route.fulfill({ status: 503, json: { message: 'GPS unavailable' } });
         const first = branchId === branches[0].id;
         return route.fulfill({ json: { refresh_interval_ms: 120_000, gps_unavailable: false, vehicles: gpsMode === 'empty' ? [] : [{
-          id: first ? 'vehicle-a' : 'vehicle-b', plate_number: first ? 'OWNER-A' : 'OWNER-B', display_name: 'Branch motorcycle', tracker_connected: true,
+          id: first ? 'vehicle-a' : 'vehicle-b', plate_number: first ? 'OWNER-A' : 'OWNER-B', display_name: 'Branch motorcycle', tracker_connected: true, geofence_status: first ? 'outside' : 'inside',
           position: { latitude: first ? 14.6 : 14.7, longitude: 121, captured_at: new Date().toISOString(), stale: false, moving: false },
         }] } });
       }
@@ -70,6 +70,14 @@ test('Owner Vehicles stays view-only and scopes roster/history across branch swi
         assert.equal(url.searchParams.get('branchId'), branches[first ? 0 : 1].id);
         return route.fulfill({ json: { vehicle: { id: first ? 'vehicle-a' : 'vehicle-b', plate_number: first ? 'OWNER-A' : 'OWNER-B', display_name: null },
           from: url.searchParams.get('from'), to: url.searchParams.get('to'), points: [{ latitude: first ? 14.6 : 14.7, longitude: 121, captured_at: new Date().toISOString() }] } });
+      }
+      if (url.pathname === '/api/notifications') {
+        const branchId = url.searchParams.get('branchId');
+        assert.ok(branches.some(branch => branch.id === branchId), 'Owner bell must carry selected branch UUID');
+        return route.fulfill({ json: { unread_count: branchId === branches[0].id ? 1 : 0, notifications: branchId === branches[0].id ? [{
+          id: 'geofence-test', type: 'vehicle-geofence', title: 'Vehicle outside assigned area', message: 'OWNER-A left its assigned area.',
+          branch_id: branchId, created_at: new Date().toISOString(), is_read: false,
+        }] : [] } });
       }
       if (url.pathname.startsWith('/api/vehicles')) {
         requests.push(url);
@@ -136,6 +144,10 @@ test('Owner Vehicles stays view-only and scopes roster/history across branch swi
     await page.getByRole('button', { name: branches[0].name, exact: true }).click();
     await mapPanel.getByRole('button', { name: 'Vehicle OWNER-A location', exact: true }).waitFor();
     await roster.getByText('Test Delivery Rider', { exact: true }).waitFor();
+    await page.getByRole('alert', { name: 'Vehicles outside assigned area', exact: true }).waitFor();
+    await page.getByRole('button', { name: /^Notifications/ }).click();
+    await page.getByRole('region', { name: 'Notifications', exact: true }).getByText('Vehicle outside assigned area', { exact: true }).waitFor();
+    await page.getByRole('button', { name: /^Notifications/ }).click();
     await roster.getByLabel('Roster view').selectOption('vehicles');
     await roster.getByText('14.600000, 121.000000', { exact: true }).waitFor();
     assert.equal(routeRequests.length, 0);
@@ -144,11 +156,13 @@ test('Owner Vehicles stays view-only and scopes roster/history across branch swi
     const routeDialogA = page.getByRole('dialog', { name: 'Route history · OWNER-A', exact: true });
     await routeDialogA.getByRole('button', { name: 'Show route', exact: true }).click();
     await routeDialogA.getByText(/recorded GPS points/).waitFor();
+    assert.equal(await routeDialogA.getByRole('button', { name: 'Play route playback', exact: true }).isEnabled(), false, 'Single-point history cannot play');
     await routeDialogA.getByRole('button', { name: 'Close', exact: true }).click();
     await routeDialogA.waitFor({ state: 'detached' });
     await page.getByRole('button', { name: branches[0].name, exact: true }).click();
     await page.getByRole('button', { name: branches[1].name, exact: true }).click();
     await roster.getByRole('button', { name: 'Show vehicle OWNER-B on map', exact: true }).waitFor();
+    assert.equal(await page.getByRole('alert', { name: 'Vehicles outside assigned area', exact: true }).count(), 0, 'Old branch alerts clear on branch switch');
     assert.equal(await mapPanel.getByRole('button', { name: 'Vehicle OWNER-A location', exact: true }).count(), 0);
     assert.equal(await roster.getByRole('button', { name: 'Show vehicle OWNER-A on map', exact: true }).count(), 0);
     await roster.getByRole('button', { name: 'View route history for OWNER-B', exact: true }).click();

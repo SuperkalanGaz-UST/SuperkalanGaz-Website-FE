@@ -11,6 +11,7 @@ export interface FleetVehicle {
     plate_number: string;
     display_name: string | null;
     tracker_connected: boolean;
+    geofence_status?: 'inside' | 'outside' | 'unknown' | 'unconfigured';
     position: VehicleLocation | null;
 }
 

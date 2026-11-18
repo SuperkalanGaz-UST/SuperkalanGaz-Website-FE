@@ -4,6 +4,7 @@ import dynamic from 'next/dynamic';
 import { Header } from './Header';
 import { KPICard } from './KPICard';
 import { Users, Navigation, AlertTriangle, Loader2, Truck } from 'lucide-react';
+import VehicleGeofenceAlerts from '../../branch-manager/screens/fleet/VehicleGeofenceAlerts';
 import { useBranch } from '../contexts/BranchContext';
 import type { FleetRider } from '../../lib/fleetPresentationData';
 import { fetchJson } from '../../lib/api';
@@ -297,12 +298,7 @@ export function FleetOverview({ vehiclesActive, onNavigate }: {
             </div>
             <div>
               <div className="text-xs text-gray-500 mb-3">Active Geofence Alerts</div>
-              <div className="flex items-start gap-3 rounded-lg bg-gray-50 p-3">
-                <AlertTriangle className="mt-0.5 h-4 w-4 text-gray-400" />
-                <div className="text-sm text-gray-500">
-                  Vehicle geofence event history is unavailable.
-                </div>
-              </div>
+              <VehicleGeofenceAlerts vehicles={vehicles} unavailable={vehicleQuery.isError || vehicleData?.gps_unavailable} />
             </div>
           </div>
 
