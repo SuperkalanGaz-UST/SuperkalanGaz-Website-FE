@@ -1,7 +1,7 @@
 import React from "react";
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: "primary" | "outline" | "ghost" | "link" | "secondary" | "accent";
+  variant?: "primary" | "outline" | "ghost" | "link" | "secondary" | "accent" | "danger";
   size?: "default" | "sm" | "lg" | "icon" | "icon-sm";
 }
 
@@ -42,6 +42,8 @@ function getVariantStyles(variant: string): React.CSSProperties {
   switch (variant) {
     case "primary":
       return { backgroundColor: "var(--primary, #0074bc)", color: "white" };
+    case "danger":
+      return { backgroundColor: "var(--destructive, #e31837)", color: "var(--destructive-foreground, #f8fafc)" };
     case "outline":
       return { backgroundColor: "transparent", border: "1px solid rgba(0,0,0,0.1)", color: "inherit" };
     case "ghost":
