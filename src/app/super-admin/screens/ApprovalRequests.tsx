@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { CheckCircle2, FileText, RotateCcw, Search, XCircle } from 'lucide-react';
 import { toast } from 'sonner';
@@ -15,6 +15,15 @@ import {
   StatusChip,
 } from '../components/GovernanceUi';
 import { SuperAdminHeader } from '../components/SuperAdminHeader';
+import { ConfirmActionDialog } from '../../components/ConfirmActionDialog';
+
+type Decision = 'approve' | 'reject' | 'request-revision';
+
+const DECISION_DIALOG: Record<Decision, { title: string; confirm: string; busy: string; tone: 'primary' | 'warning' | 'danger'; icon: typeof CheckCircle2; effect: string }> = {
+  approve: { title: 'Approve this request?', confirm: 'Approve', busy: 'Approving…', tone: 'primary', icon: CheckCircle2, effect: 'The change takes effect as soon as you approve it.' },
+  'request-revision': { title: 'Request a revision?', confirm: 'Request revision', busy: 'Sending…', tone: 'warning', icon: RotateCcw, effect: 'The Franchise Administrator will be asked to revise and resubmit.' },
+  reject: { title: 'Reject this request?', confirm: 'Reject', busy: 'Rejecting…', tone: 'danger', icon: XCircle, effect: 'The request is closed and nothing is changed.' },
+};
 
 const FILTERS: { label: string; value: 'all' | GovernanceRequestStatus }[] = [
   { label: 'All', value: 'all' },
@@ -65,6 +74,7 @@ export function ApprovalRequests() {
   const [search, setSearch] = useState('');
   const [reason, setReason] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [pendingDecision, setPendingDecision] = useState<Decision | null>(null);
 
   const { data: requests, error: queryError, refetch: load } = useQuery({
     queryKey: ['approval-requests'],
@@ -85,16 +95,27 @@ export function ApprovalRequests() {
   const selected = (requests ?? []).find((request) => request.id === selectedId) ?? filtered[0] ?? null;
   const legacyFranchiseAdminRequest = selected?.type === 'franchise-admin-account';
 
-  const decide = async (decision: 'approve' | 'reject' | 'request-revision') => {
+  // A reason typed for one request must never be saved as the audited reason for
+  // another; the selection also changes via filters, search and refetches.
+  const selectedRequestId = selected?.id;
+  useEffect(() => { setReason(''); setPendingDecision(null); }, [selectedRequestId]);
+
+  const confirmDecision = (decision: Decision) => {
     if (!selected || reason.trim().length < 5) {
       toast.error('Enter a decision reason with at least 5 characters.');
       return;
     }
+    setPendingDecision(decision);
+  };
+
+  const decide = async (decision: Decision) => {
+    if (!selected) return;
     setSubmitting(true);
     try {
       const result = await governanceApi.decide(selected.id, decision, reason.trim());
       toast.success(`Request ${humanize(result.request.status).toLowerCase()}.`);
       setReason('');
+      setPendingDecision(null);
       await load();
     } catch (decisionError) {
       toast.error(decisionError instanceof Error ? decisionError.message : 'Could not save the decision.');
@@ -202,11 +223,11 @@ export function ApprovalRequests() {
                       <div className={`mt-5 grid gap-3 ${legacyFranchiseAdminRequest ? '' : 'sm:grid-cols-3'}`}>
                         {!legacyFranchiseAdminRequest && (
                           <>
-                            <button type="button" disabled={submitting} onClick={() => void decide('approve')} className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#007BC1] px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50"><CheckCircle2 className="h-4 w-4" />Approve</button>
-                            <button type="button" disabled={submitting} onClick={() => void decide('request-revision')} className="inline-flex items-center justify-center gap-2 rounded-lg border border-amber-400 px-4 py-2.5 text-sm font-semibold text-amber-700 disabled:opacity-50"><RotateCcw className="h-4 w-4" />Revise</button>
+                            <button type="button" disabled={submitting} onClick={() => confirmDecision('approve')} className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#007BC1] px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50"><CheckCircle2 className="h-4 w-4" />Approve</button>
+                            <button type="button" disabled={submitting} onClick={() => confirmDecision('request-revision')} className="inline-flex items-center justify-center gap-2 rounded-lg border border-amber-400 px-4 py-2.5 text-sm font-semibold text-amber-700 disabled:opacity-50"><RotateCcw className="h-4 w-4" />Revise</button>
                           </>
                         )}
-                        <button type="button" disabled={submitting} onClick={() => void decide('reject')} className="inline-flex items-center justify-center gap-2 rounded-lg border border-red-400 px-4 py-2.5 text-sm font-semibold text-red-700 disabled:opacity-50"><XCircle className="h-4 w-4" />Reject</button>
+                        <button type="button" disabled={submitting} onClick={() => confirmDecision('reject')} className="inline-flex items-center justify-center gap-2 rounded-lg border border-red-400 px-4 py-2.5 text-sm font-semibold text-red-700 disabled:opacity-50"><XCircle className="h-4 w-4" />Reject</button>
                       </div>
                     </>
                   ) : (
@@ -218,6 +239,31 @@ export function ApprovalRequests() {
           </div>
         )}
       </main>
+
+      {pendingDecision && selected && (() => {
+        const dialog = DECISION_DIALOG[pendingDecision];
+        const Icon = dialog.icon;
+        return (
+          <ConfirmActionDialog
+            open
+            onOpenChange={(open) => { if (!open) setPendingDecision(null); }}
+            title={dialog.title}
+            description={(
+              <div className="space-y-3">
+                <p><span className="font-semibold text-gray-900">{selected.title}</span> · {humanize(selected.type)} · submitted by {selected.requested_by_name}</p>
+                <p className="rounded-xl bg-gray-50 px-3 py-2 text-gray-700">Your reason: {reason.trim()}</p>
+                <p>{dialog.effect} Your decision and reason are written to the immutable audit trail.</p>
+              </div>
+            )}
+            confirmLabel={dialog.confirm}
+            busyLabel={dialog.busy}
+            tone={dialog.tone}
+            icon={<Icon className="h-5 w-5" aria-hidden="true" />}
+            busy={submitting}
+            onConfirm={() => decide(pendingDecision)}
+          />
+        );
+      })()}
     </div>
   );
 }
