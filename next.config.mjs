@@ -41,6 +41,10 @@ const securityHeaders = [
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  // Accounts are invitation-only; old /signup links land on Sign In.
+  async redirects() {
+    return [{ source: '/signup', destination: '/', permanent: false }]
+  },
   async headers() {
     return [{ source: '/:path*', headers: securityHeaders }]
   },
