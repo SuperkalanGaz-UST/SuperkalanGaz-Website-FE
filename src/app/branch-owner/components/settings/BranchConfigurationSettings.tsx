@@ -30,6 +30,8 @@ const numberFieldClassName =
 /** Inventory and operating-hours settings for the selected branch. */
 export function BranchConfigurationSettings() {
   const { selectedBranch, selectedBranchId } = useBranch();
+  // selectedBranch is the placeholder "Select branch" when none is chosen.
+  const branchLabel = selectedBranchId ? selectedBranch : 'no branch selected';
   const [savedByBranch, setSavedByBranch] = useState<Record<string, BranchConfiguration>>({});
   const savedConfiguration = useMemo(
     () =>
@@ -123,7 +125,7 @@ export function BranchConfigurationSettings() {
         <LockKeyhole className="h-4 w-4 shrink-0 text-[#007BC1]" aria-hidden="true" />
         Settings apply to{' '}
         <span className="font-semibold text-gray-900">
-          {selectedBranch || 'no active branch'}
+          {branchLabel}
         </span>{' '}
         only.
       </div>

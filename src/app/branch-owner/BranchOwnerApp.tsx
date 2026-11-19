@@ -26,10 +26,13 @@ import CustomerDirectory from './components/CustomerDirectory';
 import { BranchProvider, useBranch } from './contexts/BranchContext';
 
 function BranchContentTransition({ children }: { children: ReactNode }) {
-  const { isBranchSwitching } = useBranch();
+  const { isBranchSwitching, selectedBranchId } = useBranch();
 
   return (
     <div
+      // Remount the screen on a branch switch so page numbers, filters and selected
+      // records from the previous branch never carry over.
+      key={selectedBranchId ?? 'no-branch'}
       className={`flex-1 flex flex-col overflow-hidden transition-[opacity,transform] duration-200 ease-out ${
         isBranchSwitching
           ? 'translate-y-1 opacity-70'
