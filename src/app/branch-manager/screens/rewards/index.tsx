@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import Image from 'next/image';
-import { RefreshCw, Gift, Star, UsersRound, Clock3, RotateCw, Building2 } from 'lucide-react';
+import { RefreshCw, Gift, Star, PackageCheck, CircleCheck, Clock3, RotateCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { Badge } from '../../components/Badge';
 import { Button } from '../../components/Button';
@@ -480,62 +480,56 @@ export default function Rewards() {
             </div>
 
             {/* KPI summary — real counts for the active track, not illustrative data. */}
-            <div className={styles.metricsRow}>
+            <div className={`${styles.metricsRow} ${isCommercial ? styles.commercialMetricsRow : ''}`}>
                 <div className={styles.heroCard}>
                     <p className={styles.heroEyebrow}>
-                        {isCommercial ? '30+1 Cycle Overview' : 'Household Points Overview'}
+                        {isCommercial ? 'Commercial 30+1 Rewards' : 'Household Rewards'}
                     </p>
                     <p className={styles.heroLabel}>
-                        {isCommercial ? 'Pending Free-Cylinder Requests' : 'Ready for Pickup'}
+                        {isCommercial ? 'Pending Requests' : 'Ready for Pickup'}
                     </p>
                     <p className={styles.heroValue}>
-                        {trackSummary
-                            ? (isCommercial ? trackSummary.pending : trackSummary.approved)
-                            : '—'}
+                        {trackSummary ? (isCommercial ? trackSummary.pending : trackSummary.approved) : '—'}
                     </p>
-                    <div className={styles.heroIcon}>
+                    <div className={styles.heroIcon} aria-hidden="true">
                         {isCommercial ? <RotateCw size={26} /> : <Star size={26} fill="currentColor" />}
                     </div>
                 </div>
                 {isCommercial && (
-                <div className={styles.metricCard}>
-                    <div className={styles.metricIcon}>
-                        {isCommercial ? <Building2 size={22} /> : <UsersRound size={22} />}
+                    <div className={styles.metricCard}>
+                        <div className={`${styles.metricIcon} ${styles.metricIconAmber}`} aria-hidden="true">
+                            <Clock3 size={24} />
+                        </div>
+                        <div>
+                            <p className={styles.metricLabel}>Approved, Awaiting Pickup</p>
+                            <p className={styles.metricValue}>{trackSummary ? trackSummary.approved : '—'}</p>
+                        </div>
                     </div>
-                    <div>
-                        <p className={styles.metricLabel}>Pending Requests</p>
-                        <p className={styles.metricValue}>{trackSummary ? trackSummary.pending : '—'}</p>
-                        <p className={styles.metricDetail}>Awaiting your review</p>
-                    </div>
-                </div>
                 )}
                 <div className={styles.metricCard}>
-                    <div className={`${styles.metricIcon} ${styles.metricIconAmber}`}>
-                        <Clock3 size={22} />
+                    <div className={`${styles.metricIcon} ${styles.metricIconGreen}`} aria-hidden="true">
+                        {isCommercial ? <CircleCheck size={24} /> : <PackageCheck size={26} />}
                     </div>
                     <div>
-                        <p className={styles.metricLabel}>{isCommercial ? 'Approved, Awaiting Pickup' : 'Redeemed'}</p>
-                        <p className={styles.metricValue}>{trackSummary ? (isCommercial ? trackSummary.approved : trackSummary.fulfilled) : '—'}</p>
-                        {isCommercial && <p className={`${styles.metricDetail} ${styles.metricDetailAmber}`}>
-                            {trackSummary ? `${trackSummary.fulfilled} fulfilled to date` : ' '}
-                        </p>}
+                        <p className={styles.metricLabel}>{isCommercial ? 'Fulfilled' : 'Redeemed'}</p>
+                        <p className={styles.metricValue}>{trackSummary ? trackSummary.fulfilled : '—'}</p>
                     </div>
                 </div>
             </div>
 
             {isCommercial && (
-                <div className={styles.card}>
-                    <div className={styles.cardHeaderFlex}>
+                <div className={`${styles.card} ${styles.createCard}`}>
+                    <div className={`${styles.cardHeaderFlex} ${styles.createHeader} ${showCreate ? styles.createHeaderExpanded : ''}`}>
                         <div className={styles.cardTitle}>
                             Commercial Free-Cylinder Redemptions
                         </div>
-                        <Button
-                            variant={showCreate ? 'outline' : 'accent'}
-                            size="sm"
+                        <button
+                            type="button"
+                            className={`${styles.newRequestButton} ${showCreate ? styles.cancelRequestButton : ''}`}
                             onClick={() => (showCreate ? resetCreate() : setShowCreate(true))}
                         >
                             {showCreate ? 'Cancel' : 'New Request'}
-                        </Button>
+                        </button>
                     </div>
 
                     {showCreate && (
@@ -619,7 +613,7 @@ export default function Rewards() {
                             ))}
                         </TabsList>
                     </Tabs>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <div className={styles.codeSearchActions}>
                         <input
                             type="text"
                             aria-label="Pickup code"
@@ -636,14 +630,14 @@ export default function Rewards() {
                                 width: 180,
                             }}
                         />
-                        <Button
-                            variant="ghost"
-                            size="sm"
+                        <button
+                            type="button"
+                            className={styles.verifyCodeButton}
                             onClick={handleCodeSearch}
                             disabled={codeSearchLoading || !codeSearch.trim()}
                         >
                             {codeSearchLoading ? 'Searching…' : 'Verify Code'}
-                        </Button>
+                        </button>
                         <Button variant="ghost" size="sm" onClick={() => void queryClient.invalidateQueries({ queryKey: ['loyalty-redemptions'] })} disabled={loading}>
                             <RefreshCw size={16} /> Refresh
                         </Button>

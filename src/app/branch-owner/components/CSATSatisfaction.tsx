@@ -1,11 +1,11 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { Header } from './Header';
 import { KPICard } from './KPICard';
 import typography from '../../components/FranchiseReports.module.css';
-import { Star, MessageSquare, AlertCircle, RefreshCw } from 'lucide-react';
+import { Star, MessageSquare, AlertCircle } from 'lucide-react';
 import { apiFetch, fetchJson } from '../../lib/api';
 import { useBranch } from '../contexts/BranchContext';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../../components/ui/tooltip';
@@ -62,7 +62,6 @@ export function RatingStars({ value }: { value: number }) {
 export function CSATSatisfaction() {
   const { selectedBranch, selectedBranchId } = useBranch();
 
-  const queryClient = useQueryClient();
   const PREVIEW_ROWS = 5;
 
   const {
@@ -184,17 +183,6 @@ export function CSATSatisfaction() {
             <h3 className="font-semibold text-gray-900">Customer Ratings &amp; Reviews</h3>
             <div className="flex items-center gap-3">
               <button
-                onClick={() => {
-                  void queryClient.invalidateQueries({ queryKey: ['csat-summary'] });
-                  void queryClient.invalidateQueries({ queryKey: ['csat-ratings'] });
-                }}
-                disabled={loading}
-                className="text-gray-400 hover:text-gray-600 transition-colors disabled:opacity-40"
-                title="Refresh"
-              >
-                <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-              </button>
-              <button
                 onClick={() => navigate('customer-ratings-full')}
                 className="text-[11px] text-[#007BC1] hover:text-[#005a8f] transition-colors"
               >
@@ -256,17 +244,6 @@ export function CSATSatisfaction() {
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-semibold text-gray-900">Complaint Log</h3>
             <div className="flex items-center gap-3">
-              <button
-                onClick={() => {
-                  void queryClient.invalidateQueries({ queryKey: ['csat-summary'] });
-                  void queryClient.invalidateQueries({ queryKey: ['csat-ratings'] });
-                }}
-                disabled={loading}
-                className="text-gray-400 hover:text-gray-600 transition-colors disabled:opacity-40"
-                title="Refresh"
-              >
-                <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-              </button>
               <button
                 onClick={() => navigate('complaint-log-full')}
                 className="text-[11px] text-[#007BC1] hover:text-[#005a8f] transition-colors"
