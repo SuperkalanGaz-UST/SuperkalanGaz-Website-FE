@@ -71,6 +71,12 @@ export const governanceApi = {
       '/governance/admin-accounts',
     ),
 
+  setFranchiseAdministratorStatus: (id: string, status: 'Active' | 'Inactive', reason: string) =>
+    json<{ account: { id: string; status: 'Active' | 'Inactive' } }>(
+      `/governance/admin-accounts/${id}/status`,
+      { method: 'PATCH', body: JSON.stringify({ status, reason }) },
+    ),
+
   inviteFranchiseAdministrator: (name: string, email: string) =>
     json<{ invitation: FranchiseAdminInvitation }>(
       '/governance/franchise-admin-invitations',

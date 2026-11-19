@@ -7,9 +7,10 @@ import {
   Loader2,
   Mail,
   MailPlus,
-  MoreHorizontal,
   Search,
   ShieldCheck,
+  UserCheck,
+  UserX,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -30,6 +31,7 @@ import {
   StatusChip,
 } from '../components/GovernanceUi';
 import { SuperAdminHeader } from '../components/SuperAdminHeader';
+import { ConfirmActionDialog } from '../../components/ConfirmActionDialog';
 
 export function AdminAccounts() {
   const [accountSearch, setAccountSearch] = useState('');
@@ -40,6 +42,8 @@ export function AdminAccounts() {
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [submittingInvite, setSubmittingInvite] = useState(false);
   const [actingInvitationId, setActingInvitationId] = useState<string | null>(null);
+  const [statusTarget, setStatusTarget] = useState<AdminAccount | null>(null);
+  const [statusBusy, setStatusBusy] = useState(false);
 
   const { data, error: queryError, refetch: load } = useQuery({
     queryKey: ['admin-accounts'],
@@ -105,6 +109,21 @@ export function AdminAccounts() {
       );
     } finally {
       setSubmittingInvite(false);
+    }
+  };
+
+  const changeAccountStatus = async (account: AdminAccount, reason: string) => {
+    const next = account.status === 'Active' ? 'Inactive' : 'Active';
+    setStatusBusy(true);
+    try {
+      await governanceApi.setFranchiseAdministratorStatus(account.id, next, reason);
+      await load();
+      setStatusTarget(null);
+      toast.success(next === 'Inactive' ? 'Franchise Administrator deactivated.' : 'Franchise Administrator reactivated.');
+    } catch (statusError) {
+      toast.error(statusError instanceof Error ? statusError.message : 'Could not change the account status.');
+    } finally {
+      setStatusBusy(false);
     }
   };
 
@@ -338,12 +357,14 @@ export function AdminAccounts() {
                         <td className="px-6 py-4 text-right">
                           <button
                             type="button"
-                            disabled
-                            title="Account actions require the invitation-management API"
-                            aria-label={`Manage ${account.displayName ?? 'Franchise Administrator'} account`}
-                            className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 text-gray-400 disabled:cursor-not-allowed"
+                            disabled={statusBusy}
+                            onClick={() => setStatusTarget(account)}
+                            aria-label={`${account.status === 'Active' ? 'Deactivate' : 'Reactivate'} ${account.displayName ?? 'Franchise Administrator'}`}
+                            className={account.status === 'Active'
+                              ? 'h-9 rounded-lg border border-red-200 px-3 text-xs font-semibold text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50'
+                              : 'h-9 rounded-lg border border-gray-200 px-3 text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50'}
                           >
-                            <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
+                            {account.status === 'Active' ? 'Deactivate' : 'Reactivate'}
                           </button>
                         </td>
                       </tr>
@@ -355,6 +376,25 @@ export function AdminAccounts() {
           </div>
         )}
       </main>
+
+      {statusTarget && (
+        <ConfirmActionDialog
+          key={statusTarget.id}
+          open
+          onOpenChange={(open) => { if (!open) setStatusTarget(null); }}
+          title={statusTarget.status === 'Active' ? 'Deactivate this Franchise Administrator?' : 'Reactivate this Franchise Administrator?'}
+          description={statusTarget.status === 'Active'
+            ? <p><span className="font-semibold text-gray-900">{statusTarget.displayName ?? statusTarget.email}</span> will no longer be able to sign in to the CRM. The account is kept, and you can reactivate it later.</p>
+            : <p><span className="font-semibold text-gray-900">{statusTarget.displayName ?? statusTarget.email}</span> will be able to sign in to the CRM again with their existing password.</p>}
+          confirmLabel={statusTarget.status === 'Active' ? 'Deactivate' : 'Reactivate'}
+          busyLabel={statusTarget.status === 'Active' ? 'Deactivating…' : 'Reactivating…'}
+          tone={statusTarget.status === 'Active' ? 'danger' : 'primary'}
+          icon={statusTarget.status === 'Active' ? <UserX className="h-5 w-5" aria-hidden="true" /> : <UserCheck className="h-5 w-5" aria-hidden="true" />}
+          reasonLabel="Reason"
+          busy={statusBusy}
+          onConfirm={(reason) => changeAccountStatus(statusTarget, reason)}
+        />
+      )}
 
       <Dialog
         open={inviteOpen}
