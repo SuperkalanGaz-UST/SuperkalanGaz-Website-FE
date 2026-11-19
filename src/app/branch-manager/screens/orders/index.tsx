@@ -27,6 +27,7 @@ import { toast } from 'sonner';
 import * as z from 'zod';
 import { Badge } from '../../components/Badge';
 import { Button } from '../../components/Button';
+import { ConfirmActionDialog } from '../../../components/ConfirmActionDialog';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/app/components/ui/select';
 import { RowActionsMenu } from '../../components/RowActionsMenu';
 import { Popover, PopoverTrigger, PopoverContent } from '../../../components/ui/popover';
@@ -177,6 +178,11 @@ const requestedDateValue = (iso: string) => {
     return `${year}-${month}-${day}`;
 };
 
+/** Open orders the server flags as late (breached) or about to be (at risk). */
+const isLateOrAtRisk = (request: SRRow) =>
+    (request.status === 'Pending' || request.status === 'Dispatched' || request.status === 'En Route') &&
+    (request.sla_breached || request.sla_at_risk);
+
 const getSlaState = (request: SRRow) => {
     if (request.sla_breached) return { label: 'Breached', className: 'slaDanger' };
     if (request.sla_at_risk) return { label: 'At risk', className: 'slaWarning' };
@@ -303,6 +309,7 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
     // Mark-delivered in-flight guard (Slice 3), mirroring dispatchingId: only one
     // row's deliver request runs at a time, so a single id is enough.
     const [deliveringId, setDeliveringId] = useState<string | null>(null);
+    const [deliverTarget, setDeliverTarget] = useState<SRRow | null>(null);
 
     // Pre-dispatch Edit / Cancel (BM-US-07, stories BM-033–037). Only Pending
     // rows expose these; once a request leaves Pending the controls disappear
@@ -1036,7 +1043,8 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
             activeTab === 'all' ||
             (activeTab === 'pending' && r.status === 'Pending') ||
             (activeTab === 'transit' && (r.status === 'Dispatched' || r.status === 'En Route')) ||
-            (activeTab === 'completed' && r.status === 'Delivered');
+            (activeTab === 'completed' && r.status === 'Delivered') ||
+            (activeTab === 'late' && isLateOrAtRisk(r));
 
         const q = searchQuery.toLowerCase();
         const matchesSearch =
@@ -1048,6 +1056,12 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
 
         return matchesTab && matchesSearch && matchesRequestedDate;
     });
+    // Late first, then at risk, oldest request first within each.
+    if (activeTab === 'late') {
+        filteredRequests.sort((a, b) =>
+            Number(b.sla_breached) - Number(a.sla_breached) || a.requested_at.localeCompare(b.requested_at));
+    }
+    const lateCount = requests.filter(isLateOrAtRisk).length;
 
     const totalPages = Math.ceil(filteredRequests.length / ITEMS_PER_PAGE);
     const paginatedRequests = filteredRequests.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
@@ -1371,6 +1385,7 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                                 <TabsTrigger value="pending">Pending</TabsTrigger>
                                 <TabsTrigger value="transit">In Transit</TabsTrigger>
                                 <TabsTrigger value="completed">Completed</TabsTrigger>
+                                <TabsTrigger value="late">At risk / Late{lateCount > 0 ? ` (${lateCount})` : ''}</TabsTrigger>
                             </TabsList>
                         </Tabs>
                     </div>
@@ -1598,9 +1613,14 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                                                             </div>
                                                         </PopoverContent>
                                                     </Popover>
+                                                        {isLateOrAtRisk(req) && (
+                                                            <Button size="sm" variant="outline" onClick={() => openDelayReason(req.id)}>
+                                                                <Clock size={14} /> Log delay
+                                                            </Button>
+                                                        )}
                                                         <RowActionsMenu items={[
                                                             { label: 'Edit', onClick: () => openEdit(req), icon: <Edit size={16} /> },
-                                                            { label: 'Delay Reason', onClick: () => openDelayReason(req.id), icon: <Clock size={16} /> },
+                                                            ...(!isLateOrAtRisk(req) ? [{ label: 'Delay Reason', onClick: () => openDelayReason(req.id), icon: <Clock size={16} /> }] : []),
                                                             { label: 'Cancel', onClick: () => openCancel(req.id), danger: true, icon: <X size={16} /> },
                                                         ]} />
                                                     </div>
@@ -1612,13 +1632,18 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                                                         size="sm"
                                                         variant="primary"
                                                         disabled={deliveringId === req.id}
-                                                        onClick={() => handleDeliver(req.id)}
+                                                        onClick={() => setDeliverTarget(req)}
                                                     >
                                                         {deliveringId === req.id ? 'Delivering…' : 'Mark Delivered'}
                                                     </Button>}
+                                                    {isLateOrAtRisk(req) && (
+                                                        <Button size="sm" variant="outline" onClick={() => openDelayReason(req.id)}>
+                                                            <Clock size={14} /> Log delay
+                                                        </Button>
+                                                    )}
                                                     <RowActionsMenu items={[
                                                         ...(!req.delivery_offer_expires_at ? [{ label: 'Offer reassignment', onClick: () => openReassign(req.id), icon: <RefreshCw size={16} /> }] : []),
-                                                        { label: 'Delay Reason', onClick: () => openDelayReason(req.id), icon: <Clock size={16} /> },
+                                                        ...(!isLateOrAtRisk(req) ? [{ label: 'Delay Reason', onClick: () => openDelayReason(req.id), icon: <Clock size={16} /> }] : []),
                                                         { label: 'Log Complaint', onClick: () => openLogComplaint(req.id), danger: true, icon: <AlertTriangle size={16} /> },
                                                     ]} />
                                                 </div>
@@ -1642,7 +1667,7 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                                                         serviceRequestId={req.id}
                                                         serviceRequestCode={req.sr_code}
                                                     />
-                                                    <span className={styles.mutedText}>Complaint logged</span>
+                                                    <span className={styles.mutedText}>Complaint open · resolve it in Feedback</span>
                                                 </div>
                                             ) : (
                                                 <span className={styles.mutedText}>—</span>
@@ -1784,7 +1809,7 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                                                     {cancelError && <p className={styles.fieldError}>{cancelError}</p>}
                                                     <div className={styles.editorActions}>
                                                         <Button size="sm" variant="ghost" onClick={closeCancel} disabled={cancellingId === req.id}>Keep Request</Button>
-                                                        <Button size="sm" variant="outline" onClick={() => handleCancelOrder(req.id)} disabled={cancellingId === req.id}>
+                                                        <Button size="sm" variant="danger" onClick={() => handleCancelOrder(req.id)} disabled={cancellingId === req.id}>
                                                             {cancellingId === req.id ? 'Cancelling…' : 'Confirm Cancel'}
                                                         </Button>
                                                     </div>
@@ -2019,6 +2044,27 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                     </div>
                 </div>,
                 document.body
+            )}
+            {deliverTarget && (
+                <ConfirmActionDialog
+                    key={deliverTarget.id}
+                    open
+                    onOpenChange={(open) => { if (!open) setDeliverTarget(null); }}
+                    title="Mark this order delivered?"
+                    description={<>
+                        <span className="block font-medium text-gray-900">{deliverTarget.sr_code} · {deliverTarget.customer_name}</span>
+                        <span className="mt-1 block">
+                            {serviceRequestItems(deliverTarget).map(item => `${item.quantity}× ${item.cylinder_size}`).join(', ')}
+                            {deliverTarget.total_amount !== null ? ` · ${formatPeso(Number(deliverTarget.total_amount))}` : ''}
+                        </span>
+                        <span className="mt-2 block">This completes the order and records it as delivered now. It can&apos;t be undone.</span>
+                    </>}
+                    confirmLabel="Mark Delivered"
+                    busyLabel="Delivering…"
+                    icon={<CheckCircle2 className="h-5 w-5" />}
+                    busy={deliveringId === deliverTarget.id}
+                    onConfirm={async () => { await handleDeliver(deliverTarget.id); setDeliverTarget(null); }}
+                />
             )}
         </>
     );

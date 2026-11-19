@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { Wrench, PenLine, AlertTriangle, ShieldCheck, Truck, History, Plus, RefreshCw, Check, ArrowLeft, ArrowRight } from "lucide-react";
 import { Badge } from "../../components/Badge";
 import { Button } from "../../components/Button";
+import { ConfirmActionDialog } from "../../../components/ConfirmActionDialog";
 import { Progress } from "../../components/Progress";
 import { Input } from "../../components/Input";
 import { apiFetch, apiErrorMessage, fetchJson } from "../../../lib/api";
@@ -118,6 +119,7 @@ const vehicleSetupSteps = [
 
 export default function VehicleManagementPage() {
     const [mounted, setMounted] = useState(false);
+    const [resetTarget, setResetTarget] = useState<VehicleRow | null>(null);
     const queryClient = useQueryClient();
 
     const {
@@ -589,7 +591,7 @@ export default function VehicleManagementPage() {
                                             size="sm"
                                             style={{ flex: 1 }}
                                             disabled={!isOverdue || resettingId === vehicle.id}
-                                            onClick={() => void handleResetPms(vehicle)}
+                                            onClick={() => setResetTarget(vehicle)}
                                         >
                                             <Wrench size={16} style={{ marginRight: '0.3rem' }} /> {resettingId === vehicle.id ? 'Resetting…' : 'Reset PMS'}
                                         </Button>
@@ -907,6 +909,26 @@ export default function VehicleManagementPage() {
                         )}
                     </form>
                 </div>
+            )}
+            {resetTarget && (
+                <ConfirmActionDialog
+                    key={resetTarget.id}
+                    open
+                    onOpenChange={(open) => { if (!open) setResetTarget(null); }}
+                    title="Mark this vehicle serviced?"
+                    description={<>
+                        <span className="block font-medium text-gray-900">{resetTarget.display_name || resetTarget.plate_number} · {resetTarget.plate_number}</span>
+                        <span className="mt-2 block">
+                            This resets its PMS counter to the current odometer ({resetTarget.current_odometer_km.toLocaleString()} km) and returns it to active service. Only confirm once the maintenance is done.
+                        </span>
+                    </>}
+                    confirmLabel="Reset PMS"
+                    busyLabel="Resetting…"
+                    icon={<Wrench className="h-5 w-5" />}
+                    tone="warning"
+                    busy={resettingId === resetTarget.id}
+                    onConfirm={async () => { await handleResetPms(resetTarget); setResetTarget(null); }}
+                />
             )}
         </div>
     );
