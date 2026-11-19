@@ -27,6 +27,9 @@ async function responseData<T>(response: Response, fallback: string): Promise<T>
   return data as T;
 }
 
+/** The invitation itself is dead (invalid, expired, revoked or used); retrying cannot help. */
+export class DeadInvitationError extends Error {}
+
 export async function getDeliveryRiderInvitation(
   credential: DeliveryRiderRegistrationCredential,
 ): Promise<DeliveryRiderInvitation> {
@@ -35,6 +38,9 @@ export async function getDeliveryRiderInvitation(
     : await apiPublicFetch(
         `/delivery-rider-invitations/acceptance?token=${encodeURIComponent(credential.token)}`,
       );
+  if (response.status === 403 || response.status === 404) {
+    throw new DeadInvitationError('This invitation is invalid, expired, revoked, or already used.');
+  }
   return responseData(response, 'This invitation is unavailable.');
 }
 
