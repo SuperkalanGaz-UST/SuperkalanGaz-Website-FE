@@ -48,6 +48,12 @@
   margin: 0;
 }
 
+.crm-toaster .crm-toast--geofence {
+  --warning-bg: var(--error-bg);
+  --warning-border: var(--error-border);
+  --warning-text: var(--error-text);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .crm-toaster [data-sonner-toast].crm-toast {
     transition: none;

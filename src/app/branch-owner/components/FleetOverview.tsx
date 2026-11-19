@@ -340,7 +340,7 @@ export function FleetOverview({ vehiclesActive, onNavigate }: {
         </FleetTabs>
         {activeTab === 'overview' && historyVehicle && selectedBranchId && (
           <VehicleRouteHistory key={`owner:${selectedBranchId}:${historyVehicle.id}`} vehicle={historyVehicle}
-            scope={`owner:${selectedBranchId}`} branchId={selectedBranchId} onClose={() => setHistorySelection(null)}
+            scope={`owner:${selectedBranchId}`} branchId={selectedBranchId} branchGeofence={geofence} onClose={() => setHistorySelection(null)}
             onReturnFocus={() => historyTriggerRef.current?.focus()} />
         )}
       </div>

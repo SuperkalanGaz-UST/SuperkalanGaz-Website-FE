@@ -1,9 +1,9 @@
 'use client';
 
 import { serviceRequestCylinderSummary, type ServiceRequestCylinderFields } from '../../../lib/serviceRequestItems';
-import React, { useCallback, useEffect, useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { RefreshCw, Star, MessageSquare, AlertTriangle, Flag, AlertCircle, CheckCircle } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { RefreshCw, Star, MessageSquare, AlertTriangle, Flag, AlertCircle, CheckCircle, Clock } from 'lucide-react';
 import { toast } from 'sonner';
 import { KPICard } from '../../../components/KPICard';
 import { Badge } from '../../components/Badge';
@@ -62,6 +62,11 @@ interface SummaryRow {
     total_ratings: number;
 }
 
+interface IncidentResponseSummary {
+    average_first_response_seconds: number | null;
+    awaiting_first_response_count: number;
+}
+
 /** Queue filters → the API's ?resolution values. */
 const RESOLUTION_TABS: { value: string; label: string }[] = [
     { value: 'Open', label: 'Open' },
@@ -84,6 +89,7 @@ interface IncidentRow {
     status: 'open' | 'in_progress' | 'resolved' | 'closed';
     priority: string;
     reported_at: string;
+    first_response_at: string | null;
     escalated: boolean;
     escalated_at: string | null;
     created_at: string;
@@ -118,6 +124,16 @@ const formatDateTime = (iso: string | null) => {
         month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit',
     }).format(d);
 };
+
+function formatResponseTime(seconds: number | null | undefined) {
+    if (seconds == null) return '—';
+    if (seconds < 60) return '< 1 min';
+    const minutes = Math.round(seconds / 60);
+    if (minutes < 60) return `${minutes} min`;
+    const hours = Math.floor(minutes / 60);
+    const remainingMinutes = minutes % 60;
+    return remainingMinutes ? `${hours} hr ${remainingMinutes} min` : `${hours} hr`;
+}
 
 /** Star rating as filled/empty glyphs — low scores are visually distinct (BM-038). */
 function Stars({ value }: { value: number }) {
@@ -195,6 +211,35 @@ export default function Csat() {
     });
     const incidents = incidentsData?.incidents ?? [];
     const incidentsError = incidentsQueryError ? incidentsQueryError.message : null;
+    const {
+        data: incidentResponseData,
+        isError: incidentResponseError,
+        isFetching: incidentResponseFetching,
+    } = useQuery({
+        queryKey: ['csat-incident-response-summary'],
+        queryFn: () => fetchJson<{ summary: IncidentResponseSummary }>('/csat/incidents/response-summary'),
+        staleTime: 30_000,
+        enabled: view === 'incidents',
+    });
+    const incidentResponseSummary = incidentResponseError ? undefined : incidentResponseData?.summary;
+
+    const firstResponse = useMutation({
+        mutationFn: (id: string) => fetchJson<{ incident: Pick<IncidentRow, 'first_response_at'> }>(
+            `/csat/incidents/${id}/first-response`, { method: 'POST' },
+        ),
+        onSuccess: ({ incident }, id) => {
+            queryClient.setQueriesData<{ incidents: IncidentRow[] }>({ queryKey: ['csat-incidents'] }, (cached) =>
+                cached && { incidents: cached.incidents.map(row => row.id === id
+                    ? { ...row, first_response_at: incident.first_response_at } : row) },
+            );
+            toast.success('First response logged.');
+        },
+        onError: (err) => toast.error(err instanceof Error ? err.message : 'Could not log the first response'),
+        onSettled: () => Promise.all([
+            queryClient.invalidateQueries({ queryKey: ['csat-incidents'] }),
+            queryClient.invalidateQueries({ queryKey: ['csat-incident-response-summary'] }),
+        ]),
+    });
 
     const [incidentDetailId, setIncidentDetailId] = useState<string | null>(null);
     const [escalatingId, setEscalatingId] = useState<string | null>(null);
@@ -477,6 +522,21 @@ export default function Csat() {
             )}
 
             {view === 'incidents' && (
+                <>
+                <section aria-label="Incident response metrics" className="grid grid-cols-1 gap-4 mb-6 sm:grid-cols-2">
+                    <KPICard
+                        title="Average first response"
+                        value={formatResponseTime(incidentResponseSummary?.average_first_response_seconds)}
+                        subtitle={incidentResponseError ? 'Response metrics unavailable' : 'Time from the Incident report to first contact'}
+                        icon={<Clock size={16} />}
+                    />
+                    <KPICard
+                        title="Awaiting first response"
+                        value={incidentResponseSummary?.awaiting_first_response_count ?? '—'}
+                        subtitle="Log the first response after contacting the customer."
+                        icon={<MessageSquare size={16} />}
+                    />
+                </section>
                 <div className={styles.card}>
                     <div className={styles.cardHeaderFlex}>
                         <Tabs value={incidentStatus} onValueChange={setIncidentStatus}>
@@ -485,7 +545,10 @@ export default function Csat() {
                                 <TabsTrigger value="all">All</TabsTrigger>
                             </TabsList>
                         </Tabs>
-                        <Button variant="ghost" size="sm" onClick={() => void queryClient.invalidateQueries({ queryKey: ['csat-incidents'] })} disabled={incidentsLoading}>
+                        <Button variant="ghost" size="sm" onClick={() => {
+                            void queryClient.invalidateQueries({ queryKey: ['csat-incidents'] });
+                            void queryClient.invalidateQueries({ queryKey: ['csat-incident-response-summary'] });
+                        }} disabled={incidentsLoading || incidentResponseFetching}>
                             <RefreshCw size={16} /> Refresh
                         </Button>
                     </div>
@@ -498,19 +561,20 @@ export default function Csat() {
                                     <th>Customer</th>
                                     <th>Description</th>
                                     <th>Reported</th>
+                                    <th>First response</th>
                                     <th>Status</th>
                                     <th className={styles.actionsCol}>Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {incidentsLoading && (
-                                    <tr><td colSpan={6} className={styles.emptyState}>Loading…</td></tr>
+                                    <tr><td colSpan={7} className={styles.emptyState}>Loading…</td></tr>
                                 )}
                                 {!incidentsLoading && incidentsError && (
-                                    <tr><td colSpan={6} className={styles.emptyState}>{incidentsError}</td></tr>
+                                    <tr><td colSpan={7} className={styles.emptyState}>{incidentsError}</td></tr>
                                 )}
                                 {!incidentsLoading && !incidentsError && incidents.length === 0 && (
-                                    <tr><td colSpan={6} className={styles.emptyState}>
+                                    <tr><td colSpan={7} className={styles.emptyState}>
                                         <AlertTriangle size={20} /> No complaints logged in this view.
                                     </td></tr>
                                 )}
@@ -521,6 +585,20 @@ export default function Csat() {
                                             <td>{i.customer_name ?? '—'}</td>
                                             <td className={styles.commentCell}>{i.description}</td>
                                             <td className={styles.mutedText}>{formatDateTime(i.reported_at)}</td>
+                                            <td className={styles.mutedText}>
+                                                {i.first_response_at ? formatDateTime(i.first_response_at)
+                                                    : (i.status === 'open' || i.status === 'in_progress') ? (
+                                                        <Button
+                                                            variant="outline"
+                                                            size="sm"
+                                                            onClick={() => firstResponse.mutate(i.id)}
+                                                            disabled={firstResponse.isPending}
+                                                        >
+                                                            {firstResponse.isPending && firstResponse.variables === i.id
+                                                                ? 'Logging…' : 'Log first response'}
+                                                        </Button>
+                                                    ) : '—'}
+                                            </td>
                                             <td>
                                                 <Badge variant={i.status === 'open' ? 'warning' : 'secondary'}>{i.status}</Badge>
                                                 {i.escalated && (
@@ -555,7 +633,7 @@ export default function Csat() {
                                         {/* Delivery context — the associated service request. */}
                                         {incidentDetailId === i.id && (
                                             <tr className={styles.panelRow}>
-                                                <td colSpan={6}>
+                                                <td colSpan={7}>
                                                     {i.service_request ? (
                                                         <div className={styles.panel}>
                                                             <div className={styles.panelTitle}>Associated Service Request</div>
@@ -588,6 +666,7 @@ export default function Csat() {
                         </table>
                     </div>
                 </div>
+                </>
             )}
         </div>
     );

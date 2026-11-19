@@ -101,7 +101,12 @@ export function NotificationCenter({ branchId, requireBranch = false }: { branch
     if (!latest) return;
     shownAlerts.current.add(latest.id);
     const toastId = `geofence-${account.id}-${branchId ?? ''}-${latest.id}`;
-    toast.warning(latest.title, { id: toastId, description: latest.message, duration: 10_000 });
+    toast.warning(latest.title, {
+      id: toastId,
+      description: latest.message,
+      duration: 10_000,
+      className: 'crm-toast--geofence',
+    });
     return () => { toast.dismiss(toastId); };
   }, [notifications, account.id, branchId]);
   const error = queryError ? (queryError.message || 'Could not load notifications.') : null;

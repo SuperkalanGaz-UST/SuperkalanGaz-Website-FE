@@ -38,6 +38,7 @@ test('manager dispatch and Fleet show independent phone and vehicle fixes, refre
   let vehicleInterval = 30_000;
   let routeState = 'positions';
   let routeReads = 0;
+  const geofence = { type: 'polygon', points: [[14.44, 120.97], [14.48, 120.97], [14.48, 121.0], [14.44, 121.0]] };
   const vehicleFix = { latitude: 14.47, longitude: 120.97, captured_at: new Date().toISOString(), stale: false };
   const browser = await chromium.launch({ headless: true });
   try {
@@ -55,9 +56,7 @@ test('manager dispatch and Fleet show independent phone and vehicle fixes, refre
       if (url.origin === apiOrigin && url.pathname.startsWith('/api/')) {
         assert.equal(request.method(), 'GET', 'Location display must not issue operational writes');
         assert.equal(request.headers().authorization, `Bearer ${session.access_token}`);
-        if (url.pathname === '/api/branches/assigned') return route.fulfill({ json: { branches: [{ id: branchId, name: 'Test branch', geofence: {
-          type: 'polygon', points: [[14.44, 120.97], [14.48, 120.97], [14.48, 121.0], [14.44, 121.0]],
-        } }] } });
+        if (url.pathname === '/api/branches/assigned') return route.fulfill({ json: { branches: [{ id: branchId, name: 'Test branch', geofence }] } });
         if (url.pathname === '/api/users/me') return route.fulfill({ json: { user: { ...user.app_metadata, id: user.id, email: user.email, phone: null } } });
         if (url.pathname === '/api/riders') {
           riderReads++;
@@ -77,14 +76,19 @@ test('manager dispatch and Fleet show independent phone and vehicle fixes, refre
           assert.equal(url.searchParams.get('to'), '2026-01-01T01:00:00.000Z');
           if (routeState === 'error') return route.fulfill({ status: 503, json: { message: 'Route history is unavailable. Retry or choose a shorter period' } });
           const points = [
-            { latitude: 14.6, longitude: 120.99, captured_at: '2026-01-01T00:10:00Z' },
-            { latitude: 14.61, longitude: 121, captured_at: '2026-01-01T00:20:00Z' },
-            { latitude: 14.62, longitude: 121.01, captured_at: '2026-01-01T00:40:00Z' },
+            { latitude: 14.45, longitude: 120.99, captured_at: '2026-01-01T00:10:00Z', outside_geofence: false },
+            { latitude: 14.61, longitude: 121, captured_at: '2026-01-01T00:20:00Z', outside_geofence: true },
+            { latitude: 14.62, longitude: 121.01, captured_at: '2026-01-01T00:40:00Z', outside_geofence: true },
           ];
           return route.fulfill({ json: {
             vehicle: { id: 'unassigned-vehicle', plate_number: 'HW 123', display_name: 'Branch motorcycle' },
             from: url.searchParams.get('from'), to: url.searchParams.get('to'),
-            points: routeState === 'empty' ? [] : routeState === 'single' ? points.slice(0, 1) : points,
+            ...(routeState === 'legacy' ? {
+              points: points.map(({ latitude, longitude, captured_at }) => ({ latitude, longitude, captured_at })),
+            } : {
+              geofence,
+              points: routeState === 'empty' ? [] : routeState === 'single' ? points.slice(0, 1) : points,
+            }),
           } });
         }
         if (url.pathname === '/api/prices') return route.fulfill({ json: { prices: [] } });
@@ -148,6 +152,17 @@ test('manager dispatch and Fleet show independent phone and vehicle fixes, refre
     await history.getByLabel('Vehicle route history map', { exact: true }).waitFor();
     await history.getByRole('button', { name: 'Recorded vehicle position', exact: true }).waitFor();
     const play = history.getByRole('button', { name: 'Play route playback', exact: true });
+    await history.getByText('Current branch geofence', { exact: true }).waitFor();
+    assert.ok((await play.boundingBox()).width < 120, 'Playback control stays compact');
+    const outsideTime = history.getByRole('button', { name: /8:20:00/ });
+    await outsideTime.click();
+    assert.equal(await history.getByRole('slider').inputValue(), '1');
+    assert.match(await history.getByRole('slider').getAttribute('aria-valuetext'), /8:20:00.*Outside geofence/);
+    const outsideMark = history.locator('[class*="routeOutsideMark"]');
+    assert.equal(await outsideMark.count(), 1, 'Consecutive outside fixes share a red band');
+    assert.equal(await outsideMark.evaluate(element => element.style.width), '50%');
+    if (process.env.TEST_ARTIFACT_DIR) await history.screenshot({ path: `${process.env.TEST_ARTIFACT_DIR}/route-geofence.png` });
+    await history.getByRole('slider').press('Home');
     await play.click();
     await page.clock.fastForward(550);
     assert.equal(await history.getByRole('slider').inputValue(), '1');
@@ -174,6 +189,11 @@ test('manager dispatch and Fleet show independent phone and vehicle fixes, refre
     const recoveredVehicleRead = page.waitForResponse(response => new URL(response.url()).pathname === '/api/vehicles/locations' && response.status() === 200);
     await page.clock.fastForward(30_100);
     await recoveredVehicleRead;
+    routeState = 'legacy';
+    await showRoute.click();
+    await history.getByText('Current branch geofence', { exact: true }).waitFor();
+    await history.getByText(/The route API hasn’t supplied outside-geofence timestamps/).waitFor();
+    assert.equal(await outsideMark.count(), 0, 'The saved geofence remains visible while route classifications are unavailable');
     routeState = 'empty';
     await showRoute.click();
     await history.getByText('No movement recorded for this vehicle in the selected period.').waitFor();
@@ -186,6 +206,7 @@ test('manager dispatch and Fleet show independent phone and vehicle fixes, refre
     await showRoute.click();
     await history.getByText(/1 recorded GPS points/).waitFor();
     assert.equal(await history.getByRole('slider').isDisabled(), true);
+    assert.equal(await outsideTime.count(), 0);
     await history.getByLabel('From', { exact: true }).fill('2026-01-03T08:00');
     const readsBeforeInvalid = routeReads;
     await showRoute.click();

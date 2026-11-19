@@ -77,6 +77,96 @@ async function expectPath(page, path) {
   assert.equal(new URL(page.url()).pathname, path);
 }
 
+test('Branch Manager logs the first response and sees the refreshed Incident metrics', { timeout: 30_000 }, async () => {
+  const browser = await chromium.launch({ headless: true });
+  const session = sessionFor('branch-manager');
+  session.user.app_metadata.branch_ids = [branches[0].id];
+  session.user.app_metadata.branches = [branches[0].name];
+  const { context } = await createContext(browser, session);
+  try {
+    await context.route(`${apiOrigin}/api/branches/assigned`, route => route.fulfill({ json: { branches: [branches[0]] } }));
+    const id = '00000000-0000-4000-8000-000000000010';
+    const incident = {
+      id, reported_at: '2026-11-19T06:00:00Z', first_response_at: null,
+      category: 'late_delivery', description: 'Fixture Incident', status: 'open', escalated: false,
+    };
+    await context.route(`${apiOrigin}/api/csat/incidents?*`, route => route.fulfill({ json: { incidents: [incident] } }));
+    await context.route(`${apiOrigin}/api/csat/incidents/response-summary`, route => route.fulfill({ json: {
+      summary: incident.first_response_at
+        ? { average_first_response_seconds: 900, awaiting_first_response_count: 0 }
+        : { average_first_response_seconds: null, awaiting_first_response_count: 1 },
+    } }));
+    let writes = 0;
+    await context.route(`${apiOrigin}/api/csat/incidents/${id}/first-response`, route => {
+      assert.equal(route.request().method(), 'POST');
+      assert.equal(route.request().postData(), null);
+      writes++;
+      incident.first_response_at = '2026-11-19T06:15:00Z';
+      return route.fulfill({ status: 201, json: { incident } });
+    });
+    const page = await context.newPage();
+    page.setDefaultTimeout(5_000);
+    await page.goto(`${baseUrl}/branch-manager/csat`);
+    await page.getByRole('button', { name: 'Incidents', exact: true }).click();
+    const action = page.getByRole('button', { name: 'Log first response', exact: true });
+    const metrics = page.getByRole('region', { name: 'Incident response metrics' });
+    await metrics.getByText('1', { exact: true }).waitFor();
+    await action.click();
+    await metrics.getByText('15 min', { exact: true }).waitFor();
+    await metrics.getByText('0', { exact: true }).waitFor();
+    const row = page.getByRole('row').filter({ hasText: 'Fixture Incident' });
+    await row.locator('td').nth(4).getByText(/Nov 19, 2026/).waitFor();
+    assert.equal(await action.count(), 0);
+    assert.equal(writes, 1);
+  } finally {
+    await context.close();
+    await browser.close();
+  }
+});
+
+test('a stale pickup confirmation clears the action and the same code shows Redeemed', { timeout: 30_000 }, async () => {
+  const browser = await chromium.launch({ headless: true });
+  const session = sessionFor('branch-manager');
+  session.user.app_metadata.branch_ids = [branches[0].id];
+  session.user.app_metadata.branches = [branches[0].name];
+  const { context } = await createContext(browser, session);
+  try {
+    await context.route(`${apiOrigin}/api/branches/assigned`, route => route.fulfill({ json: { branches: [branches[0]] } }));
+    const id = '00000000-0000-4000-8000-000000000010';
+    const code = 'RDM-TESTCODE';
+    await context.route(url => url.origin === apiOrigin && url.pathname === '/api/loyalty/redemptions',
+      route => route.fulfill({ json: { redemptions: [] } }));
+    let redeemed = false;
+    await context.route(`${apiOrigin}/api/loyalty/redemptions/verify/${code}`, route => route.fulfill({ json: {
+      redemption: { id, redemption_code: code, status: redeemed ? 'fulfilled' : 'approved',
+        track: 'household_points', customer_name: 'Fixture customer', catalog_item_name: 'Fixture Mug' },
+    } }));
+    await context.route(`${apiOrigin}/api/loyalty/redemptions/${id}/fulfill`, route => {
+      assert.deepEqual(route.request().postDataJSON(), { code });
+      redeemed = true;
+      return route.fulfill({ status: 409, json: { message: 'This reward is no longer ready for pickup' } });
+    });
+    const page = await context.newPage();
+    page.setDefaultTimeout(5_000);
+    await page.goto(`${baseUrl}/branch-manager/rewards`);
+    const verify = async () => {
+      await page.getByRole('textbox', { name: 'Pickup code' }).fill(code);
+      await page.getByRole('button', { name: 'Verify Code', exact: true }).click();
+    };
+    await verify();
+    const confirm = page.getByRole('button', { name: 'Confirm pickup', exact: true });
+    await confirm.click();
+    await page.getByText('This reward is no longer ready for pickup', { exact: true }).waitFor();
+    assert.equal(await confirm.count(), 0);
+    await verify();
+    await page.getByRole('status').filter({ hasText: code }).getByText('Redeemed', { exact: true }).waitFor();
+    assert.equal(await confirm.count(), 0);
+  } finally {
+    await context.close();
+    await browser.close();
+  }
+});
+
 test('owner refresh waits for live branch assignment instead of displaying a stale claim label', { timeout: 60_000 }, async () => {
   const browser = await chromium.launch({ headless: true });
   const session = sessionFor('branch-owner');
@@ -391,7 +481,7 @@ test('Branch Manager offers the order without choosing a motorcycle', { timeout:
     const page = await context.newPage();
     page.setDefaultTimeout(5_000);
     await page.goto(`${baseUrl}/branch-manager/service-requests`);
-    const offer = page.getByRole('button', { name: 'Offer delivery', exact: true });
+    const offer = page.getByRole('button', { name: 'Assign Delivery Rider', exact: true });
     await offer.click();
     await page.getByRole('combobox', { name: 'Delivery Rider', exact: true }).click();
     await page.getByRole('option', { name: /^Available Test Rider/ }).click();
