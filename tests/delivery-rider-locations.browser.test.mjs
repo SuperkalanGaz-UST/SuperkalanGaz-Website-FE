@@ -25,7 +25,7 @@ test('manager dispatch and Fleet show independent phone and vehicle fixes, refre
     capturedAt: new Date(Date.now() - age).toISOString(), receivedAt: new Date(Date.now() - age).toISOString(), source: 'phone' });
   const riders = [
     { id: 'available', name: 'Available Test', plate: 'TEST 1', status: 'Available', operational_location: location() },
-    { id: 'stale', name: 'Stale Test', plate: 'TEST 2', status: 'On Delivery', operational_location: location(16 * 60_000) },
+    { id: 'stale', name: 'Stale Test', plate: 'TEST 2', status: 'On Delivery', operational_location: location(3 * 60_000) },
     { id: 'offline', name: 'Offline Test', plate: 'TEST 3', status: 'Offline', operational_location: location() },
     { id: 'missing', name: 'Missing Test', plate: 'TEST 4', status: 'Available', operational_location: null },
   ];
@@ -108,10 +108,14 @@ test('manager dispatch and Fleet show independent phone and vehicle fixes, refre
     await panel.getByRole('button', { name: 'Show location of Available Test', exact: true }).waitFor();
     await panel.getByText('Assigned vehicle: SAVED VEHICLE', { exact: true }).waitFor();
     assert.equal(await panel.getByRole('button', { name: 'Show location of Offline Test' }).count(), 0);
-    await panel.getByText('GPS unavailable', { exact: true }).waitFor();
+    await panel.getByText('Location unavailable', { exact: true }).waitFor();
     const stalePin = panel.getByRole('button', { name: 'Show location of Stale Test', exact: true });
     assert.equal(await stalePin.getAttribute('data-stale'), 'true');
-    await panel.getByText('GPS stale · last known position', { exact: true }).waitFor();
+    await panel.getByText(/Location unavailable · last update at/).waitFor({ timeout: 3_000 });
+    riders[1].operational_location = { ...location(), latitude: 14.60, longitude: 120.99 };
+    await page.clock.fastForward(15_100);
+    await panel.getByText('Phone GPS: 14.600000, 120.990000', { exact: true }).waitFor();
+    assert.equal(await stalePin.getAttribute('data-stale'), 'false', 'A new fix replaces the stale pin');
     const before = riderReads;
     riders[0].operational_location = { ...location(), latitude: 14.46 };
     riders[0].assigned_vehicle = { id: 'vehicle-2', plate_number: 'NEW ASSIGNMENT', status: 'active' };

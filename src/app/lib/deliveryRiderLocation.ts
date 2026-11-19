@@ -5,7 +5,13 @@ export interface DeliveryRiderLocation {
   capturedAt: string;
   receivedAt: string;
   source: 'phone';
+  stale?: boolean;
 }
+
+const PHONE_FIX_MAX_AGE_MS = 2 * 60_000;
+const phoneFixTime = new Intl.DateTimeFormat('en-PH', {
+  timeZone: 'Asia/Manila', hour: 'numeric', minute: '2-digit',
+});
 
 export interface DispatchRider {
   id: string;
@@ -32,13 +38,15 @@ export function locationAgeMs(location: DeliveryRiderLocation, now = Date.now())
 
 export function operationalLocationLabel(rider: DispatchRider, now = Date.now()): string {
   const location = dispatchLocation(rider);
-  if (!location) return 'GPS unavailable';
+  if (!location) return 'Location unavailable';
+  if (isLocationStale(location, now)) {
+    return `Location unavailable · last update at ${phoneFixTime.format(new Date(location.capturedAt))}`;
+  }
   const ageMinutes = Math.floor(locationAgeMs(location, now) / 60_000);
   if (ageMinutes === 0) return 'GPS just now';
-  if (ageMinutes < 15) return `GPS ${ageMinutes}m ago`;
-  return 'GPS stale';
+  return `GPS ${ageMinutes}m ago`;
 }
 
 export function isLocationStale(location: DeliveryRiderLocation, now = Date.now()): boolean {
-  return locationAgeMs(location, now) >= 15 * 60_000;
+  return location.stale === true || locationAgeMs(location, now) >= PHONE_FIX_MAX_AGE_MS;
 }

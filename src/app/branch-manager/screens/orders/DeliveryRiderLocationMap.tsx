@@ -54,7 +54,7 @@ export default function DeliveryRiderLocationMap({ riders, selectedId, onSelect,
       element.dataset.stale = String(isLocationStale(location, now));
       element.dataset.selected = String(rider.id === selectedId);
       element.setAttribute('aria-label', `Show location of ${rider.name}`);
-      element.title = `${rider.name} · ${rider.status}`;
+      element.title = `${rider.name} · ${element.dataset.stale === 'true' ? 'Last known position' : rider.status}`;
       element.textContent = rider.name.trim().split(/\s+/).map(part => part[0]).slice(0, 2).join('');
       element.addEventListener('click', () => onSelect(rider.id));
       const coordinates: [number, number] = [location.longitude, location.latitude];

@@ -59,17 +59,17 @@ export function DeliveryRiderLocations({ riders, loading, refreshing, error, onR
                       {rider.assigned_vehicle && <span>
                         Assigned vehicle: {rider.assigned_vehicle.plate_number}{rider.assigned_vehicle.status === 'maintenance' ? ' · Maintenance' : ''}
                       </span>}
-                      <span className={stale ? styles.stale : styles.fresh}>{operationalLocationLabel(rider, now)}{stale ? ' · last known position' : ''}</span>
+                      <span className={stale || !location ? styles.stale : styles.fresh}>{operationalLocationLabel(rider, now)}</span>
                       {location && <>
-                        <span className={styles.coordinates}>Phone GPS: {location.latitude.toFixed(6)}, {location.longitude.toFixed(6)}</span>
-                        <span>Captured {new Date(location.capturedAt).toLocaleTimeString('en-PH', { hour: 'numeric', minute: '2-digit', second: '2-digit' })}
+                        <span className={styles.coordinates}>{stale ? 'Last known phone GPS' : 'Phone GPS'}: {location.latitude.toFixed(6)}, {location.longitude.toFixed(6)}</span>
+                        <span>Captured {new Date(location.capturedAt).toLocaleString('en-PH', { timeZone: 'Asia/Manila', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', second: '2-digit' })}
                           {location.accuracyM !== null ? ` · Accuracy ±${Math.round(location.accuracyM)} m` : ' · Accuracy unavailable'}</span>
                       </>}
                     </button>;
                   })}
                 </div>
               </div>}
-        <p className={styles.note}>Phone location is shared while Available or On Delivery with the app open. Amber pins show positions at least 15 minutes old.</p>
+        <p className={styles.note}>Phone location is shared while Available or On Delivery with the app open. Dimmed amber pins show the last known position while a fresh fix is unavailable.</p>
       </div>}
     </section>
   );
