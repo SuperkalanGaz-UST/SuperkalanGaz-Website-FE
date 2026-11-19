@@ -11,7 +11,9 @@ test('Owner Vehicles stays view-only and scopes roster/history across branch swi
   const baseUrl = process.env.TEST_BASE_URL ?? 'http://localhost:3000';
   const apiOrigin = new URL(env.match(/^NEXT_PUBLIC_API_URL=(.+)$/m)?.[1]?.trim() ?? 'http://localhost:3001').origin;
   const branches = [
-    { id: '00000000-0000-4000-8000-000000000002', name: 'Vehicle Branch A', geofence: null },
+    { id: '00000000-0000-4000-8000-000000000002', name: 'Vehicle Branch A', geofence: {
+      type: 'polygon', points: [[14.44, 120.97], [14.48, 120.97], [14.48, 121.0], [14.44, 121.0]],
+    } },
     { id: '00000000-0000-4000-8000-000000000003', name: 'Vehicle Branch B', geofence: null },
   ];
   const user = {
@@ -69,7 +71,8 @@ test('Owner Vehicles stays view-only and scopes roster/history across branch swi
         const first = url.pathname.includes('vehicle-a');
         assert.equal(url.searchParams.get('branchId'), branches[first ? 0 : 1].id);
         return route.fulfill({ json: { vehicle: { id: first ? 'vehicle-a' : 'vehicle-b', plate_number: first ? 'OWNER-A' : 'OWNER-B', display_name: null },
-          from: url.searchParams.get('from'), to: url.searchParams.get('to'), points: [{ latitude: first ? 14.6 : 14.7, longitude: 121, captured_at: new Date().toISOString() }] } });
+          from: url.searchParams.get('from'), to: url.searchParams.get('to'), geofence: branches[first ? 0 : 1].geofence,
+          points: [{ latitude: first ? 14.6 : 14.7, longitude: 121, captured_at: new Date().toISOString(), outside_geofence: first ? true : null }] } });
       }
       if (url.pathname === '/api/notifications') {
         const branchId = url.searchParams.get('branchId');
@@ -142,6 +145,13 @@ test('Owner Vehicles stays view-only and scopes roster/history across branch swi
     assert.equal(gpsRequests.length, 0, 'Fleet GPS requires a selected branch');
     await page.getByRole('button', { name: 'Select branch', exact: true }).click();
     await page.getByRole('button', { name: branches[0].name, exact: true }).click();
+    const geofenceToast = page.locator('[data-sonner-toast][data-type="warning"]').filter({ hasText: 'Vehicle outside assigned area' });
+    await geofenceToast.waitFor();
+    const toastColors = await geofenceToast.evaluate(element => {
+      const { backgroundColor, borderTopColor, color } = getComputedStyle(element);
+      return { backgroundColor, borderTopColor, color };
+    });
+    assert.deepEqual(toastColors, { backgroundColor: 'rgb(254, 243, 242)', borderTopColor: 'rgb(254, 205, 202)', color: 'rgb(180, 35, 24)' });
     await mapPanel.getByRole('button', { name: 'Vehicle OWNER-A location', exact: true }).waitFor();
     await roster.getByText('Test Delivery Rider', { exact: true }).waitFor();
     await page.getByRole('alert', { name: 'Vehicles outside assigned area', exact: true }).waitFor();
@@ -156,6 +166,8 @@ test('Owner Vehicles stays view-only and scopes roster/history across branch swi
     const routeDialogA = page.getByRole('dialog', { name: 'Route history · OWNER-A', exact: true });
     await routeDialogA.getByRole('button', { name: 'Show route', exact: true }).click();
     await routeDialogA.getByText(/recorded GPS points/).waitFor();
+    await routeDialogA.getByText('Current branch geofence', { exact: true }).waitFor();
+    assert.match(await routeDialogA.getByRole('slider').getAttribute('aria-valuetext'), /Outside geofence/);
     assert.equal(await routeDialogA.getByRole('button', { name: 'Play route playback', exact: true }).isEnabled(), false, 'Single-point history cannot play');
     await routeDialogA.getByRole('button', { name: 'Close', exact: true }).click();
     await routeDialogA.waitFor({ state: 'detached' });
@@ -169,6 +181,8 @@ test('Owner Vehicles stays view-only and scopes roster/history across branch swi
     const routeDialogB = page.getByRole('dialog', { name: 'Route history · OWNER-B', exact: true });
     await routeDialogB.getByRole('button', { name: 'Show route', exact: true }).click();
     await routeDialogB.getByText(/14.700000, 121.000000/).waitFor();
+    await routeDialogB.getByText('No branch geofence configured', { exact: true }).waitFor();
+    assert.doesNotMatch(await routeDialogB.getByRole('slider').getAttribute('aria-valuetext'), /Outside geofence/);
     await routeDialogB.getByRole('button', { name: 'Close', exact: true }).click();
     await routeDialogB.waitFor({ state: 'detached' });
     gpsMode = 'error';

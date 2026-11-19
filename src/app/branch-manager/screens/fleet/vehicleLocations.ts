@@ -1,3 +1,5 @@
+import type { BranchGeofence } from '../../../lib/branchGeofence';
+
 export interface VehicleLocation {
     latitude: number;
     longitude: number;
@@ -21,12 +23,13 @@ export interface VehicleLocationsResponse {
     refresh_interval_ms: number;
 }
 
-export type RoutePoint = Omit<VehicleLocation, 'stale' | 'moving'>;
+export type RoutePoint = Omit<VehicleLocation, 'stale' | 'moving'> & { outside_geofence?: boolean | null };
 
 export interface VehicleRouteResponse {
     vehicle: Pick<FleetVehicle, 'id' | 'plate_number' | 'display_name'>;
     from: string;
     to: string;
+    geofence?: BranchGeofence | null;
     points: RoutePoint[];
 }
 

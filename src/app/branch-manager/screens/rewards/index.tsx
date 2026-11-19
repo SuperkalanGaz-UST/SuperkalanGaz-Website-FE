@@ -399,6 +399,7 @@ export default function Rewards() {
             if (!res.ok) {
                 if (res.status === 409) {
                     toast.error(apiErrorMessage(data, 'This reward is no longer ready for pickup'));
+                    setCodeResult((current) => current?.id === id ? null : current);
                     void queryClient.invalidateQueries({ queryKey: ['loyalty-redemptions'] });
             void queryClient.invalidateQueries({ queryKey: ['loyalty-summary'] });
                     return;

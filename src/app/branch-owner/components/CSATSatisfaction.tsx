@@ -303,7 +303,7 @@ export function CSATSatisfaction() {
                   <tr><td colSpan={7} className="py-8 text-center text-sm text-gray-400">Loading…</td></tr>
                 )}
                 {!loading && complaints.length === 0 && (
-                  <tr><td colSpan={7} className="py-8 text-center text-sm text-gray-400">No complaints on record. 🎉</td></tr>
+                  <tr><td colSpan={7} className="py-8 text-center text-sm text-gray-400">No complaints on record.</td></tr>
                 )}
                 {!loading && complaints.slice(0, PREVIEW_ROWS).map((i) => (
                   <tr key={i.id} className="border-b border-gray-100 bg-red-50/40">

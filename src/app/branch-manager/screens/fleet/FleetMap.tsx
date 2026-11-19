@@ -155,6 +155,7 @@ export default function FleetMap({ vehicles, geofence, selection, route, routePo
         const points = route.points.map(point => toLngLat([point.latitude, point.longitude]));
         const endpoints: Marker[] = [];
         const bounds = new LngLatBounds();
+        geofence?.points.forEach(point => bounds.extend(toLngLat(point)));
         points.forEach(point => bounds.extend(point));
         map.fitBounds(bounds, { padding: 55, maxZoom: 16, duration: 0 });
 
@@ -185,7 +186,7 @@ export default function FleetMap({ vehicles, geofence, selection, route, routePo
             map.removeLayer('vehicle-route-line');
             map.removeSource('vehicle-route');
         };
-    }, [route, retry]);
+    }, [geofence, route, retry]);
 
     useEffect(() => {
         const map = mapRef.current;

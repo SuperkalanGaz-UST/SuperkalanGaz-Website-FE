@@ -141,7 +141,7 @@ export default function FleetPage() {
             </section>
 
             {historyVehicle && <VehicleRouteHistory key={`${account.id}:${account.branchIds[0]}:${historyVehicle.id}`}
-                vehicle={historyVehicle} scope={`${account.id}:${account.branchIds[0]}`} onClose={() => setHistoryVehicleId(null)}
+                vehicle={historyVehicle} scope={`${account.id}:${account.branchIds[0]}`} branchGeofence={geofence} onClose={() => setHistoryVehicleId(null)}
                 onReturnFocus={() => historyTriggerRef.current?.focus()} />}
 
             <DeliveryRiderLocations

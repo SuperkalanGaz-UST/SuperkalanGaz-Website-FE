@@ -38,27 +38,31 @@ function reportDates(): { from: string; to: string } {
   return { from: format(from), to: format(now) };
 }
 
+// Shown before data loads and after a failed load. Screens remount on a branch
+// switch, so another branch's figures are never left on screen.
+const EMPTY_BRANCH_DATA: BranchDataShape = {
+  ordersToday: '—',
+  totalOrders: '—',
+  ordersLastMonth: '—',
+  completedDeliveries: '—',
+  cancelledFailedDeliveries: '—',
+  slaBreaches: '—',
+  completionRate: '—',
+  csatScore: '—',
+  loyaltyRedemptions: '—',
+  stockLevel: 0,
+  trends: {},
+  dailyOrderVolume: [],
+  hourlyOrderVolume: [],
+  csatTrendData: [],
+  earningsToday: [],
+  earningsThisWeek: [],
+  earningsThisMonth: [],
+};
+
 export function useBranchData(): BranchDataShape {
   const { selectedBranchId } = useBranch();
-  const [data, setData] = useState<BranchDataShape>({
-    ordersToday: '—',
-    totalOrders: '—',
-    ordersLastMonth: '—',
-    completedDeliveries: '—',
-    cancelledFailedDeliveries: '—',
-    slaBreaches: '—',
-    completionRate: '—',
-    csatScore: '—',
-    loyaltyRedemptions: '—',
-    stockLevel: 0,
-    trends: {},
-    dailyOrderVolume: [],
-    hourlyOrderVolume: [],
-    csatTrendData: [],
-    earningsToday: [],
-    earningsThisWeek: [],
-    earningsThisMonth: [],
-  });
+  const [data, setData] = useState<BranchDataShape>(EMPTY_BRANCH_DATA);
 
   useEffect(() => {
     let active = true;
@@ -124,7 +128,7 @@ export function useBranchData(): BranchDataShape {
         }));
       })
       .catch(() => {
-        if (active) setData((current) => ({ ...current, completionRate: '—', csatScore: '—', trends: {} }));
+        if (active) setData(EMPTY_BRANCH_DATA);
       });
 
     return () => {

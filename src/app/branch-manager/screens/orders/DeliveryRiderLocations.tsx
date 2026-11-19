@@ -56,9 +56,9 @@ export function DeliveryRiderLocations({ riders, loading, refreshing, error, onR
                     const stale = location ? isLocationStale(location, now) : false;
                     return <button key={rider.id} type="button" disabled={!location} className={styles.rider} data-selected={selectedId === rider.id} onClick={() => setSelectedId(rider.id)}>
                       <span className={styles.riderHeader}><strong>{rider.name}</strong><span>{rider.status}</span></span>
-                      <span>{rider.assigned_vehicle
-                        ? `Assigned vehicle: ${rider.assigned_vehicle.plate_number}${rider.assigned_vehicle.status === 'maintenance' ? ' · Maintenance' : ''}`
-                        : rider.assigned_vehicle === null ? 'No vehicle assigned' : 'Vehicle assignment unavailable'}</span>
+                      {rider.assigned_vehicle && <span>
+                        Assigned vehicle: {rider.assigned_vehicle.plate_number}{rider.assigned_vehicle.status === 'maintenance' ? ' · Maintenance' : ''}
+                      </span>}
                       <span className={stale ? styles.stale : styles.fresh}>{operationalLocationLabel(rider, now)}{stale ? ' · last known position' : ''}</span>
                       {location && <>
                         <span className={styles.coordinates}>Phone GPS: {location.latitude.toFixed(6)}, {location.longitude.toFixed(6)}</span>
@@ -69,7 +69,7 @@ export function DeliveryRiderLocations({ riders, loading, refreshing, error, onR
                   })}
                 </div>
               </div>}
-        <p className={styles.note}>Vehicles link automatically from the Branch Manager’s saved assignment. Phone location is shared while Available or On Delivery with the app open. Amber pins show positions at least 15 minutes old. Vehicle GPS remains separate.</p>
+        <p className={styles.note}>Phone location is shared while Available or On Delivery with the app open. Amber pins show positions at least 15 minutes old.</p>
       </div>}
     </section>
   );

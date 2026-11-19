@@ -2,8 +2,6 @@ import { useState, useCallback, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Header } from './Header';
 import {
-  Eye,
-  EyeOff,
   MailPlus,
   Pencil,
   RotateCcw,
@@ -128,33 +126,34 @@ export function UserManagement() {
     availableBranches,
     availableBranchOptions,
   } = useBranch();
-  // A multi-branch owner manages managers across ALL their branches at once; a
-  // single-branch owner stays scoped to their one branch.
   const isMultiBranch = availableBranches.length > 1;
+  // Follow the branch chosen in the header. Only a multi-branch owner who hasn't
+  // chosen one sees staff across all of their branches.
+  const scope = selectedBranchId ?? (isMultiBranch ? 'all' : null);
 
   const queryClient = useQueryClient();
 
-  const managerQueryKey = useMemo(() => ['users', 'branch-manager', isMultiBranch ? 'all' : selectedBranchId], [isMultiBranch, selectedBranchId]);
+  const managerQueryKey = useMemo(() => ['users', 'branch-manager', scope], [scope]);
   const { data: managersData, isLoading: managersLoading } = useQuery({
     queryKey: managerQueryKey,
     queryFn: () => fetchJson<{ users: ProfileRow[] }>(
-      isMultiBranch
+      scope === 'all'
         ? '/users?role=branch-manager'
-        : `/users?role=branch-manager&branchId=${encodeURIComponent(selectedBranchId ?? '')}`
+        : `/users?role=branch-manager&branchId=${encodeURIComponent(scope ?? '')}`
     ),
-    enabled: isMultiBranch || !!selectedBranchId,
+    enabled: scope !== null,
     staleTime: 30_000,
   });
 
-  const invitationQueryKey = useMemo(() => ['delivery-rider-invitations', isMultiBranch ? 'all' : selectedBranchId], [isMultiBranch, selectedBranchId]);
+  const invitationQueryKey = useMemo(() => ['delivery-rider-invitations', scope], [scope]);
   const { data: invitationsData, isLoading: invitationsLoading } = useQuery({
     queryKey: invitationQueryKey,
     queryFn: () => fetchJson<{ invitations: DeliveryRiderInvitation[] }>(
-      isMultiBranch
+      scope === 'all'
         ? '/delivery-rider-invitations'
-        : `/delivery-rider-invitations?branchId=${encodeURIComponent(selectedBranchId ?? '')}`
+        : `/delivery-rider-invitations?branchId=${encodeURIComponent(scope ?? '')}`
     ),
-    enabled: isMultiBranch || !!selectedBranchId,
+    enabled: scope !== null,
     staleTime: 30_000,
   });
 
@@ -217,8 +216,6 @@ export function UserManagement() {
   const [managerToDeactivate, setManagerToDeactivate] = useState<BranchManager | null>(null);
   const [managerInvitationBusy, setManagerInvitationBusy] = useState(false);
   const [managerEmailError, setManagerEmailError] = useState<string | null>(null);
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [invitationToRevoke, setInvitationToRevoke] =
     useState<DeliveryRiderInvitation | null>(null);
   const [revokeReason, setRevokeReason] = useState('');
@@ -229,8 +226,6 @@ export function UserManagement() {
     email: '',
     phone: '',
     username: '',
-    password: '',
-    confirmPassword: '',
     // Which branch this manager account belongs to. Only editable by multi-branch
     // owners (single-branch owners always target their one branch).
     branchId: selectedBranchId ?? '',
@@ -249,7 +244,8 @@ export function UserManagement() {
       recipientName: '',
       email: '',
       mobile: '',
-      branchId: selectedBranchId ?? availableBranchOptions[0]?.id ?? '',
+      // Never default a multi-branch owner to their first branch (AGENTS.md §5).
+      branchId: selectedBranchId ?? '',
     });
     setShowInviteModal(true);
   };
@@ -262,8 +258,6 @@ export function UserManagement() {
       email: '',
       phone: '',
       username: '',
-      password: '',
-      confirmPassword: '',
       branchId: selectedBranchId ?? '',
       status: 'Active',
     });
@@ -277,11 +271,9 @@ export function UserManagement() {
     setFormData({
       name: manager.name,
       email: manager.email,
-      phone: manager.phone,
+      // Edited as national digits beside the fixed +63 prefix (AGENTS.md §16).
+      phone: formatNationalMobile(manager.phone),
       username: manager.username,
-      // Passwords are never returned by the API; leave blank and only send if changed.
-      password: '',
-      confirmPassword: '',
       branchId: manager.branchIds[0] ?? selectedBranchId ?? '',
       status: manager.status,
     });
@@ -296,8 +288,6 @@ export function UserManagement() {
   const handleCloseModal = () => {
     setShowModal(false);
     setEditingManager(null);
-    setShowPassword(false);
-    setShowConfirmPassword(false);
   };
 
   const [submitting, setSubmitting] = useState(false);
@@ -306,8 +296,9 @@ export function UserManagement() {
     e.preventDefault();
 
     setManagerEmailError(null);
-    if (editingManager && formData.password !== formData.confirmPassword) {
-      toast.error('Passwords do not match');
+    const phone = canonicalPhMobile(formData.phone);
+    if (!phone) {
+      toast.error('Enter a valid PH mobile number');
       return;
     }
     if (!formData.branchId) {
@@ -318,15 +309,14 @@ export function UserManagement() {
     setSubmitting(true);
     try {
       if (editingManager) {
-        // Only send password when the owner actually entered a new one.
+        // No password: a Branch Manager sets their own (AGENTS.md §7).
         const payload: Record<string, unknown> = {
           name: formData.name,
           email: formData.email,
-          phone: formData.phone,
+          phone,
           username: formData.username,
           status: formData.status,
         };
-        if (formData.password) payload.password = formData.password;
         // Only a multi-branch owner can reassign a manager's branch; leave the
         // claim untouched for single-branch owners so we never collapse scope.
         if (isMultiBranch) payload.branchIds = [formData.branchId];
@@ -339,11 +329,6 @@ export function UserManagement() {
         if (!res.ok) throw new Error(apiErrorMessage(data, 'Update failed'));
         toast.success('Branch manager account updated successfully.');
       } else {
-        const phone = canonicalPhMobile(formData.phone);
-        if (!phone) {
-          toast.error('Enter a valid Philippine mobile number.');
-          return;
-        }
         const res = await apiFetch('/users', {
           method: 'POST',
           body: JSON.stringify({
@@ -918,6 +903,7 @@ export function UserManagement() {
                       }
                       className="h-11 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm outline-none focus:border-transparent focus:ring-2 focus:ring-[#007BC1]"
                     >
+                      <option value="" disabled>Choose a branch</option>
                       {availableBranchOptions.map((branch) => (
                         <option key={branch.id} value={branch.id}>
                           {branch.name}
@@ -1020,15 +1006,21 @@ export function UserManagement() {
                   <label htmlFor="manager-phone" className="block text-sm text-gray-700 mb-1.5">
                     Phone Number <span className="text-red-500">*</span>
                   </label>
-                  <input
-                    id="manager-phone"
-                    type="text"
-                    required
-                    value={formData.phone}
-                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                    placeholder="Enter phone number"
-                    className="w-full h-[44px] px-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#007BC1] focus:border-transparent outline-none text-sm"
-                  />
+                  <span className="flex h-[44px] overflow-hidden rounded-lg border border-gray-300 bg-white focus-within:border-transparent focus-within:ring-2 focus-within:ring-[#007BC1]">
+                    <span className="flex items-center border-r border-gray-200 bg-gray-50 px-3 text-sm font-medium text-gray-700">
+                      +63
+                    </span>
+                    <input
+                      id="manager-phone"
+                      required
+                      inputMode="numeric"
+                      autoComplete="tel-national"
+                      value={formData.phone}
+                      onChange={(e) => setFormData({ ...formData, phone: formatNationalMobile(e.target.value) })}
+                      placeholder="9XX XXX XXXX"
+                      className="min-w-0 flex-1 px-3 text-sm outline-none"
+                    />
+                  </span>
                 </div>
 
                 <div>
@@ -1046,54 +1038,6 @@ export function UserManagement() {
                   />
                 </div>
 
-                {editingManager && (
-                  <>
-                    <div>
-                      <label className="block text-sm text-gray-700 mb-1.5">
-                        Password
-                      </label>
-                      <div className="relative">
-                        <input
-                          type={showPassword ? 'text' : 'password'}
-                          value={formData.password}
-                          onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                          placeholder="Enter password"
-                          className="w-full h-[44px] px-3 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#007BC1] focus:border-transparent outline-none text-sm"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowPassword(!showPassword)}
-                          className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                        >
-                          {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                        </button>
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm text-gray-700 mb-1.5">
-                        Confirm Password
-                      </label>
-                      <div className="relative">
-                        <input
-                          type={showConfirmPassword ? 'text' : 'password'}
-                          value={formData.confirmPassword}
-                          onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
-                          placeholder="Re-enter password"
-                          className="w-full h-[44px] px-3 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#007BC1] focus:border-transparent outline-none text-sm"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                          className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                        >
-                          {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                        </button>
-                      </div>
-                    </div>
-                  </>
-                )}
-
                 {isMultiBranch && (
                   <div>
                     <label className="block text-sm text-gray-700 mb-1.5">
@@ -1104,6 +1048,7 @@ export function UserManagement() {
                       onChange={(e) => setFormData({ ...formData, branchId: e.target.value })}
                       className="w-full h-[44px] px-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#007BC1] focus:border-transparent outline-none text-sm bg-white"
                     >
+                      <option value="" disabled>Choose a branch</option>
                       {availableBranchOptions.map((branch) => (
                         <option key={branch.id} value={branch.id}>{branch.name}</option>
                       ))}

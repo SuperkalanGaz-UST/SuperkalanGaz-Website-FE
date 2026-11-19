@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { ChevronDown, Check } from 'lucide-react';
+import { Building2, ChevronDown, Check } from 'lucide-react';
 import { useBranch } from '../contexts/BranchContext';
 import { AppHeader } from '../../components/AppHeader';
 
@@ -123,6 +123,19 @@ interface HeaderProps {
 
 /** BO page header: the shared AppHeader with the branch selector as its badge. */
 export function Header({ title, description }: HeaderProps) {
-  const { selectedBranchId } = useBranch();
-  return <AppHeader notificationBranchId={selectedBranchId ?? undefined} requireNotificationBranch title={title} description={description} badge={<BranchBadge />} />;
+  const { selectedBranchId, availableBranchOptions } = useBranch();
+  // A multi-branch owner is never defaulted to a branch (AGENTS.md §5), so say why
+  // branch figures are empty instead of leaving "—" unexplained.
+  const needsBranch = !selectedBranchId && availableBranchOptions.length > 1;
+  return (
+    <>
+      <AppHeader notificationBranchId={selectedBranchId ?? undefined} requireNotificationBranch title={title} description={description} badge={<BranchBadge />} />
+      {needsBranch && (
+        <div role="status" className="mx-8 mb-4 flex items-center gap-2 rounded-xl border border-[#B9DFF4] bg-[#EFF8FD] px-4 py-3 text-sm text-gray-700">
+          <Building2 className="h-4 w-4 shrink-0 text-[#007BC1]" aria-hidden="true" />
+          Select a branch from the branch menu above to see its data.
+        </div>
+      )}
+    </>
+  );
 }

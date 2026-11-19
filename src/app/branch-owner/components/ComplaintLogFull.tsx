@@ -145,7 +145,7 @@ export function ComplaintLogFull({ onBack }: { onBack: () => void }) {
                 {!loading && currentData.length === 0 && (
                   <tr>
                     <td colSpan={7} className="py-10 text-center text-sm text-gray-400">
-                      {hasFilters ? 'No complaints match the selected filters.' : 'No complaints on record. 🎉'}
+                      {hasFilters ? 'No complaints match the selected filters.' : 'No complaints on record.'}
                     </td>
                   </tr>
                 )}

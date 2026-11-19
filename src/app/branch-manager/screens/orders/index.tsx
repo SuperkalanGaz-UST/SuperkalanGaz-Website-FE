@@ -293,7 +293,7 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
         retry: false,
     });
     const rosterMap: Record<string, string> = Object.fromEntries(
-        (rosterData?.riders ?? []).map(rider => [rider.id, rider.plate ? `${rider.name} (${rider.plate})` : rider.name]),
+        (rosterData?.riders ?? []).map(rider => [rider.id, rider.name]),
     );
     const [availableRiders, setAvailableRiders] = useState<RiderRow[] | null>(null);
     const [ridersLoading, setRidersLoading] = useState(false);
@@ -894,7 +894,7 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
 
     const handleReassign = async (id: string) => {
         if (!selectedRiderId) {
-            setReassignError('Select a rider.');
+            setReassignError('Select a Delivery Rider.');
             return;
         }
         setReassignError(null);
@@ -1552,7 +1552,7 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                                                 <div className={styles.actionButtons}>
                                                     <Popover open={assigningId === req.id} onOpenChange={(open) => { if (!open) closeAssign(); }}>
                                                         <PopoverTrigger asChild>
-                                                            <Button size="sm" variant="primary" disabled={Boolean(req.delivery_offer_expires_at)} onClick={() => openAssign(req.id)}>Offer delivery</Button>
+                                                            <Button size="sm" variant="primary" disabled={Boolean(req.delivery_offer_expires_at)} onClick={() => openAssign(req.id)}>Assign Delivery Rider</Button>
                                                         </PopoverTrigger>
                                                         <PopoverContent align="end" side="top" sideOffset={8} className={styles.assignPopover}>
                                                             <div className={styles.popoverHeader}>Offer to a Delivery Rider</div>
@@ -1844,7 +1844,7 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                                                     <span className={styles.editorTitle}>
                                                         Reassign — {req.customer_name} (currently {req.rider_id ? (rosterMap[req.rider_id] ?? req.rider_id) : '—'})
                                                     </span>
-                                                    <label className={styles.fieldLabel} htmlFor={`reassign-rider-${req.id}`}>New rider</label>
+                                                    <label className={styles.fieldLabel} htmlFor={`reassign-rider-${req.id}`}>New Delivery Rider</label>
                                                     {ridersLoading || availableRiders === null ? (
                                                         <span className={styles.mutedText}>Loading Delivery Riders…</span>
                                                     ) : availableRiders.length === 0 ? (
