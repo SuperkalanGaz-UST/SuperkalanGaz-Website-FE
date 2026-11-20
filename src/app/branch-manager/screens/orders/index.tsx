@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import ReactDOM from 'react-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -380,6 +380,21 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
     const newRequestTotal = linePrices.every(value => value !== null)
         ? linePrices.reduce<number>((sum, value) => sum + (value ?? 0), 0)
         : null;
+    // Mirrors the API's edit pricing: sizes already on the order keep their
+    // recorded price, newly chosen sizes use today's catalog price.
+    const editTotal = (req: SRRow) => {
+        const recorded = serviceRequestItems(req);
+        let total = 0;
+        for (const item of editValues.items) {
+            const price = recorded.find(line => line.cylinder_size === item.cylinder_size)?.unit_price
+                ?? catalogPrices.find(p => p.cylinder_size === item.cylinder_size)?.unit_price;
+            if (price == null || !Number.isInteger(item.quantity) || item.quantity < 1) return null;
+            total += price * item.quantity;
+        }
+        return total;
+    };
+    // "Create & start another" keeps the intake form open after a save.
+    const startAnotherRef = useRef(false);
     const updateExtraLine = (index: number, change: Partial<{ cylinderSize: string; quantity: number | '' }>) => {
         setExtraLines(lines => lines.map((line, i) => (i === index ? { ...line, ...change } : line)));
         setExtraLinesError(null);
@@ -1029,7 +1044,7 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
             if (!res.ok) throw new Error(apiErrorMessage(data, 'Failed to create service request'));
             toast.success('Walk-in/phone service request created.');
             resetIntake();
-            setIsCreateFormVisible(false);
+            if (!startAnotherRef.current) setIsCreateFormVisible(false);
             await loadRequests();
         } catch (err) {
             toast.error(err instanceof Error ? err.message : 'Failed to create service request');
@@ -1337,10 +1352,20 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                                     </Button>
                                 )}
                                 <div className={styles.formFooter}>
+                                    {!selectedCustomer && (
+                                        <span className={styles.noCustomerNote} role="status">
+                                            No customer linked — this order will not earn loyalty points.
+                                        </span>
+                                    )}
                                     {newRequestTotal !== null && (
                                         <span className={styles.formTotal} aria-live="polite">Total {formatPeso(newRequestTotal)}</span>
                                     )}
-                                    <Button type="submit" size="default" variant="primary" disabled={submitting || pricesLoading || catalogPrices.length === 0}>
+                                    <Button type="submit" size="default" variant="outline" disabled={submitting || pricesLoading || catalogPrices.length === 0}
+                                        onClick={() => { startAnotherRef.current = true; }}>
+                                        Create &amp; start another
+                                    </Button>
+                                    <Button type="submit" size="default" variant="primary" disabled={submitting || pricesLoading || catalogPrices.length === 0}
+                                        onClick={() => { startAnotherRef.current = false; }}>
                                         {submitting ? 'Creating…' : 'Create Request'}
                                     </Button>
                                 </div>
@@ -1350,13 +1375,6 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                 </div>
             )}
 
-            <DeliveryRiderLocations
-                riders={rosterData?.riders ?? []}
-                loading={rosterLoading}
-                refreshing={rosterRefreshing}
-                error={rosterError?.message ?? null}
-                onRefresh={() => { void loadRoster(); }}
-            />
 
             <div className={styles.metricsGrid} aria-label="Service request summary">
                 {summaryMetrics.map((metric) => {
@@ -1783,6 +1801,9 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                                                     </fieldset>
                                                     {editError && <p className={styles.fieldError}>{editError}</p>}
                                                     <div className={styles.editorActions}>
+                                                        {editTotal(req) !== null && (
+                                                            <span className={styles.formTotal} aria-live="polite">New total {formatPeso(editTotal(req) ?? 0)}</span>
+                                                        )}
                                                         <Button size="sm" variant="ghost" onClick={closeEdit} disabled={savingEditId === req.id}>Cancel</Button>
                                                         <Button size="sm" variant="primary" onClick={() => handleSaveEdit(req)} disabled={savingEditId === req.id}>
                                                             {savingEditId === req.id ? 'Saving…' : 'Save Changes'}
@@ -1842,7 +1863,7 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                                                     <label className={styles.fieldLabel} htmlFor={`complaint-desc-${req.id}`}>Description (required)</label>
                                                     <Input
                                                         id={`complaint-desc-${req.id}`}
-                                                        placeholder="e.g. Customer reports the cylinder never arrived; rider marked it delivered."
+                                                        placeholder="e.g. Customer reports the cylinder never arrived; Delivery Rider marked it delivered."
                                                         value={complaintDescription}
                                                         onChange={e => setComplaintDescription(e.target.value)}
                                                     />
@@ -1873,14 +1894,14 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                                                     {ridersLoading || availableRiders === null ? (
                                                         <span className={styles.mutedText}>Loading Delivery Riders…</span>
                                                     ) : availableRiders.length === 0 ? (
-                                                        <span className={styles.mutedText}>No other available riders</span>
+                                                        <span className={styles.mutedText}>No other available Delivery Riders</span>
                                                     ) : (
                                                         <select
                                                             id={`reassign-rider-${req.id}`}
                                                             className={styles.riderSelect}
                                                             value={selectedRiderId}
                                                             onChange={(e) => setSelectedRiderId(e.target.value)}
-                                                            aria-label="Select new rider"
+                                                            aria-label="Select new Delivery Rider"
                                                         >
                                                             <option value="" disabled>Select Delivery Rider…</option>
                                                             {availableRiders.map(r => (
@@ -1965,6 +1986,14 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                     </div>
                 )}
             </div>
+
+            <DeliveryRiderLocations
+                riders={rosterData?.riders ?? []}
+                loading={rosterLoading}
+                refreshing={rosterRefreshing}
+                error={rosterError?.message ?? null}
+                onRefresh={() => { void loadRoster(); }}
+            />
             {/* ── New Customer Modal ── portal so it escapes overflow:hidden on .card */}
             {mounted && showNewCustomerModal && ReactDOM.createPortal(
                 <div

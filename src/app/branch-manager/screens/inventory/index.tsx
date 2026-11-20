@@ -361,7 +361,7 @@ export default function Inventory() {
             localStorage.setItem('stock_confirmed_' + today, time);
             setConfirmedTime(time);
             queryClient.invalidateQueries({ queryKey: ['sla-report'] });
-            toast.success("Stock count confirmed for today.");
+            toast.success("Today's stock check is marked done.");
         } catch (err) {
             toast.error(err instanceof Error ? err.message : 'Failed to confirm stock');
         } finally {
@@ -401,8 +401,9 @@ export default function Inventory() {
                     disabled={confirmStockLoading || !!confirmedTime} 
                     variant={confirmedTime ? "secondary" : "primary"}
                     className={`${styles.stockCheckBtnSize} ${!confirmedTime ? styles.confirmStockBtn : ''}`}
+                    title="Records that today's stock check was done. It does not change any quantities."
                 >
-                    {confirmStockLoading ? 'Confirming...' : confirmedTime ? `Confirmed today at ${confirmedTime}` : "Confirm today's stock count"}
+                    {confirmStockLoading ? 'Saving…' : confirmedTime ? `Stock check done at ${confirmedTime}` : "Mark today's stock check done"}
                 </Button>}
                 </div>
                 </div>
