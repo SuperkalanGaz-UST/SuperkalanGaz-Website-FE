@@ -14,7 +14,6 @@ import { ReportGeneration } from './components/ReportGeneration';
 import { FleetOverview } from './components/FleetOverview';
 import { UserManagement } from './components/UserManagement';
 import { BranchSettings } from './components/BranchSettings';
-import { DeliveryCompletionFull } from './components/DeliveryCompletionFull';
 import { DeliveryProofRecordsFull } from './components/DeliveryProofRecordsFull';
 import { ComplaintLogFull } from './components/ComplaintLogFull';
 import { RedemptionHistoryFull } from './components/RedemptionHistoryFull';
@@ -71,7 +70,6 @@ export function BranchOwnerApp() {
           {activeScreen === 'sales-full' && <SalesFull onBack={() => setActiveScreen('sales-overview')} />}
           {activeScreen === 'expenses-log-full' && <ExpensesLogFull onBack={() => setActiveScreen('operational-expenses')} />}
 
-          {activeScreen === 'delivery-completion-full' && <DeliveryCompletionFull onBack={() => setActiveScreen('order-analytics')} />}
           {activeScreen === 'delivery-proof-full' && <DeliveryProofRecordsFull onBack={() => setActiveScreen('order-analytics')} />}
           {activeScreen === 'complaint-log-full' && <ComplaintLogFull onBack={() => setActiveScreen('csat')} />}
           {activeScreen === 'redemption-history-full' && <RedemptionHistoryFull onBack={() => setActiveScreen('loyalty')} />}

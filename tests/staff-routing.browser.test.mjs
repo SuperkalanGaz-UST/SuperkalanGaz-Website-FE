@@ -386,10 +386,10 @@ test('branch selection and compact sidebar survive client navigation; detail eve
     await expectPath(page, '/branch-owner/dashboard');
     await page.getByRole('button', { name: 'Routing Branch B', exact: true }).waitFor();
     await page.getByRole('button', { name: 'Expand sidebar', exact: true }).waitFor();
-    await page.evaluate(() => window.dispatchEvent(new CustomEvent('navigate', { detail: 'delivery-completion-full' })));
-    await expectPath(page, '/branch-owner/delivery-completion');
+    await page.evaluate(() => window.dispatchEvent(new CustomEvent('navigate', { detail: 'complaint-log-full' })));
+    await expectPath(page, '/branch-owner/complaint-log');
     await page.reload();
-    await page.getByRole('heading', { name: 'Delivery Completion', exact: false }).first().waitFor();
+    await page.getByRole('heading', { name: 'Complaint Log', exact: false }).first().waitFor();
     await page.goBack();
     await expectPath(page, '/branch-owner/dashboard');
     await context.close();

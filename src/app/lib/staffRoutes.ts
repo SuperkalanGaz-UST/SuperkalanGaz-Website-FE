@@ -45,7 +45,6 @@ const SCREEN_PATHS: Record<Role, Readonly<Record<string, string>>> = {
     settings: 'settings',
     'sales-full': 'sales',
     'expenses-log-full': 'expenses-log',
-    'delivery-completion-full': 'delivery-completion',
     'delivery-proof-full': 'delivery-proof',
     'complaint-log-full': 'complaint-log',
     'redemption-history-full': 'redemption-history',

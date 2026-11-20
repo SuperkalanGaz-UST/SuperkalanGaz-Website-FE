@@ -1,13 +1,14 @@
 import { useEffect, useState } from 'react';
 import { Header } from './Header';
 import { KPICard } from './KPICard';
-import { TrendingUp, ShoppingBag, ArrowUpRight } from 'lucide-react';
+import { TrendingUp, ShoppingBag, ArrowUpRight, ArrowDownRight } from 'lucide-react';
 import {
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer,
   Cell, PieChart, Pie,
 } from 'recharts';
 import { apiFetch } from '../../lib/api';
 import { useBranch } from '../contexts/BranchContext';
+import { monthToDate } from '../hooks/useBranchData';
 
 const axisProps = {
   axisLine: false as const,
@@ -23,6 +24,8 @@ export function SalesOverview() {
   const [salesMetrics, setSalesMetrics] = useState<any[]>([]);
   const [allSales, setAllSales] = useState<any[]>([]);
   const [salesLoading, setSalesLoading] = useState(true);
+  // Revenue for the same days of last month, so month-to-date compares like with like.
+  const [previousPeriodRevenue, setPreviousPeriodRevenue] = useState<number | null>(null);
 
   useEffect(() => {
     if (!selectedBranchId) return;
@@ -43,6 +46,10 @@ export function SalesOverview() {
       if (!response.ok) throw new Error('Could not load sales data.');
       return { label, ...(data?.metrics ?? {}) };
     })).then(setSalesMetrics).catch(() => setSalesMetrics([])).finally(() => setSalesLoading(false));
+    setPreviousPeriodRevenue(null);
+    apiFetch(`/service-requests/reports/branch-owner-dashboard?${new URLSearchParams({ ...monthToDate(-1), branchId: selectedBranchId })}`, { signal: controller.signal })
+      .then((response) => response.json().then((data) => setPreviousPeriodRevenue(response.ok ? Number(data?.metrics?.totalRevenue ?? 0) : null)))
+      .catch(() => setPreviousPeriodRevenue(null));
     apiFetch(`/service-requests/reports/branch-owner-sales?branchId=${encodeURIComponent(selectedBranchId)}&limit=5`, { signal: controller.signal })
       .then((response) => response.json().then((data) => response.ok ? setAllSales(data?.sales ?? []) : setAllSales([])))
       .catch(() => setAllSales([]));
@@ -83,7 +90,10 @@ export function SalesOverview() {
   const previousMetrics = salesMetrics.at(-2);
   const currentRevenue = Number(currentMetrics?.totalRevenue ?? 0);
   const previousRevenue = Number(previousMetrics?.totalRevenue ?? 0);
-  const revenueChange = previousRevenue === 0 ? 0 : ((currentRevenue - previousRevenue) / previousRevenue) * 100;
+  const revenueChange = previousPeriodRevenue ? ((currentRevenue - previousPeriodRevenue) / previousPeriodRevenue) * 100 : null;
+  const revenueDown = revenueChange !== null && revenueChange < 0;
+  const RevenueArrow = revenueDown ? ArrowDownRight : ArrowUpRight;
+  const revenueColor = revenueDown ? '#ef4444' : '#22c55e';
   const liveMonthlyRevenue = salesMetrics.map((metrics) => ({
     period: new Intl.DateTimeFormat('en-PH', { month: 'short' }).format(metrics.label),
     revenue: Number(metrics.totalRevenue ?? 0),
@@ -152,10 +162,16 @@ export function SalesOverview() {
           />
           <KPICard
             title="Revenue vs Last Month"
-            value={salesLoading ? '—' : `${revenueChange >= 0 ? '+' : ''}${revenueChange.toFixed(1)}%`}
-            icon={<ArrowUpRight className="w-4 h-4 text-[#22c55e]" />}
-            accentColor="#22c55e"
-            tooltip={salesLoading ? undefined : <span>₱{(currentRevenue - previousRevenue).toLocaleString()} difference from last month</span>}
+            value={salesLoading || revenueChange === null ? '—' : `${revenueChange >= 0 ? '+' : ''}${revenueChange.toFixed(1)}%`}
+            icon={<RevenueArrow className="w-4 h-4" style={{ color: revenueColor }} />}
+            accentColor={revenueColor}
+            tooltip={salesLoading || previousPeriodRevenue === null ? undefined : (
+              <span>
+                {previousPeriodRevenue === 0
+                  ? 'No revenue in the same period last month'
+                  : `${currentRevenue - previousPeriodRevenue < 0 ? '−' : '+'}₱${Math.abs(currentRevenue - previousPeriodRevenue).toLocaleString()} vs the same period last month`}
+              </span>
+            )}
           />
         </div>
 
