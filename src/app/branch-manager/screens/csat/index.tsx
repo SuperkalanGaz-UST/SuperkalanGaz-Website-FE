@@ -487,7 +487,7 @@ export default function Csat() {
                                                                 <div><span className={styles.detailLabel}>Order</span>{serviceRequestCylinderSummary(r.service_request)}</div>
                                                                 <div><span className={styles.detailLabel}>Source</span>{r.service_request.order_source}</div>
                                                                 <div><span className={styles.detailLabel}>Status</span>{r.service_request.status}</div>
-                                                                <div><span className={styles.detailLabel}>Rider</span>{r.rider_name ?? '—'}</div>
+                                                                <div><span className={styles.detailLabel}>Delivery Rider</span>{r.rider_name ?? '—'}</div>
                                                                 <div className={styles.detailWide}><span className={styles.detailLabel}>Address</span>{r.service_request.delivery_address}</div>
                                                             </div>
                                                             <div className={styles.panelTitle}>SLA Timeline</div>
@@ -674,7 +674,7 @@ export default function Csat() {
                                                                 <div><span className={styles.detailLabel}>Order</span>{serviceRequestCylinderSummary(i.service_request)}</div>
                                                                 <div><span className={styles.detailLabel}>Source</span>{i.service_request.order_source}</div>
                                                                 <div><span className={styles.detailLabel}>Status</span>{i.service_request.status}</div>
-                                                                <div><span className={styles.detailLabel}>Rider</span>{i.rider_name ?? '—'}</div>
+                                                                <div><span className={styles.detailLabel}>Delivery Rider</span>{i.rider_name ?? '—'}</div>
                                                                 <div className={styles.detailWide}><span className={styles.detailLabel}>Address</span>{i.service_request.delivery_address}</div>
                                                                 {i.resolution_note && (
                                                                     <div className={styles.detailWide}><span className={styles.detailLabel}>Resolution</span>{i.resolution_note}</div>

@@ -47,9 +47,9 @@ interface StockLevelRow {
     threshold_qty: number;
 }
 
-// Same "needs attention" band the Inventory screen's own Critical/Low Stock
-// badges use: at or under threshold is Critical, up to 1.5x threshold is Low.
-const isStockAlert = (item: StockLevelRow) => item.current_qty <= item.threshold_qty * 1.5;
+// Same rule as the Inventory screen: at or under threshold_qty is Low Stock
+// (0 is Out of Stock), so both screens count the same items.
+const isStockAlert = (item: StockLevelRow) => item.current_qty <= item.threshold_qty;
 
 const RECENT_ORDERS_LIMIT = 6;
 const STAR_LEVELS = [1, 2, 3, 4, 5] as const;
@@ -346,7 +346,7 @@ export default function Dashboard({ onViewOrders }: DashboardProps = {}) {
                                         <th>Customer</th>
                                         <th>Items</th>
                                         <th>Status</th>
-                                        <th>Rider</th>
+                                        <th>Delivery Rider</th>
                                         <th>Date & Time</th>
                                     </tr>
                                 </thead>
