@@ -1,4 +1,4 @@
-import { CheckCircle, User, Building2, X, Copy, ExternalLink, PlusCircle } from 'lucide-react';
+import { CheckCircle, User, Building2, X, Copy, PlusCircle } from 'lucide-react';
 import { useState } from 'react';
 
 interface BranchCreatedModalProps {
@@ -120,14 +120,6 @@ export function BranchCreatedModal({
 
           {/* Footer actions */}
           <div className="flex flex-col gap-2.5">
-            <button
-              onClick={onClose}
-              className="w-full h-[38px] bg-[#007BC1] hover:bg-[#0069a6] text-white text-sm font-medium rounded-xl flex items-center justify-center gap-2 transition-colors"
-            >
-              <ExternalLink className="w-4 h-4" />
-              View Branch Account
-            </button>
-
             <div className="flex gap-2">
               <button
                 onClick={onRegisterAnother}
@@ -138,7 +130,7 @@ export function BranchCreatedModal({
               </button>
               <button
                 onClick={onClose}
-                className="flex-1 h-[36px] bg-white border border-gray-200 text-gray-700 text-sm rounded-xl hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                className="flex-1 h-[36px] bg-[#007BC1] hover:bg-[#0069a6] text-white text-sm font-medium rounded-xl transition-colors"
               >
                 Done
               </button>

@@ -1,10 +1,11 @@
+import type { ReactNode } from 'react';
 import { CompletionRow, reportMonth, reportPercent } from '../lib/franchise-reports';
 import { ReportTable, reportCell } from './FranchiseReportUi';
 import styles from './FranchiseReports.module.css';
 
-export function DeliveryCompletionTable({ rows }: { rows: CompletionRow[] }) {
+export function DeliveryCompletionTable({ rows, scope = 'Last 6 months', action }: { rows: CompletionRow[]; scope?: string; action?: ReactNode }) {
   return <div className={styles.panel}>
-    <div className={styles.panelHeader}><div><h3 className={styles.panelTitle}>Delivery performance</h3><p className={styles.panelSubtitle}>Completion and SLA breaches by branch and order month</p></div><span className={styles.badge}>Last 6 months</span></div>
+    <div className={styles.panelHeader}><div><h3 className={styles.panelTitle}>Delivery performance</h3><p className={styles.panelSubtitle}>Completion and SLA breaches by branch and order month</p></div><div className="flex items-center gap-3">{action}<span className={styles.badge}>{scope}</span></div></div>
     <ReportTable headers={['Branch', 'Month', 'Total Orders', 'Delivered', 'Completion Rate', 'SLA Breaches']} empty={!rows.length}>
       {rows.map(r => <tr key={r.branchId + r.month}>
         <td className={reportCell}><span className={styles.cellStrong}>{r.branch}</span></td>

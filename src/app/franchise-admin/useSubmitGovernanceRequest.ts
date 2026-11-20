@@ -10,6 +10,7 @@ interface GovernanceSubmission {
   riskLevel: GovernanceRequest['risk_level'];
   branchId?: string;
   payload: Record<string, unknown>;
+  revisesRequestId?: string;
 }
 
 export function useSubmitGovernanceRequest() {
