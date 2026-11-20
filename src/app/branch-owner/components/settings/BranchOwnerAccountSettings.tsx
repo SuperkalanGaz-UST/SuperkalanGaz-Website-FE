@@ -86,6 +86,7 @@ export function BranchOwnerAccountSettings() {
   const [errors, setErrors] = useState<ProfileErrors>({});
   const [saving, setSaving] = useState(false);
 
+  const [currentPassword, setCurrentPassword] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -170,6 +171,10 @@ export function BranchOwnerAccountSettings() {
 
   const handlePasswordSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (!currentPassword) {
+      setPasswordError('Enter your current password');
+      return;
+    }
     if (password.length < 8) {
       setPasswordError('Use at least 8 characters');
       return;
@@ -184,13 +189,15 @@ export function BranchOwnerAccountSettings() {
     try {
       const response = await apiFetch('/users/me/password', {
         method: 'PATCH',
-        body: JSON.stringify({ password }),
+        body: JSON.stringify({ currentPassword, password }),
       });
       const data = await response.json().catch(() => null);
       if (!response.ok) {
         setPasswordError(apiErrorMessage(data, 'Could not change your password.'));
         return;
       }
+
+      setCurrentPassword('');
 
       setPassword('');
       setConfirmPassword('');
@@ -338,6 +345,17 @@ export function BranchOwnerAccountSettings() {
           </div>
 
           <label className="mt-6 block text-sm font-medium text-gray-700">
+            Current password
+            <input
+              type={showPassword ? 'text' : 'password'}
+              value={currentPassword}
+              onChange={(event) => setCurrentPassword(event.target.value)}
+              className={fieldClassName}
+              autoComplete="current-password"
+            />
+          </label>
+
+          <label className="mt-4 block text-sm font-medium text-gray-700">
             New password
             <span className="relative block">
               <input

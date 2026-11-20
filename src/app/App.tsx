@@ -223,6 +223,8 @@ export default function App({ children }: { children: ReactNode }) {
       toast.success('You have been successfully logged out.');
     } catch (logoutError) {
       toast.error(logoutError instanceof Error ? logoutError.message : 'Could not log out. Please try again.');
+      // Still signed in, so keep inactivity protection armed.
+      idleTimer.reset();
     } finally {
       setLoggingOut(false);
     }
@@ -282,6 +284,7 @@ export default function App({ children }: { children: ReactNode }) {
           <IdleLogoutWarningDialog
             open={showIdleWarning}
             warningSeconds={IDLE_WARNING_SECONDS}
+            idleMinutes={IDLE_TIMEOUT_MS / 60_000}
             onStayLoggedIn={() => {
               setShowIdleWarning(false);
               idleTimer.reset();

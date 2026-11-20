@@ -2,6 +2,7 @@
 
 import { useCallback, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useRouter } from 'next/navigation';
 import {
   ArrowRight,
   CheckCircle2,
@@ -24,12 +25,14 @@ import {
 } from '../components/GovernanceUi';
 import { SuperAdminHeader } from '../components/SuperAdminHeader';
 import typography from '../../components/FranchiseReports.module.css';
+import { staffScreenPath } from '../../lib/staffRoutes';
 
 function activityLabel(action: string): string {
   return action === 'governance-request-submitted' ? 'Request Submitted' : humanize(action);
 }
 
 export function GovernanceDashboard({ onNavigate }: { onNavigate: (screen: string) => void }) {
+  const router = useRouter();
   const { data, error: queryError, refetch: load } = useQuery({
     queryKey: ['governance-dashboard'],
     queryFn: () => governanceApi.dashboard(),
@@ -55,7 +58,7 @@ export function GovernanceDashboard({ onNavigate }: { onNavigate: (screen: strin
 
   return (
     <div className="flex-1 overflow-y-auto bg-[#f7f8fa]">
-      <SuperAdminHeader title="Approval Center" />
+      <SuperAdminHeader title="Dashboard" />
       <main className="mx-auto w-full max-w-[1560px] px-8 pb-10 pt-5">
         {!data && !error && <LoadingState />}
         {error && <ErrorState message={error} onRetry={() => void load()} />}
@@ -131,7 +134,7 @@ export function GovernanceDashboard({ onNavigate }: { onNavigate: (screen: strin
                           <td className="px-6 py-4 text-right">
                             <button
                               type="button"
-                              onClick={() => onNavigate('approval-requests')}
+                              onClick={() => router.push(`${staffScreenPath('super-admin', 'approval-requests')}?request=${request.id}`)}
                               className="rounded-lg bg-[#007BC1] px-4 py-2 text-xs font-semibold text-white hover:bg-[#006aa6]"
                             >
                               Review

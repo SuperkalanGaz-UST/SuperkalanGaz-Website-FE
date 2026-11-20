@@ -305,7 +305,7 @@ test('staff URLs preserve navigation, refresh and role isolation for every staff
   const browser = await chromium.launch({ headless: true });
   try {
     for (const [role, settingsLabel, heading] of [
-      ['super-admin', 'System Settings', 'Account settings'],
+      ['super-admin', 'Account Settings', 'Account settings'],
       ['franchise-admin', 'Settings', 'Account settings'],
       ['branch-owner', 'Settings', 'Settings'],
       ['branch-manager', 'Settings', 'Account settings'],
