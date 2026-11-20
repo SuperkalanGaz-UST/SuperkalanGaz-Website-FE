@@ -30,12 +30,21 @@ type BranchDataShape = {
 
 type CsatReport = { average_stars?: number | null; total_responses?: number };
 
-function reportDates(): { from: string; to: string } {
+const formatDay = (date: Date) =>
+  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+
+/**
+ * The 1st of the month `offset` months from now through today's day of the
+ * month (capped at that month's end). monthToDate(-1) is "same period last month".
+ */
+export function monthToDate(offset = 0): { from: string; to: string } {
   const now = new Date();
-  const from = new Date(now.getFullYear(), now.getMonth(), 1);
-  const format = (date: Date) =>
-    `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-  return { from: format(from), to: format(now) };
+  const first = new Date(now.getFullYear(), now.getMonth() + offset, 1);
+  const lastDay = new Date(first.getFullYear(), first.getMonth() + 1, 0).getDate();
+  return {
+    from: formatDay(first),
+    to: formatDay(new Date(first.getFullYear(), first.getMonth(), Math.min(now.getDate(), lastDay))),
+  };
 }
 
 // Shown before data loads and after a failed load. Screens remount on a branch
@@ -69,17 +78,8 @@ export function useBranchData(): BranchDataShape {
     if (!selectedBranchId) return () => { active = false; };
 
     const controller = new AbortController();
-    const currentRange = reportDates();
-    const previousDate = new Date(new Date().getFullYear(), new Date().getMonth() - 1, 1);
-    const previousYear = previousDate.getFullYear();
-    const previousMonth = String(previousDate.getMonth() + 1).padStart(2, '0');
-    const previousLastDay = new Date(previousYear, previousDate.getMonth() + 1, 0).getDate();
-    const query = new URLSearchParams({ ...currentRange, branchId: selectedBranchId }).toString();
-    const previousQuery = new URLSearchParams({
-      from: `${previousYear}-${previousMonth}-01`,
-      to: `${previousYear}-${previousMonth}-${previousLastDay}`,
-      branchId: selectedBranchId,
-    }).toString();
+    const query = new URLSearchParams({ ...monthToDate(), branchId: selectedBranchId }).toString();
+    const previousQuery = new URLSearchParams({ ...monthToDate(-1), branchId: selectedBranchId }).toString();
 
     Promise.all([
       apiFetch(`/service-requests/reports/branch-owner-dashboard?${query}`, { signal: controller.signal }),

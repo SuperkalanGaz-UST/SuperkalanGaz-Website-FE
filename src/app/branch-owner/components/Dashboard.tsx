@@ -56,7 +56,7 @@ export function Dashboard() {
             tooltip={(
               <div className="flex flex-col gap-1">
                 <span>{branchData.totalOrders} total orders this month</span>
-                <span>{branchData.ordersLastMonth} orders last month</span>
+                <span>{branchData.ordersLastMonth} orders in the same period last month</span>
               </div>
             )}
           />

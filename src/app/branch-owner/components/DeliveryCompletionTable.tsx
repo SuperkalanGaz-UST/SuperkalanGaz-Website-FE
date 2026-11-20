@@ -72,9 +72,6 @@ export function DeliveryCompletionTable({
     <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
       <div className="flex items-center justify-between mb-4">
         <h3 className="font-semibold text-gray-900">Delivery Completion Rate</h3>
-        <a href="#" onClick={(e) => { e.preventDefault(); window.dispatchEvent(new CustomEvent('navigate', { detail: 'delivery-completion-full' })); }} className="text-[11px] text-[#007BC1] hover:text-[#005a8f] transition-colors">
-          View all
-        </a>
       </div>
 
       <div className="overflow-x-auto">

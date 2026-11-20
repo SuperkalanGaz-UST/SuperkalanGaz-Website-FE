@@ -23,7 +23,7 @@ export function OrderAnalytics() {
             icon={<ShoppingCart className="w-4 h-4 text-[#eab308]" />}
             accentColor="#eab308"
             trend={branchData.totalOrders === '—' || branchData.ordersLastMonth === '—' ? undefined : {
-              text: `${Number(branchData.totalOrders) >= Number(branchData.ordersLastMonth) ? '+' : ''}${branchData.ordersLastMonth === '0' ? '0.0' : (((Number(branchData.totalOrders) - Number(branchData.ordersLastMonth)) / Number(branchData.ordersLastMonth)) * 100).toFixed(1)}% from last month`,
+              text: `${Number(branchData.totalOrders) >= Number(branchData.ordersLastMonth) ? '+' : ''}${branchData.ordersLastMonth === '0' ? '0.0' : (((Number(branchData.totalOrders) - Number(branchData.ordersLastMonth)) / Number(branchData.ordersLastMonth)) * 100).toFixed(1)}% vs same period last month`,
               direction: Number(branchData.totalOrders) >= Number(branchData.ordersLastMonth) ? 'up' : 'down',
               positive: Number(branchData.totalOrders) >= Number(branchData.ordersLastMonth),
             }}
