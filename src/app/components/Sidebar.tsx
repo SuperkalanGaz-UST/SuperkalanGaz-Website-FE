@@ -27,7 +27,7 @@ const PesoIcon = ({ className }: { className?: string }) => (
  */
 const NAV_ENTRIES: SidebarNavEntry[] = [
   { icon: LayoutDashboard, label: 'Dashboard',           id: 'dashboard' },
-  { icon: TrendingUp,      label: 'Branch Accounts',     id: 'order-analytics' },
+  { icon: TrendingUp,      label: 'Order Analytics',     id: 'order-analytics' },
   { icon: Users,           label: 'Customers',           id: 'customers' },
   { icon: Gift,            label: 'Household Rewards',    id: 'loyalty' },
   { icon: Star,            label: 'System CSAT',         id: 'csat' },

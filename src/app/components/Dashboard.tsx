@@ -10,6 +10,7 @@ import { CSATChart, type CsatAnalyticsSeries } from './CSATChart';
 import { SLATable } from './SLATable';
 import { ShoppingCart, Truck, Star, ClipboardCheck } from 'lucide-react';
 import { fetchJson } from '../lib/api';
+import { reportPercent } from '../lib/franchise-reports';
 import { governanceApi } from '../super-admin/api';
 
 // ─── helpers ────────────────────────────────────────────────────────────────
@@ -154,13 +155,10 @@ export function Dashboard() {
     [filteredOrderSeries],
   );
 
-  const deliveryCompletionRate = useMemo(() => {
-    const delivered = filteredOrderSeries.reduce((sum, s) => sum + s.deliveredCount, 0);
-    const cancelled = filteredOrderSeries.reduce((sum, s) => sum + s.cancelledCount, 0);
-    const denominator = totalOrders - cancelled;
-    if (denominator <= 0) return null;
-    return Math.round((delivered / denominator) * 1000) / 10; // one decimal place
-  }, [filteredOrderSeries, totalOrders]);
+  const deliveredOrders = useMemo(
+    () => filteredOrderSeries.reduce((sum, s) => sum + s.deliveredCount, 0),
+    [filteredOrderSeries],
+  );
 
   const avgCsat = useMemo(() => {
     const totalWeight = filteredCsatSeries.reduce((sum, s) => sum + s.totalRatings, 0);
@@ -228,11 +226,7 @@ export function Dashboard() {
           <KPICard
             title={`Delivery Completion Rate — ${scopeLabel}`}
             value={
-              orderLoading
-                ? '…'
-                : deliveryCompletionRate !== null
-                ? `${deliveryCompletionRate}%`
-                : '—'
+orderLoading ? '…' : reportPercent(deliveredOrders, totalOrders)
             }
             icon={<Truck className="w-4 h-4 text-[#16A34A]" />}
             accentColor="#16A34A"

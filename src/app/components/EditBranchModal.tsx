@@ -12,6 +12,7 @@ import { provinceFocus } from "../lib/phProvinces";
 import { cityMunicipalityFocus } from "../lib/phCitiesMunicipalities";
 import { formatPhMobileNational, normalizePhMobile } from "../lib/phMobile";
 import { BranchOwnerReassignmentForm } from "../franchise-admin/components/BranchOwnerReassignmentForm";
+import type { GovernanceRequest } from "../super-admin/types";
 
 /** The branch's linked owner, as returned by GET /users. */
 interface OwnerProfile {
@@ -25,6 +26,8 @@ interface OwnerProfile {
 
 interface EditBranchModalProps {
   branch: BranchRow;
+  /** A returned Branch Owner change to revise; opens straight on the reassignment form. */
+  revision?: GovernanceRequest;
   onClose: () => void;
   onSaved: (updated: BranchRow) => void;
 }
@@ -35,7 +38,7 @@ interface EditBranchModalProps {
  * PATCH /branches/:id; owner changes go to PATCH /users/:id. All values render
  * from real API data.
  */
-export function EditBranchModal({ branch, onClose, onSaved }: EditBranchModalProps) {
+export function EditBranchModal({ branch, revision, onClose, onSaved }: EditBranchModalProps) {
   // --- Branch fields ---
   const [name, setName] = useState(branch.name);
   // Keep only the editable national digits in state. The fixed +63 prefix is a
@@ -70,7 +73,7 @@ export function EditBranchModal({ branch, onClose, onSaved }: EditBranchModalPro
 
   const [resendingInvitation, setResendingInvitation] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [showReassignment, setShowReassignment] = useState(false);
+  const [showReassignment, setShowReassignment] = useState(!!revision);
 
   // owner_id is the canonical association. Directory order and branch labels
   // cannot identify an owner, especially when several accounts retain old scope.
@@ -231,11 +234,12 @@ export function EditBranchModal({ branch, onClose, onSaved }: EditBranchModalPro
           <BranchOwnerReassignmentForm
             branch={branch}
             currentOwner={owner}
-            onBack={() => setShowReassignment(false)}
+            revision={revision}
+            onBack={revision ? onClose : () => setShowReassignment(false)}
           />
         )}
         {/* Body */}
-        <div hidden={showReassignment} className="p-6 space-y-6">
+        <div hidden={showReassignment && !!owner} className="p-6 space-y-6">
           {/* Branch details */}
           <div className="space-y-4">
             <BranchPricingRegionField value={region} onChange={setRegion} disabled={submitting} />
@@ -426,7 +430,7 @@ export function EditBranchModal({ branch, onClose, onSaved }: EditBranchModalPro
         </div>
 
         {/* Footer */}
-        <div className={showReassignment ? "hidden" : "flex items-center justify-end gap-2 px-6 py-4 border-t border-gray-100 sticky bottom-0 bg-white"}>
+        <div className={showReassignment && owner ? "hidden" : "flex items-center justify-end gap-2 px-6 py-4 border-t border-gray-100 sticky bottom-0 bg-white"}>
           {coverageNeedsRedo && (
             <span className="mr-auto text-xs text-amber-700">Set the coverage area for the new address to save.</span>
           )}

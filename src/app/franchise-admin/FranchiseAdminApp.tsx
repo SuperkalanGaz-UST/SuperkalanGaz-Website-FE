@@ -7,15 +7,10 @@ import { Dashboard } from '../components/Dashboard';
 import { OrderAnalytics } from '../components/OrderAnalytics';
 import { CSATSatisfaction } from '../components/CSATSatisfaction';
 import { HouseholdRewards } from './components/HouseholdRewards';
-import { SupplyChain } from '../components/SupplyChain';
-import { ReportGeneration } from '../components/ReportGeneration';
 import { BranchSettings } from '../components/BranchSettings';
 import { PriceConfiguration } from '../components/PriceConfiguration';
 import { DeliveryCompletionFull } from '../components/DeliveryCompletionFull';
 import { ComplaintLogFull } from '../components/ComplaintLogFull';
-import { PurchaseTrackerFull } from '../components/PurchaseTrackerFull';
-import { RedemptionHistoryFull } from '../components/RedemptionHistoryFull';
-import { ReorderLogFull } from '../components/ReorderLogFull';
 import { CustomerRatingsFull } from '../components/CustomerRatingsFull';
 import { CustomerList } from '../components/CustomerList';
 import { CustomerDetail } from '../components/CustomerDetail';
@@ -44,17 +39,12 @@ export function FranchiseAdminApp() {
         {activeScreen === 'customer-detail' && <CustomerDetail customerId={selectedCustomerId} onBack={() => setActiveScreen('customers')} />}
         {activeScreen === 'csat' && <CSATSatisfaction />}
         {activeScreen === 'loyalty' && <HouseholdRewards />}
-        {activeScreen === 'supply-chain' && <SupplyChain />}
-        {activeScreen === 'reports' && <ReportGeneration />}
         {activeScreen === 'franchise-registry' && <BranchSettings />}
         {activeScreen === 'price-config' && <PriceConfiguration />}
         {activeScreen === 'governance-requests' && <GovernanceRequests />}
         {activeScreen === 'account-settings' && <FranchiseAdminSettings />}
         {activeScreen === 'delivery-completion-full' && <DeliveryCompletionFull onBack={() => setActiveScreen('order-analytics')} />}
         {activeScreen === 'complaint-log-full' && <ComplaintLogFull onBack={() => setActiveScreen('csat')} />}
-        {activeScreen === 'purchase-tracker-full' && <PurchaseTrackerFull onBack={() => setActiveScreen('loyalty')} />}
-        {activeScreen === 'redemption-history-full' && <RedemptionHistoryFull onBack={() => setActiveScreen('loyalty')} />}
-        {activeScreen === 'reorder-log-full' && <ReorderLogFull onBack={() => setActiveScreen('supply-chain')} />}
         {activeScreen === 'customer-ratings-full' && <CustomerRatingsFull onBack={() => setActiveScreen('csat')} />}
       </div>
     </div>
