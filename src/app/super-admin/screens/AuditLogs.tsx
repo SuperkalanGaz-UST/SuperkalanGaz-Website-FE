@@ -19,6 +19,10 @@ function escapeCsvFormula(cell: string): string {
   return /^[=+\-@\t\r]/.test(cell) ? `'${cell}` : cell;
 }
 
+/** YYYY-MM-DD in Manila, matching what <input type="date"> holds. */
+const manilaDay = (value: string) =>
+  new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(new Date(value));
+
 function stateSummary(state: Record<string, unknown> | null): string {
   if (!state) return '—';
   const prices = state.prices;
@@ -50,7 +54,7 @@ function PriceComparison({ event }: { event: AuditEvent }) {
             <span className="font-medium">{String(after.cylinderSize)} LPG Cylinder</span>
             <span className="text-gray-500">₱{oldPrice.toLocaleString('en-PH', { minimumFractionDigits: 2 })}</span>
             <span className="text-gray-400">→</span>
-            <span className={`font-semibold ${delta < 0 ? 'text-red-600' : 'text-emerald-700'}`}>₱{newPrice.toLocaleString('en-PH', { minimumFractionDigits: 2 })}</span>
+            <span className="font-semibold text-gray-900" title={delta === 0 ? 'Unchanged' : `${delta > 0 ? '+' : '−'}₱${Math.abs(delta).toLocaleString('en-PH', { minimumFractionDigits: 2 })}`}>₱{newPrice.toLocaleString('en-PH', { minimumFractionDigits: 2 })}</span>
           </div>
         );
       })}
@@ -83,6 +87,8 @@ export function AuditLogs({ category }: { category: VisibleAuditCategory }) {
       : 'Ownership History';
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
+  const [fromDay, setFromDay] = useState('');
+  const [toDay, setToDay] = useState('');
 
   const { data: events, error: queryError, refetch: load } = useQuery({
     queryKey: ['audit-logs', category],
@@ -92,14 +98,19 @@ export function AuditLogs({ category }: { category: VisibleAuditCategory }) {
 
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
-    return (events ?? []).filter((event) => !term || `${event.action} ${event.actorName} ${event.reason ?? ''}`.toLowerCase().includes(term));
-  }, [events, search]);
-  const selected = (events ?? []).find((event) => event.id === selectedId) ?? filtered[0] ?? null;
+    return (events ?? []).filter((event) => {
+      const day = manilaDay(event.occurredAt);
+      if ((fromDay && day < fromDay) || (toDay && day > toDay)) return false;
+      return !term || `${event.action} ${event.actorName} ${event.reason ?? ''} ${event.affectedRecordId ?? ''}`.toLowerCase().includes(term);
+    });
+  }, [events, search, fromDay, toDay]);
+  const selected = filtered.find((event) => event.id === selectedId) ?? filtered[0] ?? null;
 
+  // Exports exactly what the search and date range show.
   const exportCsv = () => {
-    if (!events?.length) return;
-    const cells = events.map((event) => [event.occurredAt, event.action, event.actorName, event.actorRole, event.governanceRequestId ?? '', event.reason ?? '']);
-    const csv = [['occurred_at', 'action', 'actor', 'role', 'governance_request_id', 'reason'], ...cells]
+    if (!filtered.length) return;
+    const cells = filtered.map((event) => [event.occurredAt, event.action, event.actorName, event.actorRole, event.affectedRecordType, event.affectedRecordId ?? '', event.governanceRequestId ?? '', event.reason ?? '']);
+    const csv = [['occurred_at', 'action', 'actor', 'role', 'affected_record_type', 'affected_record_id', 'governance_request_id', 'reason'], ...cells]
       .map((row) => row.map((cell) => `"${escapeCsvFormula(String(cell)).replaceAll('"', '""')}"`).join(','))
       .join('\n');
     const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
@@ -119,7 +130,11 @@ export function AuditLogs({ category }: { category: VisibleAuditCategory }) {
       <main className="mx-auto w-full max-w-[1560px] px-8 pb-10">
         <div className="mb-5 flex flex-wrap items-center justify-between gap-4">
           <label className="relative block w-full max-w-sm"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search audit events…" className="h-10 w-full rounded-lg border border-gray-200 bg-white pl-10 pr-4 text-sm outline-none focus:border-[#007BC1]" /></label>
-          <button type="button" onClick={exportCsv} disabled={!events?.length} className="inline-flex items-center gap-2 rounded-lg border border-[#007BC1] bg-white px-4 py-2 text-sm font-semibold text-[#007BC1] disabled:opacity-50"><Download className="h-4 w-4" />Export CSV</button>
+          <div className="flex flex-wrap items-center gap-3">
+            <label className="flex items-center gap-2 text-sm text-gray-600">From<input type="date" value={fromDay} max={toDay || undefined} onChange={(event) => setFromDay(event.target.value)} className="h-10 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-900 outline-none focus:border-[#007BC1]" /></label>
+            <label className="flex items-center gap-2 text-sm text-gray-600">To<input type="date" value={toDay} min={fromDay || undefined} onChange={(event) => setToDay(event.target.value)} className="h-10 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-900 outline-none focus:border-[#007BC1]" /></label>
+            <button type="button" onClick={exportCsv} disabled={!filtered.length} className="inline-flex items-center gap-2 rounded-lg border border-[#007BC1] bg-white px-4 py-2 text-sm font-semibold text-[#007BC1] disabled:opacity-50"><Download className="h-4 w-4" />Export CSV</button>
+          </div>
         </div>
         {!events && !error && <LoadingState label="Loading immutable audit history…" />}
         {error && <ErrorState message={error} onRetry={() => void load()} />}
@@ -128,7 +143,7 @@ export function AuditLogs({ category }: { category: VisibleAuditCategory }) {
             <Panel className="overflow-hidden">
               <div className="border-b border-gray-100 px-6 py-5"><h2 className="text-lg font-semibold text-gray-950">{historyTitle}</h2><p className="mt-1 text-sm text-gray-500">{filtered.length} immutable event{filtered.length === 1 ? '' : 's'}</p></div>
               <div className="divide-y divide-gray-100">
-                {filtered.length === 0 && <p className="px-6 py-16 text-center text-sm text-gray-500">No audit events recorded yet.</p>}
+                {filtered.length === 0 && <p className="px-6 py-16 text-center text-sm text-gray-500">{events.length ? 'No audit events match this search or date range.' : 'No audit events recorded yet.'}</p>}
                 {filtered.map((event) => (
                   <button key={event.id} type="button" onClick={() => setSelectedId(event.id)} className={`grid w-full grid-cols-[auto_1fr_auto] items-start gap-4 px-6 py-5 text-left ${selected?.id === event.id ? 'border-l-[3px] border-l-[#007BC1] bg-blue-50/50' : 'hover:bg-gray-50'}`}>
                     <div className={`rounded-xl p-2.5 ${accountMode ? 'bg-sky-50 text-[#007BC1]' : priceMode ? 'bg-emerald-50 text-emerald-700' : 'bg-violet-50 text-violet-700'}`}>{accountMode ? <UserCheck className="h-5 w-5" /> : priceMode ? <Tags className="h-5 w-5" /> : <FileClock className="h-5 w-5" />}</div>
@@ -141,7 +156,7 @@ export function AuditLogs({ category }: { category: VisibleAuditCategory }) {
 
             <Panel className="self-start p-6">
               {!selected && <p className="py-20 text-center text-sm text-gray-500">Select an event to inspect.</p>}
-              {selected && <><div className="border-b border-gray-100 pb-5"><p className="text-xs font-semibold uppercase tracking-wide text-[#007BC1]">Read-only audit record</p><h2 className="mt-2 text-xl font-semibold text-gray-950">{humanize(selected.action)}</h2><p className="mt-2 text-sm text-gray-500">{formatDate(selected.occurredAt)}</p></div><dl className="space-y-3 py-5 text-sm">{[['Actor', selected.actorName], ['Role', humanize(selected.actorRole)], ['Request ID', selected.governanceRequestId ?? '—'], ['Affected record', selected.affectedRecordType], ['Reason', selected.reason ?? '—']].map(([label, value]) => <div key={label} className="grid grid-cols-[8rem_1fr] gap-3"><dt className="text-gray-500">{label}</dt><dd className="break-words font-medium text-gray-900">{value}</dd></div>)}</dl>{priceMode ? <PriceComparison event={selected} /> : <div className="grid gap-3 sm:grid-cols-2"><div className="rounded-xl border border-gray-200 p-4"><p className="text-xs font-semibold uppercase tracking-wide text-gray-500">{accountMode ? 'Previous State' : 'Previous Owner'}</p><p className="mt-3 text-sm font-semibold text-gray-900">{stateSummary(selected.beforeState)}</p></div><div className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-4"><p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">{accountMode ? 'New State' : 'New Owner'}</p><p className="mt-3 text-sm font-semibold text-gray-900">{stateSummary(selected.afterState)}</p></div></div>}<div className="mt-5 rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800">This audit record cannot be edited or deleted through the application.</div></>}
+              {selected && <><div className="border-b border-gray-100 pb-5"><p className="text-xs font-semibold uppercase tracking-wide text-[#007BC1]">Read-only audit record</p><h2 className="mt-2 text-xl font-semibold text-gray-950">{humanize(selected.action)}</h2><p className="mt-2 text-sm text-gray-500">{formatDate(selected.occurredAt)}</p></div><dl className="space-y-3 py-5 text-sm">{[['Actor', selected.actorName], ['Role', humanize(selected.actorRole)], ['Request ID', selected.governanceRequestId ?? '—'], ['Affected record', `${humanize(selected.affectedRecordType)}${selected.affectedRecordId ? ` · ${selected.affectedRecordId}` : ''}`], ['Reason', selected.reason ?? '—']].map(([label, value]) => <div key={label} className="grid grid-cols-[8rem_1fr] gap-3"><dt className="text-gray-500">{label}</dt><dd className="break-words font-medium text-gray-900">{value}</dd></div>)}</dl>{priceMode ? <PriceComparison event={selected} /> : <div className="grid gap-3 sm:grid-cols-2"><div className="rounded-xl border border-gray-200 p-4"><p className="text-xs font-semibold uppercase tracking-wide text-gray-500">{accountMode ? 'Previous State' : 'Previous Owner'}</p><p className="mt-3 text-sm font-semibold text-gray-900">{stateSummary(selected.beforeState)}</p></div><div className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-4"><p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">{accountMode ? 'New State' : 'New Owner'}</p><p className="mt-3 text-sm font-semibold text-gray-900">{stateSummary(selected.afterState)}</p></div></div>}<div className="mt-5 rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800">This audit record cannot be edited or deleted through the application.</div></>}
             </Panel>
           </div>
         )}

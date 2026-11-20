@@ -51,6 +51,17 @@ const TYPE_ICONS: Record<NotificationType, ComponentType<{ className?: string }>
   system: Bell,
 };
 
+/**
+ * ponytail: notifications carry no record link yet (that needs a migration), so
+ * the governance notifications map to the screen that holds their record.
+ */
+function notificationScreen(role: string, title: string): string | null {
+  if (role === 'super-admin' && title === 'Governance request submitted') return 'approval-requests';
+  if (role === 'super-admin' && title === 'Franchise Administrator invitation accepted') return 'admin-accounts';
+  if (role === 'franchise-admin' && title.startsWith('Governance request ')) return 'governance-requests';
+  return null;
+}
+
 function relativeTime(value: string): string {
   const timestamp = new Date(value).getTime();
   const seconds = Math.max(0, Math.floor((Date.now() - timestamp) / 1000));
@@ -235,7 +246,13 @@ export function NotificationCenter({ branchId, requireBranch = false }: { branch
                   <button
                     key={notification.id}
                     type="button"
-                    onClick={() => void markRead(notification)}
+                    onClick={() => {
+                      void markRead(notification);
+                      const screen = notificationScreen(account.role, notification.title);
+                      if (!screen) return;
+                      setIsOpen(false);
+                      window.dispatchEvent(new CustomEvent('navigate', { detail: screen }));
+                    }}
                     className={`grid w-full grid-cols-[2rem_minmax(0,1fr)_5rem] gap-3 border-b border-gray-100 px-4 py-3 text-left transition-colors last:border-b-0 hover:bg-gray-50 ${
                       notification.is_read ? 'bg-white' : 'bg-[#007BC1]/[0.055]'
                     }`}

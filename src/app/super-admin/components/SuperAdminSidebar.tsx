@@ -20,7 +20,7 @@ const NAV_ENTRIES: SidebarNavEntry[] = [
   { icon: Tags, label: 'Price Change Logs', id: 'price-change-logs' },
   { icon: FileClock, label: 'Branch Owner Logs', id: 'branch-owner-logs' },
   { icon: ShieldCheck, label: 'Audit & Security', id: 'audit-security' },
-  { icon: Settings, label: 'System Settings', id: 'settings' },
+  { icon: Settings, label: 'Account Settings', id: 'settings' },
 ];
 
 export function SuperAdminSidebar({

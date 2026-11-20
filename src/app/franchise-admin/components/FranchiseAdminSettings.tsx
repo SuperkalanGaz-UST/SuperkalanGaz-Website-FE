@@ -71,6 +71,7 @@ export function FranchiseAdminSettings() {
   const [errors, setErrors] = useState<FormErrors>({});
   const [saving, setSaving] = useState(false);
   const [passwordOpen, setPasswordOpen] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -173,6 +174,7 @@ export function FranchiseAdminSettings() {
 
   const closePasswordDialog = () => {
     setPasswordOpen(false);
+    setCurrentPassword('');
     setPassword('');
     setConfirmPassword('');
     setPasswordError(null);
@@ -181,6 +183,10 @@ export function FranchiseAdminSettings() {
 
   const handlePasswordSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (!currentPassword) {
+      setPasswordError('Enter your current password');
+      return;
+    }
     if (password.length < 8) {
       setPasswordError('Use at least 8 characters');
       return;
@@ -195,7 +201,7 @@ export function FranchiseAdminSettings() {
     try {
       const response = await apiFetch('/users/me/password', {
         method: 'PATCH',
-        body: JSON.stringify({ password }),
+        body: JSON.stringify({ currentPassword, password }),
       });
       const data = await response.json().catch(() => null);
       if (!response.ok) {
@@ -399,6 +405,18 @@ export function FranchiseAdminSettings() {
 
             <form onSubmit={handlePasswordSubmit} className="mt-5">
               <label className="block text-sm font-medium text-gray-700">
+                Current password
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  value={currentPassword}
+                  onChange={(event) => setCurrentPassword(event.target.value)}
+                  className={`${fieldClassName} mt-2`}
+                  autoComplete="current-password"
+                  autoFocus
+                />
+              </label>
+
+              <label className="mt-4 block text-sm font-medium text-gray-700">
                 New password
                 <span className="relative mt-2 block">
                   <input
@@ -407,7 +425,6 @@ export function FranchiseAdminSettings() {
                     onChange={(event) => setPassword(event.target.value)}
                     className={`${fieldClassName} pr-11`}
                     autoComplete="new-password"
-                    autoFocus
                   />
                   <button
                     type="button"

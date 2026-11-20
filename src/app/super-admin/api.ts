@@ -92,10 +92,10 @@ export const governanceApi = {
       { method: 'POST' },
     ),
 
-  revokeFranchiseAdministratorInvitation: (id: string) =>
+  revokeFranchiseAdministratorInvitation: (id: string, reason: string) =>
     json<{ invitation: FranchiseAdminInvitation }>(
       `/governance/franchise-admin-invitations/${id}/revoke`,
-      { method: 'PATCH' },
+      { method: 'PATCH', body: JSON.stringify({ reason }) },
     ),
 
   audit: async (category?: AuditCategory) => {
