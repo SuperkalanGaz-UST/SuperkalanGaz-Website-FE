@@ -2,12 +2,13 @@
 
 import React, { useState } from 'react';
 import Image from 'next/image';
-import { Cylinder, Gift, Package, CheckCircle2, AlertTriangle, PackageX, ChevronDown } from 'lucide-react';
+import { Cylinder, Gift, Package, PackageCheck, CheckCircle2, AlertTriangle, PackageX, ChevronDown } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import * as z from 'zod';
 import { Badge } from '../../components/Badge';
 import { Button } from '../../components/Button';
+import { ConfirmActionDialog } from '../../../components/ConfirmActionDialog';
 import { Progress } from '../../components/Progress';
 import { RowActionsMenu } from '../../components/RowActionsMenu';
 import { Form, FormItem, FormLabel, FormControl, FormMessage, useForm } from '../../components/Form';
@@ -156,7 +157,9 @@ export default function Inventory() {
     const rewardStock = !rewardQuery.isFetching && !rewardQuery.isError ? rewardQuery.data ?? [] : [];
     const { data: stockData, error: stockQueryError, isLoading: stockLoading, refetch: loadStockLevels } = useQuery({
         queryKey: ['stock-levels', managerBranchId],
-        queryFn: () => fetchJson<{ stockLevels: StockLevelRow[] }>('/inventory/stock-levels'),
+        queryFn: ({ signal }) => fetchJson<{ stockLevels: StockLevelRow[] }>('/inventory/stock-levels', { signal, cache: 'no-store' }),
+        staleTime: 0,
+        refetchInterval: 30_000,
     });
     // For local optimism, we track stockLevels in state but initialize from query.
     // Wait, tracking in state defeats query caching if we don't sync them.
@@ -312,6 +315,7 @@ export default function Inventory() {
     };
 
     const [statusUpdatingId, setStatusUpdatingId] = useState<string | null>(null);
+    const [deliverReorder, setDeliverReorder] = useState<ReorderRequestRow | null>(null);
     const updateReorderStatus = async (id: string, status: 'Approved' | 'Delivered' | 'Cancelled') => {
         setStatusUpdatingId(id);
         try {
@@ -359,7 +363,7 @@ export default function Inventory() {
             localStorage.setItem('stock_confirmed_' + today, time);
             setConfirmedTime(time);
             queryClient.invalidateQueries({ queryKey: ['sla-report'] });
-            toast.success("Stock count confirmed for today.");
+            toast.success("Today's stock check is marked done.");
         } catch (err) {
             toast.error(err instanceof Error ? err.message : 'Failed to confirm stock');
         } finally {
@@ -399,8 +403,9 @@ export default function Inventory() {
                     disabled={confirmStockLoading || !!confirmedTime} 
                     variant={confirmedTime ? "secondary" : "primary"}
                     className={`${styles.stockCheckBtnSize} ${!confirmedTime ? styles.confirmStockBtn : ''}`}
+                    title="Records that today's stock check was done. It does not change any quantities."
                 >
-                    {confirmStockLoading ? 'Confirming...' : confirmedTime ? `Confirmed today at ${confirmedTime}` : "Confirm today's stock count"}
+                    {confirmStockLoading ? 'Saving…' : confirmedTime ? `Stock check done at ${confirmedTime}` : "Mark today's stock check done"}
                 </Button>}
                 </div>
                 </div>
@@ -551,7 +556,7 @@ export default function Inventory() {
                                                     size="sm"
                                                     variant="primary"
                                                     disabled={statusUpdatingId === req.id}
-                                                    onClick={() => updateReorderStatus(req.id, 'Delivered')}
+                                                    onClick={() => setDeliverReorder(req)}
                                                 >
                                                     {statusUpdatingId === req.id ? 'Updating…' : 'Mark Delivered'}
                                                 </Button>
@@ -573,6 +578,25 @@ export default function Inventory() {
                 </div>
             </div>
             </section>
+            {deliverReorder && (
+                <ConfirmActionDialog
+                    key={deliverReorder.id}
+                    open
+                    onOpenChange={(open) => { if (!open) setDeliverReorder(null); }}
+                    title="Mark this reorder delivered?"
+                    description={<>
+                        <span className="block font-medium text-gray-900">{deliverReorder.product_name} · {deliverReorder.requested_qty} units</span>
+                        <span className="mt-2 block">
+                            {deliverReorder.requested_qty} units are added to this branch&apos;s stock right away. Only confirm once the delivery has arrived.
+                        </span>
+                    </>}
+                    confirmLabel="Mark Delivered"
+                    busyLabel="Updating…"
+                    icon={<PackageCheck className="h-5 w-5" />}
+                    busy={statusUpdatingId === deliverReorder.id}
+                    onConfirm={async () => { await updateReorderStatus(deliverReorder.id, 'Delivered'); setDeliverReorder(null); }}
+                />
+            )}
         </div>
     );
 }

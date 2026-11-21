@@ -7,6 +7,7 @@ import {
   Loader2,
   Mail,
   MailPlus,
+  MailX,
   Search,
   ShieldCheck,
   UserCheck,
@@ -44,6 +45,7 @@ export function AdminAccounts() {
   const [actingInvitationId, setActingInvitationId] = useState<string | null>(null);
   const [statusTarget, setStatusTarget] = useState<AdminAccount | null>(null);
   const [statusBusy, setStatusBusy] = useState(false);
+  const [revokeTarget, setRevokeTarget] = useState<FranchiseAdminInvitation | null>(null);
 
   const { data, error: queryError, refetch: load } = useQuery({
     queryKey: ['admin-accounts'],
@@ -130,22 +132,16 @@ export function AdminAccounts() {
   const updateInvitation = async (
     invitation: FranchiseAdminInvitation,
     action: 'resend' | 'revoke',
+    reason = '',
   ) => {
-    if (
-      action === 'revoke' &&
-      !window.confirm(
-        `Revoke the invitation for ${invitation.email}? The current link will no longer grant CRM access.`,
-      )
-    ) {
-      return;
-    }
     setActingInvitationId(invitation.id);
     try {
       if (action === 'resend') {
         await governanceApi.resendFranchiseAdministratorInvitation(invitation.id);
         toast.success(`Invitation resent to ${invitation.email}.`);
       } else {
-        await governanceApi.revokeFranchiseAdministratorInvitation(invitation.id);
+        await governanceApi.revokeFranchiseAdministratorInvitation(invitation.id, reason);
+        setRevokeTarget(null);
         toast.success(`Invitation for ${invitation.email} revoked.`);
       }
       await load();
@@ -210,7 +206,7 @@ export function AdminAccounts() {
             <Panel className="overflow-hidden">
               <div className="flex flex-col justify-between gap-4 border-b border-gray-100 px-6 py-5 sm:flex-row sm:items-center">
                 <div>
-                  <h2 className="text-lg font-semibold text-gray-950">Pending Invitations</h2>
+                  <h2 className="text-lg font-semibold text-gray-950">Invitations</h2>
                   <p className="mt-1 text-sm text-gray-500">
                     Track invitations until they are accepted, expired, or revoked.
                   </p>
@@ -280,8 +276,9 @@ export function AdminAccounts() {
                               </button>
                               <button
                                 type="button"
-                                disabled={actionInProgress || invitation.status === 'Revoked'}
-                                onClick={() => void updateInvitation(invitation, 'revoke')}
+                                disabled={actionInProgress || invitation.status !== 'Pending'}
+                                title={invitation.status === 'Expired' ? 'Expired links already grant no access' : undefined}
+                                onClick={() => setRevokeTarget(invitation)}
                                 className="h-9 rounded-lg border border-red-200 px-3 text-xs font-semibold text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
                               >
                                 Revoke
@@ -376,6 +373,23 @@ export function AdminAccounts() {
           </div>
         )}
       </main>
+
+      {revokeTarget && (
+        <ConfirmActionDialog
+          key={revokeTarget.id}
+          open
+          onOpenChange={(open) => { if (!open) setRevokeTarget(null); }}
+          title="Revoke this invitation?"
+          description={<p>The link sent to <span className="font-semibold text-gray-900">{revokeTarget.email}</span> will stop working, so it can no longer be used to open a CRM account. You can send a new invitation later.</p>}
+          confirmLabel="Revoke"
+          busyLabel="Revoking…"
+          tone="danger"
+          icon={<MailX className="h-5 w-5" aria-hidden="true" />}
+          reasonLabel="Reason"
+          busy={actingInvitationId === revokeTarget.id}
+          onConfirm={(reason) => updateInvitation(revokeTarget, 'revoke', reason)}
+        />
+      )}
 
       {statusTarget && (
         <ConfirmActionDialog

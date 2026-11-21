@@ -12,22 +12,35 @@
 .trackTabsRow { display: flex; flex-direction: column; gap: 0.75rem; border-bottom: 1px solid var(--border); margin-bottom: 1.5rem; }
 .trackTabsRow > .headerRow { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
 
-/* KPI summary row above the queue, mirroring the Loyalty Program tab's
-   hero + supporting metric cards. */
-.metricsRow { display: grid; grid-template-columns: 1fr; gap: 1.25rem; margin-bottom: 1.5rem; }
-@media (min-width: 1024px) { .metricsRow { grid-template-columns: 1.45fr 0.9fr 0.9fr; } }
-.heroCard { position: relative; overflow: hidden; min-height: 10rem; border-radius: 1rem; border: 1px solid #a9d4ee; background: linear-gradient(135deg, #ffffff 0%, #f5faff 55%, #e8f3ff 100%); padding: 1.5rem; box-shadow: var(--shadow); }
-.heroEyebrow { font-size: 1.125rem; font-weight: 600; color: #101828; margin: 0; }
-.heroLabel { margin-top: 1.25rem; font-size: 0.875rem; font-weight: 500; color: #1f2a44; }
-.heroValue { margin-top: 0.25rem; font-size: 2.25rem; font-weight: 700; letter-spacing: -0.01em; color: #101828; }
-.heroIcon { position: absolute; right: 2rem; top: 50%; transform: translateY(-50%); display: flex; align-items: center; justify-content: center; width: 4rem; height: 4rem; border-radius: 9999px; border: 3px solid var(--primary); background-color: #fff; color: var(--primary); box-shadow: 0 0 0 7px rgba(0, 116, 188, 0.1); z-index: 1; }
-.metricCard { display: flex; align-items: center; gap: 1.25rem; min-height: 10rem; border-radius: 1rem; border: 1px solid var(--border); background-color: var(--card); padding: 1.5rem; box-shadow: var(--shadow); }
-.metricIcon { display: flex; align-items: center; justify-content: center; width: 3rem; height: 3rem; flex-shrink: 0; border-radius: 9999px; background-color: #eef6fc; color: var(--primary); }
-.metricIconAmber { background-color: #fffbeb; color: #d97706; }
-.metricLabel { font-size: 0.875rem; font-weight: 500; color: #4b5563; }
-.metricValue { margin-top: 0.5rem; font-size: 1.875rem; font-weight: 600; letter-spacing: -0.01em; color: #101828; }
-.metricDetail { margin-top: 0.25rem; font-size: 0.75rem; font-weight: 500; color: #6b7280; }
-.metricDetailAmber { color: #d97706; }
+/* Both tracks share the reference's rounded cards and live summary counts. */
+.metricsRow { display: grid; grid-template-columns: 1fr; gap: 1rem; margin-bottom: 1.25rem; }
+.commercialMetricsRow { margin-bottom: 1rem; }
+@media (min-width: 1024px) {
+  .metricsRow { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .commercialMetricsRow { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+.heroCard, .metricCard { min-width: 0; min-height: 8.25rem; padding: 1.25rem; border: 1px solid #e0e7f0; border-radius: 1rem; box-shadow: 0 8px 20px rgba(15, 23, 42, 0.05); }
+.heroCard { position: relative; overflow: hidden; border-color: #a9d7ff; background: linear-gradient(120deg, #ffffff 0%, #f2f8ff 50%, #e6f2ff 100%); }
+.heroEyebrow { position: relative; margin: 0; font-size: 1rem; line-height: 1.4; font-weight: 600; color: #172033; }
+.commercialMetricsRow .heroEyebrow { font-size: 0.9375rem; }
+.heroLabel { margin: 0.5rem 4rem 0 0; font-size: 0.8125rem; line-height: 1.5; font-weight: 500; color: #172033; }
+.heroValue { margin: 0.375rem 4rem 0 0; font-size: 2.125rem; line-height: 1; font-weight: 700; letter-spacing: -0.02em; color: #111a2d; }
+.heroIcon { position: absolute; right: 1.5rem; top: 50%; transform: translateY(-50%); display: flex; align-items: center; justify-content: center; width: 3.125rem; height: 3.125rem; border-radius: 50%; border: 2px solid #0074bc; background-color: #f4f9ff; color: #0074bc; box-shadow: 0 0 0 6px #d3e8f9; }
+.heroIcon svg { width: 1.375rem; height: 1.375rem; }
+.metricCard { display: flex; align-items: center; gap: 1rem; background-color: #fff; }
+.metricIcon { display: flex; align-items: center; justify-content: center; width: 3rem; height: 3rem; flex-shrink: 0; border-radius: 50%; }
+.metricIcon svg { width: 1.375rem; height: 1.375rem; }
+.metricIconAmber { background-color: #fff1d5; color: #c55c00; }
+.metricIconGreen { background-color: #dcfce7; color: #11883d; }
+.metricLabel { margin: 0; font-size: 0.8125rem; line-height: 1.5; font-weight: 500; color: #52617a; }
+.metricValue { margin: 0.375rem 0 0; font-size: 2.125rem; line-height: 1; font-weight: 700; letter-spacing: -0.02em; color: #111a2d; }
+
+.verifyCodeButton { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; min-height: 1.875rem; padding: 0.375rem 0.75rem; border: 1px solid #0074bc; border-radius: 0.375rem; background-color: #0074bc; color: #fff; font-size: 0.75rem; font-weight: 600; line-height: 1.25; cursor: pointer; transition: background-color 0.15s, border-color 0.15s, box-shadow 0.15s; }
+.verifyCodeButton:hover:not(:disabled) { background-color: #005f9a; border-color: #005f9a; box-shadow: 0 2px 6px rgba(0, 116, 188, 0.2); }
+.verifyCodeButton:active:not(:disabled) { background-color: #004e80; border-color: #004e80; }
+.verifyCodeButton:focus-visible { outline: 3px solid #7dd3fc; outline-offset: 2px; }
+.verifyCodeButton:disabled { opacity: 0.55; cursor: not-allowed; }
+.codeSearchActions { display: flex; align-items: center; flex-wrap: wrap; gap: 0.5rem; max-width: 100%; }
 
 /* Dual Authorization toggle (BM-013) in the header. */
 .dualAuthToggle { display: inline-flex; align-items: center; gap: 0.5rem; font-size: 0.8125rem; cursor: pointer; user-select: none; }
@@ -35,7 +48,6 @@
 .dualAuthBanner { padding: 0.6rem 0.9rem; margin-bottom: 1.25rem; border: 1px solid var(--border); border-left: 3px solid var(--primary); border-radius: 0.375rem; background-color: var(--muted); font-size: 0.8125rem; color: var(--muted-foreground); }
 
 /* System-issued redemption code shown on approved/fulfilled rows (BM-016/017). */
-.codeBadge { display: inline-block; margin-top: 0.25rem; padding: 0.05rem 0.4rem; border: 1px dashed var(--border); border-radius: 0.25rem; font-family: var(--font-family-monospace); font-size: 0.75rem; color: var(--foreground); background-color: var(--card); letter-spacing: 0.03em; }
 
 /* Ledger review panel (BM-014), rendered as an expanded row. */
 .ledgerPanel { display: flex; flex-direction: column; gap: 0.5rem; padding: 0.75rem 0.25rem; }
@@ -49,6 +61,15 @@
 .cardHeaderFlex { display: flex; justify-content: space-between; align-items: center; padding: 1.25rem; border-bottom: 1px solid #f3f4f6; gap: 1rem; flex-wrap: wrap; }
 .cardTitle { font-size: 1.0625rem; font-weight: 600; color: #101828; }
 .cardBody { padding: 1.25rem; }
+.createCard { border-color: #e0e7f0; border-radius: 1rem; box-shadow: 0 8px 20px rgba(15, 23, 42, 0.05); }
+.createHeader { min-height: 4rem; padding: 0.75rem 1.25rem; border-bottom: none; }
+.createHeaderExpanded { border-bottom: 1px solid #f3f4f6; }
+.createHeader .cardTitle { font-size: 1rem; color: #172033; }
+.newRequestButton { display: inline-flex; align-items: center; justify-content: center; min-height: 2.25rem; padding: 0.5rem 1rem; border: 1px solid #c90839; border-radius: 0.625rem; background-color: #c90839; color: #fff; font-size: 0.8125rem; line-height: 1.25; font-weight: 600; cursor: pointer; transition: background-color 0.15s, border-color 0.15s; }
+.newRequestButton:hover { background-color: #ab0730; border-color: #ab0730; }
+.newRequestButton:focus-visible { outline: 3px solid #fda4af; outline-offset: 2px; }
+.cancelRequestButton { background-color: transparent; border-color: #e2e8f0; color: #475569; }
+.cancelRequestButton:hover { background-color: #f1f5f9; border-color: #cbd5e1; }
 
 .tableWrapper { overflow-x: auto; }
 .table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
@@ -103,3 +124,22 @@
 .catalogCardStock { font-size: 0.8125rem; color: var(--muted-foreground); }
 .catalogCardActions { padding: 0 1rem 1rem; display: flex; gap: 0.5rem; align-items: center; }
 .catalogStockInput { width: 70px; padding: 0.35rem 0.5rem; border: 1px solid var(--border); border-radius: 0.375rem; font-size: 0.8125rem; }
+.pickupLink {
+    background: transparent;
+    border: 0;
+    padding: 4px 0;
+    color: var(--primary, #0879ad);
+    cursor: pointer;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    font-weight: 600;
+}
+
+.pickupDialog { max-width: 420px; }
+.pickupReward { display: flex; align-items: center; gap: 12px; padding: 10px; background: #f3f8fc; border-radius: 12px; }
+.pickupPhoto { width: 72px; height: 72px; flex: 0 0 72px; background: #fff; border-radius: 8px; overflow: hidden; }
+.pickupForm { display: grid; gap: 8px; }
+.pickupInput { width: 100%; border: 1px solid #cbd5e1; padding: 10px 12px; border-radius: 8px; font-family: monospace; font-size: 17px; letter-spacing: .08em; }
+.pickupInput:focus-visible, .pickupLink:focus-visible { outline: 2px solid var(--primary, #0879ad); outline-offset: 2px; }
+.pickupVerified { color: #166534; font-size: 13px; }
+.pickupActions { justify-content: flex-end; margin-top: 8px; }

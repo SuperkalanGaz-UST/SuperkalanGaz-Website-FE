@@ -212,6 +212,8 @@ export function UserManagement() {
   const [riderToDeactivate, setRiderToDeactivate] = useState<DeliveryRiderInvitation | null>(null);
   const [deactivateReason, setDeactivateReason] = useState('');
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [managerReason, setManagerReason] = useState('');
+  const [managerBusy, setManagerBusy] = useState(false);
   const [editingManager, setEditingManager] = useState<BranchManager | null>(null);
   const [managerToDeactivate, setManagerToDeactivate] = useState<BranchManager | null>(null);
   const [managerInvitationBusy, setManagerInvitationBusy] = useState(false);
@@ -282,6 +284,7 @@ export function UserManagement() {
 
   const handleDeleteClick = (manager: BranchManager) => {
     setManagerToDeactivate(manager);
+    setManagerReason('');
     setShowDeleteDialog(true);
   };
 
@@ -381,22 +384,28 @@ export function UserManagement() {
   };
 
   const handleConfirmDelete = async () => {
-    if (!managerToDeactivate) return;
+    if (!managerToDeactivate || managerBusy) return;
+    if (managerReason.trim().length < 5) {
+      toast.error('Enter a reason of at least 5 characters.');
+      return;
+    }
     const pending = managerToDeactivate.pendingInvitation;
     const [branchId] = managerToDeactivate.branchIds;
     if (pending && !branchId) return;
     const path = '/users/' + managerToDeactivate.id + (pending ? '?branchId=' + encodeURIComponent(branchId) : '');
+    setManagerBusy(true);
     try {
-      const res = await apiFetch(path, { method: 'DELETE' });
-      const data = await res.json();
+      const res = await apiFetch(path, { method: 'DELETE', body: JSON.stringify({ reason: managerReason.trim() }) });
+      const data = await res.json().catch(() => null);
       if (!res.ok) throw new Error(apiErrorMessage(data, 'Could not remove account access.'));
       toast.success(pending ? 'Branch Manager invitation revoked.' : 'Branch Manager account deactivated.');
       refreshAccounts();
+      setShowDeleteDialog(false);
+      setManagerToDeactivate(null);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Could not remove account access.');
     } finally {
-      setShowDeleteDialog(false);
-      setManagerToDeactivate(null);
+      setManagerBusy(false);
     }
   };
 
@@ -1132,27 +1141,37 @@ export function UserManagement() {
         </div>
       )}
 
-      {showDeleteDialog && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg border border-gray-200 w-[400px] p-6">
-            <h3 className="font-semibold text-gray-900 mb-2">{managerToDeactivate?.pendingInvitation ? 'Revoke invitation' : 'Deactivate Account'}</h3>
-            <p className="text-sm text-gray-600 mb-6">
-              {managerToDeactivate?.pendingInvitation
-                ? 'The recipient will lose access to this invitation.'
-                : 'This Branch Manager will no longer be able to sign in. The account and its history will be retained.'}
+      {showDeleteDialog && managerToDeactivate && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-[420px] max-w-full rounded-xl border border-gray-200 bg-white p-6 shadow-xl">
+            <h3 className="font-semibold text-gray-900">{managerToDeactivate.pendingInvitation ? 'Revoke Branch Manager invitation' : 'Deactivate Branch Manager'}</h3>
+            <p className="mt-2 text-sm leading-5 text-gray-600">
+              {managerToDeactivate.pendingInvitation
+                ? `${managerToDeactivate.name} will no longer be able to use this invitation. The audit history will be retained.`
+                : `${managerToDeactivate.name} will no longer be able to sign in. The account and its history will be retained.`}
             </p>
-            <div className="flex items-center justify-end gap-3">
+            <label className="mt-4 block">
+              <span className="mb-1.5 block text-sm text-gray-700">Reason <span className="text-red-500">*</span></span>
+              <textarea
+                value={managerReason}
+                onChange={(event) => setManagerReason(event.target.value)}
+                rows={3}
+                maxLength={300}
+                placeholder={managerToDeactivate.pendingInvitation ? 'Why is this invitation being revoked?' : 'Why is this Branch Manager being deactivated?'}
+                className="w-full resize-none rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-transparent focus:ring-2 focus:ring-[#007BC1]"
+              />
+            </label>
+            <div className="mt-6 flex items-center justify-end gap-3">
+              <button type="button" disabled={managerBusy} onClick={() => setShowDeleteDialog(false)} className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-60">Cancel</button>
               <button
-                onClick={() => setShowDeleteDialog(false)}
-                className="px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                type="button"
+                disabled={managerBusy || managerReason.trim().length < 5}
+                onClick={() => void handleConfirmDelete()}
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-60"
               >
-                Cancel
-              </button>
-              <button
-                onClick={handleConfirmDelete}
-                className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm hover:bg-red-700 transition-colors"
-              >
-                {managerToDeactivate?.pendingInvitation ? 'Revoke invitation' : 'Deactivate'}
+                {managerBusy
+                  ? (managerToDeactivate.pendingInvitation ? 'Revoking…' : 'Deactivating…')
+                  : (managerToDeactivate.pendingInvitation ? 'Revoke invitation' : 'Deactivate')}
               </button>
             </div>
           </div>

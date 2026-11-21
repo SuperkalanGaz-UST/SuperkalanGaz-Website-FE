@@ -60,6 +60,7 @@ export default function App({ children }: { children: ReactNode }) {
   const [passwordRecovery, setPasswordRecovery] = useState(false);
   const [branchInvitationRole, setBranchInvitationRole] = useState<BranchInvitationRole | null>(null);
   const [invitationActivation, setInvitationActivation] = useState(false);
+  const [invitationLinkError, setInvitationLinkError] = useState<string>();
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
   const [showIdleWarning, setShowIdleWarning] = useState(false);
@@ -91,6 +92,11 @@ export default function App({ children }: { children: ReactNode }) {
       // An explicit invitation must not fall through to an existing staff session.
       setBranchInvitationRole(invitation);
       return;
+    }
+    // Supabase reports a dead invite link (expired or already used) in the fragment.
+    if (invitation === 'franchise-admin' && new URLSearchParams(url.hash.slice(1)).has('error_code')) {
+      setInvitationLinkError('This invitation link has expired or was already used. Ask your Super Administrator to resend it.');
+      window.history.replaceState(null, '', '/');
     }
 
     let mounted = true;
@@ -217,6 +223,8 @@ export default function App({ children }: { children: ReactNode }) {
       toast.success('You have been successfully logged out.');
     } catch (logoutError) {
       toast.error(logoutError instanceof Error ? logoutError.message : 'Could not log out. Please try again.');
+      // Still signed in, so keep inactivity protection armed.
+      idleTimer.reset();
     } finally {
       setLoggingOut(false);
     }
@@ -276,6 +284,7 @@ export default function App({ children }: { children: ReactNode }) {
           <IdleLogoutWarningDialog
             open={showIdleWarning}
             warningSeconds={IDLE_WARNING_SECONDS}
+            idleMinutes={IDLE_TIMEOUT_MS / 60_000}
             onStayLoggedIn={() => {
               setShowIdleWarning(false);
               idleTimer.reset();
@@ -284,6 +293,8 @@ export default function App({ children }: { children: ReactNode }) {
         </AccountProvider>
       ) : (
         <Login
+          key={invitationLinkError}
+          signInError={invitationLinkError}
           onLogin={setAccount}
           passwordRecovery={passwordRecovery}
           onPasswordReset={handlePasswordReset}

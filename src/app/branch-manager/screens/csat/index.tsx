@@ -6,6 +6,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { RefreshCw, Star, MessageSquare, AlertTriangle, Flag, AlertCircle, CheckCircle, Clock } from 'lucide-react';
 import { toast } from 'sonner';
 import { KPICard } from '../../../components/KPICard';
+import { ConfirmActionDialog } from '../../../components/ConfirmActionDialog';
 import { Badge } from '../../components/Badge';
 import { Button } from '../../components/Button';
 import { Tabs, TabsList, TabsTrigger } from '../../components/Tabs';
@@ -90,6 +91,7 @@ interface IncidentRow {
     priority: string;
     reported_at: string;
     first_response_at: string | null;
+    resolution_note: string | null;
     escalated: boolean;
     escalated_at: string | null;
     created_at: string;
@@ -243,6 +245,32 @@ export default function Csat() {
 
     const [incidentDetailId, setIncidentDetailId] = useState<string | null>(null);
     const [escalatingId, setEscalatingId] = useState<string | null>(null);
+    const [resolveIncident, setResolveIncident] = useState<IncidentRow | null>(null);
+    const [resolvingIncident, setResolvingIncident] = useState(false);
+
+    const handleResolveIncident = async (id: string, note: string) => {
+        setResolvingIncident(true);
+        try {
+            const r = await apiFetch(`/csat/incidents/${id}/resolve`, { method: 'POST', body: JSON.stringify({ note }) });
+            const data = await r.json();
+            if (!r.ok) {
+                toast.error(apiErrorMessage(data, 'Failed to resolve the complaint'));
+                if (r.status === 409) { setResolveIncident(null); void queryClient.invalidateQueries({ queryKey: ['csat-incidents'] }); }
+                return;
+            }
+            setResolveIncident(null);
+            toast.success(data.serviceRequestStatus && data.serviceRequestStatus !== 'Under Review'
+                ? `Complaint resolved. The order is now ${data.serviceRequestStatus}.`
+                : 'Complaint resolved.');
+            void queryClient.invalidateQueries({ queryKey: ['csat-incidents'] });
+            void queryClient.invalidateQueries({ queryKey: ['csat-incident-response-summary'] });
+            void queryClient.invalidateQueries({ queryKey: ['service-requests'] });
+        } catch (err) {
+            toast.error(err instanceof Error ? err.message : 'Failed to resolve the complaint');
+        } finally {
+            setResolvingIncident(false);
+        }
+    };
 
     const handleEscalate = async (id: string) => {
         setEscalatingId(id);
@@ -459,7 +487,7 @@ export default function Csat() {
                                                                 <div><span className={styles.detailLabel}>Order</span>{serviceRequestCylinderSummary(r.service_request)}</div>
                                                                 <div><span className={styles.detailLabel}>Source</span>{r.service_request.order_source}</div>
                                                                 <div><span className={styles.detailLabel}>Status</span>{r.service_request.status}</div>
-                                                                <div><span className={styles.detailLabel}>Rider</span>{r.rider_name ?? '—'}</div>
+                                                                <div><span className={styles.detailLabel}>Delivery Rider</span>{r.rider_name ?? '—'}</div>
                                                                 <div className={styles.detailWide}><span className={styles.detailLabel}>Address</span>{r.service_request.delivery_address}</div>
                                                             </div>
                                                             <div className={styles.panelTitle}>SLA Timeline</div>
@@ -616,6 +644,11 @@ export default function Csat() {
                                                     >
                                                         {incidentDetailId === i.id ? 'Hide' : 'Delivery'}
                                                     </Button>
+                                                    {(i.status === 'open' || i.status === 'in_progress') && (
+                                                        <Button variant="primary" size="sm" onClick={() => setResolveIncident(i)}>
+                                                            Resolve
+                                                        </Button>
+                                                    )}
                                                     {!i.escalated && (
                                                         <Button
                                                             variant="outline"
@@ -641,8 +674,11 @@ export default function Csat() {
                                                                 <div><span className={styles.detailLabel}>Order</span>{serviceRequestCylinderSummary(i.service_request)}</div>
                                                                 <div><span className={styles.detailLabel}>Source</span>{i.service_request.order_source}</div>
                                                                 <div><span className={styles.detailLabel}>Status</span>{i.service_request.status}</div>
-                                                                <div><span className={styles.detailLabel}>Rider</span>{i.rider_name ?? '—'}</div>
+                                                                <div><span className={styles.detailLabel}>Delivery Rider</span>{i.rider_name ?? '—'}</div>
                                                                 <div className={styles.detailWide}><span className={styles.detailLabel}>Address</span>{i.service_request.delivery_address}</div>
+                                                                {i.resolution_note && (
+                                                                    <div className={styles.detailWide}><span className={styles.detailLabel}>Resolution</span>{i.resolution_note}</div>
+                                                                )}
                                                             </div>
                                                             <div className={styles.panelTitle}>SLA Timeline</div>
                                                             <div className={styles.detailGrid}>
@@ -666,6 +702,26 @@ export default function Csat() {
                         </table>
                     </div>
                 </div>
+                {resolveIncident && (
+                    <ConfirmActionDialog
+                        key={resolveIncident.id}
+                        open
+                        onOpenChange={(open) => { if (!open && !resolvingIncident) setResolveIncident(null); }}
+                        title="Resolve this complaint?"
+                        description={<>
+                            <span className="block font-medium text-gray-900">{CATEGORY_LABELS[resolveIncident.category] ?? resolveIncident.category} · {resolveIncident.customer_name ?? 'Unknown customer'}</span>
+                            <span className="mt-1 block">
+                                The complaint closes and its order leaves Under Review: back to Delivered if it was delivered, otherwise Cancelled.
+                            </span>
+                        </>}
+                        confirmLabel="Resolve"
+                        busyLabel="Resolving…"
+                        icon={<CheckCircle className="h-5 w-5" />}
+                        busy={resolvingIncident}
+                        reasonLabel="Resolution note"
+                        onConfirm={(note) => handleResolveIncident(resolveIncident.id, note)}
+                    />
+                )}
                 </>
             )}
         </div>

@@ -24,6 +24,9 @@ interface SRRow extends ServiceRequestCylinderFields {
     customer_name: string;
     rider_id: string | null;
     requested_at: string;
+    // Server-computed SLA flags (same thresholds as the SLA report).
+    sla_breached: boolean;
+    sla_at_risk: boolean;
 }
 
 interface RiderRow {
@@ -44,9 +47,9 @@ interface StockLevelRow {
     threshold_qty: number;
 }
 
-// Same "needs attention" band the Inventory screen's own Critical/Low Stock
-// badges use: at or under threshold is Critical, up to 1.5x threshold is Low.
-const isStockAlert = (item: StockLevelRow) => item.current_qty <= item.threshold_qty * 1.5;
+// Same rule as the Inventory screen: at or under threshold_qty is Low Stock
+// (0 is Out of Stock), so both screens count the same items.
+const isStockAlert = (item: StockLevelRow) => item.current_qty <= item.threshold_qty;
 
 const RECENT_ORDERS_LIMIT = 6;
 const STAR_LEVELS = [1, 2, 3, 4, 5] as const;
@@ -184,6 +187,13 @@ export default function Dashboard({ onViewOrders }: DashboardProps = {}) {
     }, [requests, todayKey]);
     const dispatchedCount = useMemo(() => requests.filter((r) => r.status === 'Dispatched').length, [requests]);
     const enRouteCount = useMemo(() => requests.filter((r) => r.status === 'En Route').length, [requests]);
+    const sla = useMemo(() => {
+        const open = requests.filter((r) => r.status === 'Pending' || r.status === 'Dispatched' || r.status === 'En Route');
+        return {
+            late: open.filter((r) => r.sla_breached).length,
+            atRisk: open.filter((r) => !r.sla_breached && r.sla_at_risk).length,
+        };
+    }, [requests]);
 
     const csatChartData = useMemo(
         () => STAR_LEVELS.map((stars) => ({ rating: String(stars), count: starCounts?.[stars] ?? 0 })),
@@ -214,6 +224,7 @@ export default function Dashboard({ onViewOrders }: DashboardProps = {}) {
                 <KPICard
                     title="Active Deliveries"
                     value={requestsLoading ? '…' : String(activeDeliveries)}
+                    subtitle={requestsLoading ? undefined : `${sla.late} late · ${sla.atRisk} at risk`}
                     icon={<Truck className="w-4 h-4 text-[#16A34A]" />}
                     accentColor="#16A34A"
                     tooltip={requestsLoading ? undefined : (
@@ -221,6 +232,9 @@ export default function Dashboard({ onViewOrders }: DashboardProps = {}) {
                             <span className="font-semibold">In-progress deliveries</span>
                             <span>Dispatched: {dispatchedCount}</span>
                             <span>En Route: {enRouteCount}</span>
+                            <span className="font-semibold mt-1">Open orders against SLA</span>
+                            <span>Late: {sla.late}</span>
+                            <span>At risk: {sla.atRisk}</span>
                         </div>
                     )}
                 />
@@ -332,7 +346,7 @@ export default function Dashboard({ onViewOrders }: DashboardProps = {}) {
                                         <th>Customer</th>
                                         <th>Items</th>
                                         <th>Status</th>
-                                        <th>Rider</th>
+                                        <th>Delivery Rider</th>
                                         <th>Date & Time</th>
                                     </tr>
                                 </thead>

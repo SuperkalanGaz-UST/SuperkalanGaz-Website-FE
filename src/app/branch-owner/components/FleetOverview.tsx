@@ -11,6 +11,7 @@ import { fetchJson } from '../../lib/api';
 import { DeliveryRiderAccess } from './DeliveryRiderAccess';
 import { VehicleOverview } from './VehicleOverview';
 import { FleetTabs, type FleetTab } from '../../components/FleetTabs';
+import { BranchOperatingHours } from '../../components/BranchOperatingHours';
 import VehicleRouteHistory from '../../branch-manager/screens/fleet/VehicleRouteHistory';
 import { vehicleFixTime, type VehicleLocationsResponse } from '../../branch-manager/screens/fleet/vehicleLocations';
 
@@ -288,13 +289,14 @@ export function FleetOverview({ vehiclesActive, onNavigate }: {
           </section>
         </div>
 
-        <div className="grid grid-cols-2 gap-6 mb-8">
+        <div className="mb-8">
           <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <h3 className="font-semibold text-gray-900 mb-4">Curfew & Active Alerts</h3>
+            <h3 className="font-semibold text-gray-900 mb-4">Operating Hours &amp; Geofence Alerts</h3>
             <div className="mb-4 pb-4 border-b border-gray-200">
               <div className="text-xs text-gray-500 mb-2">Branch Operating Hours</div>
-              <div className="text-sm text-gray-500 font-medium">Not configured</div>
-              <div className="text-xs text-gray-500 mt-1">Curfew settings are not available for this branch.</div>
+              <div className="text-sm text-gray-700 font-medium">
+                {selectedBranchId && <BranchOperatingHours branchId={selectedBranchId} />}
+              </div>
             </div>
             <div>
               <div className="text-xs text-gray-500 mb-3">Active Geofence Alerts</div>
@@ -302,34 +304,6 @@ export function FleetOverview({ vehiclesActive, onNavigate }: {
             </div>
           </div>
 
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold text-gray-900">Delivery Rider Status</h3>
-            </div>
-
-            <div className="space-y-3">
-              {ridersLoading ? (
-                <div className="py-10 text-center text-sm text-gray-500">Loading Delivery Rider status…</div>
-              ) : riders.length === 0 ? (
-                <div className="py-10 text-center text-sm text-gray-500">No rider status to display.</div>
-              ) : (
-                riders.map((rider) => (
-                  <div key={rider.id} className="flex gap-3 border-b border-gray-100 pb-3 last:border-0">
-                    <div className="min-w-0 flex-1">
-                      <div className="text-xs font-medium text-gray-900">{rider.name}</div>
-                      <div className="text-xs text-gray-600">
-                        {rider.currentOrder ? `Current Service Request: ${rider.currentOrder}` : 'No active Service Request'}
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <div className="text-xs font-medium text-gray-700">{formatStatus(rider.apiStatus)}</div>
-                      <div className="text-[10px] text-gray-400">Updated: {rider.lastUpdated}</div>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
         </div>
           </>
         ) : activeTab === 'vehicles' ? (

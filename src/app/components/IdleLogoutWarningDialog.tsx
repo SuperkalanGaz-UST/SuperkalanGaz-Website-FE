@@ -14,6 +14,7 @@ import {
 interface IdleLogoutWarningDialogProps {
   open: boolean;
   warningSeconds: number;
+  idleMinutes: number;
   onStayLoggedIn: () => void;
 }
 
@@ -22,7 +23,7 @@ interface IdleLogoutWarningDialogProps {
  * useIdleTimer's own onTimeout, independent of this component reaching
  * zero, so there's a single source of truth for when the session ends.
  */
-export function IdleLogoutWarningDialog({ open, warningSeconds, onStayLoggedIn }: IdleLogoutWarningDialogProps) {
+export function IdleLogoutWarningDialog({ open, warningSeconds, idleMinutes, onStayLoggedIn }: IdleLogoutWarningDialogProps) {
   const [secondsLeft, setSecondsLeft] = useState(warningSeconds);
 
   useEffect(() => {
@@ -46,7 +47,8 @@ export function IdleLogoutWarningDialog({ open, warningSeconds, onStayLoggedIn }
           </div>
           <AlertDialogTitle>You&apos;ve been inactive</AlertDialogTitle>
           <AlertDialogDescription>
-            For security, you&apos;ll be automatically logged out in {secondsLeft}s.
+            For security, Super Administrator sessions end after {idleMinutes} minutes without activity.
+            You&apos;ll be logged out in {secondsLeft}s unless you stay signed in.
           </AlertDialogDescription>
         </AlertDialogHeader>
         <div className="mt-2 flex justify-end">

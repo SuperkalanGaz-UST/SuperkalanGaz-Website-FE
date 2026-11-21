@@ -14,33 +14,19 @@
 .statIcon { color: var(--muted-foreground); }
 .statValue { font-size: 2rem; font-weight: 700; color: var(--foreground); line-height: 1; }
 
-.vehiclesGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap: 1.5rem; }
+.vehiclesGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 350px), 1fr)); gap: 1.5rem; }
 
 .vehicleCard { background-color: var(--card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 1.25rem; box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 1.25rem; }
-.cardHeader { display: flex; justify-content: space-between; align-items: flex-start; }
-.statusStack { display: flex; flex-direction: column; align-items: flex-end; gap: 0.35rem; }
 .vehicleIdentity { display: flex; flex-direction: column; gap: 0.15rem; min-width: 0; }
 .vehicleName { font-size: 1.1rem; font-weight: 600; color: var(--foreground); overflow-wrap: anywhere; }
 .vehicleNameRow { display: flex; align-items: center; gap: 0.35rem; min-width: 0; }
 .renameButton { display: inline-flex; align-items: center; justify-content: center; width: 1.75rem; height: 1.75rem; border: none; border-radius: var(--radius-sm); background: transparent; color: var(--muted-foreground); cursor: pointer; flex-shrink: 0; }
 .renameButton:hover { background: var(--muted); color: var(--foreground); }
 .renameButton:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
-.vehicleRider { font-size: 0.8rem; color: var(--muted-foreground); margin-top: 0.15rem; }
-.vehiclePlate { font-family: var(--font-family-monospace); font-size: 0.85rem; color: var(--muted-foreground); background: var(--muted); padding: 0.15rem 0.4rem; border-radius: var(--radius-sm); width: fit-content; }
-
-.metricsRow { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
-.metricBox { display: flex; flex-direction: column; gap: 0.35rem; padding: 0.75rem; background-color: var(--muted); border-radius: var(--radius-md); }
-.metricLabel { font-size: 0.75rem; font-weight: 500; color: var(--muted-foreground); text-transform: uppercase; }
-.metricValueWrapper { display: flex; align-items: baseline; gap: 0.25rem; }
-.metricValue { font-size: 1.5rem; font-weight: 700; color: var(--foreground); line-height: 1; font-family: var(--font-family-monospace); }
-.metricUnit { font-size: 0.8rem; color: var(--muted-foreground); font-weight: 500; }
-
-.progressSection { display: flex; flex-direction: column; gap: 0.5rem; }
-.progressHeader { display: flex; justify-content: space-between; font-size: 0.8rem; font-weight: 500; }
-.progressText { color: var(--muted-foreground); }
-.progressPercentage { font-weight: 600; color: var(--foreground); }
-
-.actionRow { display: flex; flex-direction: column; margin-top: auto; padding-top: 0.75rem; border-top: 1px solid var(--border); }
+.vehicleDetails { font-size: 0.85rem; color: var(--muted-foreground); overflow-wrap: anywhere; }
+.actionRow { display: flex; flex-direction: column; gap: .4rem; margin-top: auto; padding-top: 0.75rem; border-top: 1px solid var(--border); }
+.mileageActions { display: flex; flex-wrap: wrap; gap: .5rem; }
+.mileageActions > button { flex: 1 1 auto; }
 
 .emptyState { text-align: center; padding: 2rem; color: var(--muted-foreground); }
 
@@ -104,4 +90,3 @@
   .wizardFooter { padding: 0.85rem 1rem; }
   .detailsScreen { padding: 1.25rem 1rem; }
 }
-.gpsMileageNote { color: var(--muted-foreground); font-size: 0.8125rem; line-height: 1.5; margin: 0 0 1rem; }

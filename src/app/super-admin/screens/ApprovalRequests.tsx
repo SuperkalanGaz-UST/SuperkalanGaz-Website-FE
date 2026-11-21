@@ -33,8 +33,41 @@ const FILTERS: { label: string; value: 'all' | GovernanceRequestStatus }[] = [
   { label: 'Rejected', value: 'rejected' },
 ];
 
+const SLA_SEGMENT_LABELS: Record<string, string> = {
+  request_to_dispatch: 'Request → Dispatch',
+  dispatch_to_in_transit: 'Dispatch → In transit',
+  in_transit_to_delivery: 'In transit → Delivered',
+};
+
+function fieldValue(value: unknown): string {
+  if (value === null || value === undefined || value === '') return '—';
+  if (typeof value === 'object') {
+    return Object.entries(value).map(([key, item]) => `${humanize(key)}: ${typeof item === 'object' ? JSON.stringify(item) : String(item)}`).join(' · ');
+  }
+  return String(value);
+}
+
+/** Label, proposed value and, when the API captured it, the value it replaces. */
+function payloadRows(request: GovernanceRequest): [string, string, string?][] {
+  const p = request.payload;
+  if (request.type === 'sla-threshold') {
+    return [
+      ['SLA segment', SLA_SEGMENT_LABELS[String(p.segment)] ?? fieldValue(p.segment)],
+      ['Threshold', `${fieldValue(p.thresholdMinutes)} min`, 'currentThresholdMinutes' in p ? (p.currentThresholdMinutes == null ? 'Default' : `${p.currentThresholdMinutes} min`) : undefined],
+    ];
+  }
+  if (request.type === 'branch-owner-change') {
+    return [
+      ...(p.branchName ? [['Branch', String(p.branchName)] as [string, string]] : []),
+      ['Branch Owner', String(p.newOwnerName ?? 'Selected Branch Owner'), 'currentOwnerName' in p ? String(p.currentOwnerName ?? 'None') : undefined],
+    ];
+  }
+  return Object.entries(p)
+    .filter(([, value]) => !Array.isArray(value))
+    .map(([key, value]) => [key === 'regionCode' ? 'Pricing region' : humanize(key), fieldValue(value)]);
+}
+
 function PayloadDetails({ request }: { request: GovernanceRequest }) {
-  const entries = Object.entries(request.payload).filter(([, value]) => !Array.isArray(value));
   const prices = Array.isArray(request.payload.prices)
     ? (request.payload.prices as Record<string, unknown>[])
     : [];
@@ -42,10 +75,13 @@ function PayloadDetails({ request }: { request: GovernanceRequest }) {
     ? request.payload.currentPrices as Record<string, unknown>[] : [];
   return (
     <div className="space-y-3">
-      {entries.map(([key, value]) => (
-        <div key={key} className="grid grid-cols-[10rem_1fr] gap-4 text-sm">
-          <span className="text-gray-500">{key === 'regionCode' ? 'Pricing region' : humanize(key)}</span>
-          <span className="font-medium text-gray-900">{String(value ?? '—')}</span>
+      {payloadRows(request).map(([label, value, before]) => (
+        <div key={label} className="grid grid-cols-[10rem_1fr] gap-4 text-sm">
+          <span className="text-gray-500">{label}</span>
+          <span className="font-medium text-gray-900">
+            {before !== undefined && <span className="font-normal text-gray-500">{before} → </span>}
+            {value}
+          </span>
         </div>
       ))}
       {prices.length > 0 && (
@@ -92,7 +128,14 @@ export function ApprovalRequests() {
         .includes(term);
     });
   }, [filter, requests, search]);
-  const selected = (requests ?? []).find((request) => request.id === selectedId) ?? filtered[0] ?? null;
+  // Only ever show a request the current filter and search include.
+  const selected = filtered.find((request) => request.id === selectedId) ?? filtered[0] ?? null;
+
+  // The dashboard's Review button opens a specific request (?request=<id>).
+  useEffect(() => {
+    const requested = new URLSearchParams(window.location.search).get('request');
+    if (requested) setSelectedId(requested);
+  }, []);
   const legacyFranchiseAdminRequest = selected?.type === 'franchise-admin-account';
 
   // A reason typed for one request must never be saved as the audited reason for
@@ -110,12 +153,15 @@ export function ApprovalRequests() {
 
   const decide = async (decision: Decision) => {
     if (!selected) return;
+    const index = filtered.findIndex((request) => request.id === selected.id);
+    const next = filtered[index + 1] ?? filtered[index - 1] ?? null;
     setSubmitting(true);
     try {
       const result = await governanceApi.decide(selected.id, decision, reason.trim());
       toast.success(`Request ${humanize(result.request.status).toLowerCase()}.`);
       setReason('');
       setPendingDecision(null);
+      setSelectedId(next?.id ?? null);
       await load();
     } catch (decisionError) {
       toast.error(decisionError instanceof Error ? decisionError.message : 'Could not save the decision.');

@@ -24,6 +24,7 @@ interface LoginProps {
   onBranchInvitationActivation?: () => void;
   invitationContent?: ReactNode;
   signInNotice?: string;
+  signInError?: string;
 }
 
 export function Login({
@@ -36,6 +37,7 @@ export function Login({
   onBranchInvitationActivation,
   invitationContent,
   signInNotice,
+  signInError,
 }: LoginProps) {
   const [username, setUsername] = useState('');
   const [recoveryUsername, setRecoveryUsername] = useState('');
@@ -49,7 +51,7 @@ export function Login({
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [resetComplete, setResetComplete] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState(signInError ?? '');
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -199,7 +201,6 @@ export function Login({
     setNotice('');
     setError('');
     setRecoveryUsername('');
-    setUsername('');
     setPassword('');
   };
 
@@ -227,7 +228,7 @@ export function Login({
         aria-label={visible ? 'Hide password' : 'Show password'}
         className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
       >
-        {visible ? <Eye className="w-5 h-5" /> : <EyeOff className="w-5 h-5" />}
+        {visible ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
       </button>
     </div>
   );
@@ -542,9 +543,8 @@ export function Login({
               onClick={() => {
                 setForgotPassword(true);
                 setError('');
-                setUsername('');
                 setPassword('');
-                setRecoveryUsername('');
+                setRecoveryUsername(username.includes('@') ? username.trim() : '');
               }}
               className="text-sm font-medium text-[#007BC1] hover:text-[#006399] hover:underline"
             >

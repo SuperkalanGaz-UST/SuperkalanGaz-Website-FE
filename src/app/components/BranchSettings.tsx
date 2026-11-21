@@ -1,9 +1,13 @@
 import { useState, useEffect, useCallback } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { Building2, PowerOff } from "lucide-react";
 import { Header } from "./Header";
 import { Select } from "./Select";
 import { RegisterBranchModal } from "./RegisterBranchModal";
 import { EditBranchModal } from "./EditBranchModal";
 import { apiFetch, apiErrorMessage } from "../lib/api";
+import { ConfirmActionDialog } from "./ConfirmActionDialog";
+import { governanceApi } from "../super-admin/api";
 import { toast } from "sonner";
 import styles from "./BranchSettings.module.css";
 
@@ -33,10 +37,20 @@ export function BranchSettings() {
   const [branches, setBranches] = useState<BranchRow[]>([]);
   const [loadingBranches, setLoadingBranches] = useState(true);
   const [branchesError, setBranchesError] = useState<string | null>(null);
-  // Edit modal target, and the branch pending a delete (deactivate) confirmation.
+  // Edit modal target, and the branch pending a deactivate/reactivate confirmation.
   const [editingBranch, setEditingBranch] = useState<BranchRow | null>(null);
-  const [deletingBranch, setDeletingBranch] = useState<BranchRow | null>(null);
-  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [statusTarget, setStatusTarget] = useState<BranchRow | null>(null);
+  const [statusBusy, setStatusBusy] = useState(false);
+  // Governance Requests links here (?revise=<id>) to revise a returned Branch Owner change.
+  const [reviseId, setReviseId] = useState<string | null>(null);
+  const { data: requests } = useQuery({
+    queryKey: ["governance-requests"],
+    queryFn: () => governanceApi.requests(),
+    enabled: reviseId !== null,
+  });
+  const revision = requests?.find(
+    (request) => request.id === reviseId && request.type === "branch-owner-change" && request.status === "revision-requested",
+  );
   const [stock11kg, setStock11kg] = useState("10");
   const [stock22kg, setStock22kg] = useState("5");
   const [stock50kg, setStock50kg] = useState("3");
@@ -79,7 +93,21 @@ export function BranchSettings() {
 
   useEffect(() => {
     void fetchBranches();
+    setReviseId(new URLSearchParams(window.location.search).get("revise"));
   }, [fetchBranches]);
+
+  const revisionBranch = revision && branches.find((branch) => branch.id === revision.branch_id);
+  useEffect(() => {
+    if (revisionBranch) setEditingBranch(revisionBranch);
+  }, [revisionBranch]);
+
+  const closeEdit = () => {
+    setEditingBranch(null);
+    if (reviseId) {
+      setReviseId(null);
+      window.history.replaceState(null, "", window.location.pathname);
+    }
+  };
 
   // Refresh the registry after the registration modal closes (a branch may have
   // just been created).
@@ -91,31 +119,36 @@ export function BranchSettings() {
   // Reflect an edited branch in the table without a full refetch.
   const handleEditSaved = (updated: BranchRow) => {
     setBranches((prev) => prev.map((b) => (b.id === updated.id ? updated : b)));
-    setEditingBranch(null);
+    closeEdit();
   };
 
-  // "Delete" is a soft-delete: it deactivates the branch (AGENTS.md §3.2 — never
-  // a hard delete). The row stays and flips to Inactive.
-  const handleConfirmDelete = async () => {
-    if (!deletingBranch) return;
-    setDeleteBusy(true);
+  // Deactivation is a soft delete (AGENTS.md §3.2): the row stays and flips to
+  // Inactive. Both directions need a reason, which the API audits.
+  const handleConfirmStatus = async (reason: string) => {
+    if (!statusTarget) return;
+    const reactivating = statusTarget.status === "inactive";
+    const verb = reactivating ? "reactivate" : "deactivate";
+    setStatusBusy(true);
     try {
-      const res = await apiFetch(`/branches/${deletingBranch.id}`, { method: "DELETE" });
+      const res = await apiFetch(
+        reactivating ? `/branches/${statusTarget.id}/reactivate` : `/branches/${statusTarget.id}`,
+        { method: reactivating ? "POST" : "DELETE", body: JSON.stringify({ reason }) },
+      );
       const data = await res.json().catch(() => null);
       if (!res.ok) {
-        toast.error(apiErrorMessage(data, "Could not deactivate the branch."));
+        toast.error(apiErrorMessage(data, `Could not ${verb} the branch.`));
         return;
       }
       const updated = data?.branch as BranchRow | undefined;
       if (updated) {
         setBranches((prev) => prev.map((b) => (b.id === updated.id ? updated : b)));
       }
-      toast.success(`Branch "${deletingBranch.name}" deactivated.`);
-      setDeletingBranch(null);
+      toast.success(`Branch "${statusTarget.name}" ${verb}d.`);
+      setStatusTarget(null);
     } catch {
       toast.error("Could not reach the server.");
     } finally {
-      setDeleteBusy(false);
+      setStatusBusy(false);
     }
   };
 
@@ -133,38 +166,31 @@ export function BranchSettings() {
       {editingBranch && (
         <EditBranchModal
           branch={editingBranch}
-          onClose={() => setEditingBranch(null)}
+          revision={revision?.branch_id === editingBranch.id ? revision : undefined}
+          onClose={closeEdit}
           onSaved={handleEditSaved}
         />
       )}
 
-      {deletingBranch && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
-          <div className="bg-white rounded-xl w-[420px] shadow-xl p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-1">Deactivate branch?</h2>
-            <p className="text-sm text-gray-500">
-              <span className="font-medium text-gray-700">{deletingBranch.name}</span> will be set
-              to <span className="font-medium text-gray-700">Inactive</span>. Its record is kept for
-              history and it can be reactivated later.
-            </p>
-            <div className="flex items-center justify-end gap-2 mt-6">
-              <button
-                onClick={() => setDeletingBranch(null)}
-                disabled={deleteBusy}
-                className="h-[36px] px-4 bg-white border border-gray-200 text-gray-700 text-sm rounded-lg hover:bg-gray-50 disabled:opacity-40 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleConfirmDelete}
-                disabled={deleteBusy}
-                className="h-[36px] px-4 bg-[#CC1903] text-white text-sm font-medium rounded-lg hover:bg-[#a81402] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-              >
-                {deleteBusy ? "Deactivating…" : "Deactivate"}
-              </button>
-            </div>
-          </div>
-        </div>
+      {statusTarget && (
+        <ConfirmActionDialog
+          key={statusTarget.id}
+          open
+          onOpenChange={(open) => { if (!open) setStatusTarget(null); }}
+          title={statusTarget.status === "active" ? "Deactivate branch?" : "Reactivate branch?"}
+          description={statusTarget.status === "active"
+            ? <p><span className="font-semibold text-gray-900">{statusTarget.name}</span> will be set to Inactive. Its record is kept for history and it can be reactivated later.</p>
+            : <p><span className="font-semibold text-gray-900">{statusTarget.name}</span> will be set back to Active.</p>}
+          confirmLabel={statusTarget.status === "active" ? "Deactivate" : "Reactivate"}
+          busyLabel={statusTarget.status === "active" ? "Deactivating…" : "Reactivating…"}
+          tone={statusTarget.status === "active" ? "danger" : "primary"}
+          icon={statusTarget.status === "active"
+            ? <PowerOff className="h-5 w-5" aria-hidden="true" />
+            : <Building2 className="h-5 w-5" aria-hidden="true" />}
+          reasonLabel="Reason"
+          busy={statusBusy}
+          onConfirm={handleConfirmStatus}
+        />
       )}
 
       <div className={`flex-1 overflow-y-auto ${styles.screen}`}>
@@ -187,9 +213,6 @@ export function BranchSettings() {
                 className="px-4 py-2 bg-[#007BC1] text-white rounded-lg text-sm font-medium hover:bg-[#005a8f] transition-colors"
               >
                 + Register New Branch
-              </button>
-              <button className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors">
-                View All Branches
               </button>
             </div>
             </div>
@@ -255,11 +278,14 @@ export function BranchSettings() {
                               Edit
                             </button>
                             <button
-                              onClick={() => setDeletingBranch(branch)}
-                              disabled={branch.status === "inactive"}
-                              className="px-2.5 py-1 text-xs font-medium rounded-md border border-[#CC1903]/30 text-[#CC1903] hover:bg-red-50 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent transition-colors"
+                              onClick={() => setStatusTarget(branch)}
+                              className={`px-2.5 py-1 text-xs font-medium rounded-md border transition-colors ${
+                                branch.status === "active"
+                                  ? "border-[#CC1903]/30 text-[#CC1903] hover:bg-red-50"
+                                  : "border-[#007BC1]/30 text-[#007BC1] hover:bg-blue-50"
+                              }`}
                             >
-                              Deactivate
+                              {branch.status === "active" ? "Deactivate" : "Reactivate"}
                             </button>
                           </div>
                         </td>

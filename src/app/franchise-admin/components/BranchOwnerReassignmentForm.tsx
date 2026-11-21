@@ -2,6 +2,7 @@ import { useId, useState, type FormEvent } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { fetchJson } from '../../lib/api';
 import { useSubmitGovernanceRequest } from '../useSubmitGovernanceRequest';
+import type { GovernanceRequest } from '../../super-admin/types';
 
 interface OwnerOption {
   id: string;
@@ -13,6 +14,8 @@ interface OwnerOption {
 interface BranchOwnerReassignmentFormProps {
   branch: { id: string; name: string };
   currentOwner: OwnerOption;
+  /** A request the Super Administrator sent back; submitting revises it in place. */
+  revision?: GovernanceRequest;
   onBack: () => void;
 }
 
@@ -22,10 +25,11 @@ const fieldClass =
 export function BranchOwnerReassignmentForm({
   branch,
   currentOwner,
+  revision,
   onBack,
 }: BranchOwnerReassignmentFormProps) {
-  const [ownerId, setOwnerId] = useState('');
-  const [reason, setReason] = useState('');
+  const [ownerId, setOwnerId] = useState(String(revision?.payload.newOwnerId ?? ''));
+  const [reason, setReason] = useState(revision?.reason ?? '');
   const ownerSelectId = useId();
   const { mutate, isPending: submitting } = useSubmitGovernanceRequest();
   const { data, isPending: loading, isError, isFetching, refetch } = useQuery({
@@ -51,17 +55,23 @@ export function BranchOwnerReassignmentForm({
       riskLevel: 'medium',
       branchId: branch.id,
       payload: { newOwnerId: ownerId },
+      revisesRequestId: revision?.id,
     }, { onSuccess: onBack });
   }
 
   return (
     <form onSubmit={submit} className="space-y-5 p-6">
       <div>
-        <h3 className="font-semibold text-slate-900">Request Branch Owner reassignment</h3>
+        <h3 className="font-semibold text-slate-900">{revision ? 'Revise' : 'Request'} Branch Owner reassignment</h3>
         <p className="mt-1 text-sm text-slate-600">
           A Super Administrator must approve the transfer before it takes effect.
         </p>
       </div>
+      {revision?.decision_reason && (
+        <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-800">
+          <span className="font-semibold">Reviewer note:</span> {revision.decision_reason}
+        </p>
+      )}
       <dl className="grid gap-3 rounded-lg bg-slate-50 p-3 text-sm sm:grid-cols-2">
         <div>
           <dt className="text-slate-600">Active branch</dt>
@@ -111,7 +121,7 @@ export function BranchOwnerReassignmentForm({
         </button>
         <button disabled={!canSubmit}
           className="rounded-lg bg-[#007BC1] px-4 py-2 text-sm font-semibold text-white hover:bg-[#00679f] disabled:opacity-50">
-          {submitting ? 'Submitting…' : 'Submit reassignment request'}
+          {submitting ? 'Submitting…' : revision ? 'Resubmit request' : 'Submit reassignment request'}
         </button>
       </div>
     </form>

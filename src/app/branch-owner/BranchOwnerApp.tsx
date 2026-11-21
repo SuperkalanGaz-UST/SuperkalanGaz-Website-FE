@@ -14,7 +14,6 @@ import { ReportGeneration } from './components/ReportGeneration';
 import { FleetOverview } from './components/FleetOverview';
 import { UserManagement } from './components/UserManagement';
 import { BranchSettings } from './components/BranchSettings';
-import { DeliveryCompletionFull } from './components/DeliveryCompletionFull';
 import { DeliveryProofRecordsFull } from './components/DeliveryProofRecordsFull';
 import { ComplaintLogFull } from './components/ComplaintLogFull';
 import { RedemptionHistoryFull } from './components/RedemptionHistoryFull';
@@ -25,14 +24,15 @@ import { ExpensesLogFull } from './components/ExpensesLogFull';
 import CustomerDirectory from './components/CustomerDirectory';
 import { BranchProvider, useBranch } from './contexts/BranchContext';
 
-function BranchContentTransition({ children }: { children: ReactNode }) {
+function BranchContentTransition({ children, resetOnBranchChange }: { children: ReactNode; resetOnBranchChange: boolean }) {
   const { isBranchSwitching, selectedBranchId } = useBranch();
 
   return (
     <div
       // Remount the screen on a branch switch so page numbers, filters and selected
-      // records from the previous branch never carry over.
-      key={selectedBranchId ?? 'no-branch'}
+      // records from the previous branch never carry over. Settings handles
+      // this in its branch-specific tab so the current tab can stay open.
+      key={resetOnBranchChange ? selectedBranchId ?? 'no-branch' : 'settings'}
       className={`flex-1 flex flex-col overflow-hidden transition-[opacity,transform] duration-200 ease-out ${
         isBranchSwitching
           ? 'translate-y-1 opacity-70'
@@ -52,7 +52,7 @@ export function BranchOwnerApp() {
       <div className="flex h-screen bg-gray-50">
         <Sidebar activeScreen={activeScreen === 'vehicles' ? 'fleet-overview' : activeScreen} onNavigate={setActiveScreen} />
 
-        <BranchContentTransition>
+        <BranchContentTransition resetOnBranchChange={activeScreen !== 'settings'}>
           {activeScreen === 'dashboard' && <Dashboard />}
           {activeScreen === 'order-analytics' && <OrderAnalytics />}
           {activeScreen === 'sales-overview' && <SalesOverview />}
@@ -71,7 +71,6 @@ export function BranchOwnerApp() {
           {activeScreen === 'sales-full' && <SalesFull onBack={() => setActiveScreen('sales-overview')} />}
           {activeScreen === 'expenses-log-full' && <ExpensesLogFull onBack={() => setActiveScreen('operational-expenses')} />}
 
-          {activeScreen === 'delivery-completion-full' && <DeliveryCompletionFull onBack={() => setActiveScreen('order-analytics')} />}
           {activeScreen === 'delivery-proof-full' && <DeliveryProofRecordsFull onBack={() => setActiveScreen('order-analytics')} />}
           {activeScreen === 'complaint-log-full' && <ComplaintLogFull onBack={() => setActiveScreen('csat')} />}
           {activeScreen === 'redemption-history-full' && <RedemptionHistoryFull onBack={() => setActiveScreen('loyalty')} />}

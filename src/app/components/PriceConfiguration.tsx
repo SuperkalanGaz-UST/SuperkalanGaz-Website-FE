@@ -1,6 +1,8 @@
 'use client';
 
 import { FormEvent, useEffect, useRef, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useSearchParams } from 'next/navigation';
 import { CheckCircle2, Flame, Info, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { apiErrorMessage, apiFetch } from '../lib/api';
@@ -13,6 +15,8 @@ import {
   PricingRegion,
 } from '../lib/pricing';
 import { Header } from './Header';
+import { governanceApi } from '../super-admin/api';
+import type { GovernanceRequest } from '../super-admin/types';
 import { PricingRegionSelect } from './PricingRegionSelect';
 import {
   AlertDialog,
@@ -93,6 +97,24 @@ export function PriceConfiguration() {
     Partial<Record<CylinderSize, boolean>>
   >({});
   const [pendingRegion, setPendingRegion] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+  const { data: myRequests } = useQuery({
+    queryKey: ['governance-requests'],
+    queryFn: () => governanceApi.requests(),
+    staleTime: 30_000,
+  });
+  // A returned proposal opened from Governance Requests (?revise=<id>).
+  const [revision, setRevision] = useState<GovernanceRequest | null>(null);
+  const revisionRef = useRef<GovernanceRequest | null>(null);
+  const reviseId = useSearchParams().get('revise');
+  const revisionOpened = useRef(false);
+  // Requests are FA-scoped, so this only sees this administrator's own proposals.
+  const pendingProposal = myRequests?.find(
+    (request) =>
+      request.type === 'price-configuration' &&
+      request.status === 'pending' &&
+      String(request.payload.regionCode ?? '') === regionCode,
+  );
   const savedPrices = new Map(
     catalog?.prices.map((price) => [price.cylinder_size, price.unit_price]) ??
       [],
@@ -135,6 +157,12 @@ export function PriceConfiguration() {
         const loadedPrices = { ...EMPTY_PRICES };
         for (const price of loadedCatalog.prices)
           loadedPrices[price.cylinder_size] = formatPrice(price.unit_price);
+        const revised = revisionRef.current;
+        if (revised && String(revised.payload.regionCode ?? '') === regionCode) {
+          for (const price of revised.payload.prices as { cylinderSize: CylinderSize; unitPrice: number }[])
+            loadedPrices[price.cylinderSize] = formatPrice(price.unitPrice);
+          setRequestReason(revised.reason);
+        }
         setPrices(loadedPrices);
         setCatalog(loadedCatalog);
         setRegions(loadedRegions);
@@ -161,6 +189,25 @@ export function PriceConfiguration() {
       window.clearTimeout(timeout);
     };
   }, [regionCode, reload]);
+
+  useEffect(() => {
+    const found = myRequests?.find(
+      (request) => request.id === reviseId && request.type === 'price-configuration' && request.status === 'revision-requested',
+    );
+    if (!found || revisionOpened.current) return;
+    revisionOpened.current = true;
+    revisionRef.current = found;
+    setRevision(found);
+    setRegionCode(String(found.payload.regionCode ?? ''));
+    setIsLoading(true);
+    setReload((value) => value + 1);
+  }, [myRequests, reviseId]);
+
+  function endRevision() {
+    revisionRef.current = null;
+    setRevision(null);
+    window.history.replaceState(null, '', window.location.pathname);
+  }
 
   function resetChanges() {
     const saved = { ...EMPTY_PRICES };
@@ -194,7 +241,10 @@ export function PriceConfiguration() {
     savingRef.current = true;
     setIsSaving(true);
     try {
-      const response = await apiFetch('/governance/requests', {
+      const path = revision
+        ? `/governance/requests/${encodeURIComponent(revision.id)}/revise`
+        : '/governance/requests';
+      const response = await apiFetch(path, {
         method: 'POST',
         body: JSON.stringify({
           type: 'price-configuration',
@@ -212,12 +262,17 @@ export function PriceConfiguration() {
         }),
         signal: AbortSignal.timeout(15000),
       });
+      if (revision && response.status === 404) {
+        throw new Error('Revisions are temporarily unavailable. Please try again later.');
+      }
       const data: unknown = await response.json().catch(() => null);
       if (!response.ok)
         throw new Error(
           apiErrorMessage(data, 'Could not submit the price proposal.'),
         );
+      if (revision) endRevision();
       resetChanges();
+      void queryClient.invalidateQueries({ queryKey: ['governance-requests'] });
       window.dispatchEvent(new Event('notifications:refresh'));
       toast.success(
         'Proposal submitted. Prices will change only after Super Administrator approval.',
@@ -307,6 +362,25 @@ export function PriceConfiguration() {
             ) : (
               catalog && (
                 <>
+                  {revision && (
+                    <div className="mb-5 flex items-start justify-between gap-4 rounded-lg bg-amber-50 p-3 text-xs leading-5 text-amber-800">
+                      <p>
+                        Revising <span className="font-semibold">{revision.title}</span>
+                        {revision.decision_reason && <><br /><span className="font-semibold">Reviewer note:</span> {revision.decision_reason}</>}
+                      </p>
+                      <button type="button" onClick={() => { endRevision(); resetChanges(); }} className="shrink-0 font-semibold underline underline-offset-4">
+                        Cancel revision
+                      </button>
+                    </div>
+                  )}
+                  {pendingProposal && !revision && (
+                    <p role="status" className="mb-5 flex items-start gap-2 rounded-lg bg-amber-50 p-3 text-xs leading-5 text-amber-800">
+                      <Info aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0" />
+                      You already have a proposal for {regionName} awaiting Super Administrator approval
+                      (submitted {new Date(pendingProposal.submitted_at).toLocaleDateString('en-PH')}). A new
+                      proposal will be reviewed separately.
+                    </p>
+                  )}
                   {regionCode && catalog.source === 'system-wide' && (
                     <p className="mb-5 flex items-start gap-2 rounded-lg bg-blue-50 p-3 text-xs leading-5 text-[#007BC1]">
                       <Info
@@ -504,7 +578,7 @@ export function PriceConfiguration() {
                     className="h-4 w-4 animate-spin"
                   />
                 )}
-                {isSaving ? 'Submitting…' : 'Submit proposal'}
+                {isSaving ? 'Submitting…' : revision ? 'Resubmit proposal' : 'Submit proposal'}
               </button>
             </div>
           </div>

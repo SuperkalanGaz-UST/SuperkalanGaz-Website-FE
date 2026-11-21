@@ -5,11 +5,12 @@ import VehicleGeofenceAlerts from './VehicleGeofenceAlerts';
 import { useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import dynamic from 'next/dynamic';
-import { Clock, Navigation, RefreshCw, Truck, Users } from 'lucide-react';
+import { Clock, Navigation, RefreshCw, Truck, UserCheck, Users } from 'lucide-react';
 import { Badge } from '../../components/Badge';
 import { fetchJson } from '../../../lib/api';
 import { assignedBranchesFrom } from '../../../lib/branchGeofence';
 import { useAccount } from '../../../contexts/AccountContext';
+import { BranchOperatingHours } from '../../../components/BranchOperatingHours';
 import { DeliveryRiderLocations } from '../orders/DeliveryRiderLocations';
 import type { DispatchRider } from '../../../lib/deliveryRiderLocation';
 import { serviceRequestCylinderSummary, type ServiceRequestCylinderFields } from '../../../lib/serviceRequestItems';
@@ -68,7 +69,8 @@ export default function FleetPage() {
     const vehicles = vehicleQuery.isError ? [] : vehicleQuery.data?.vehicles ?? [];
     const historyVehicle = vehicleQuery.data?.vehicles.find(vehicle => vehicle.id === historyVehicleId && vehicle.tracker_connected);
     const riders = riderQuery.isError ? [] : riderQuery.data?.riders ?? [];
-    const activeRiders = riders.filter(rider => rider.status === 'Available' || rider.status === 'On Delivery').length;
+    const availableRiders = riders.filter(rider => rider.status === 'Available').length;
+    const onDeliveryRiders = riders.filter(rider => rider.status === 'On Delivery').length;
     const geofence = branchQuery.isError ? null : branch?.geofence ?? null;
     const mapAvailable = geofence || vehicles.some(vehicle => vehicle.position);
 
@@ -77,7 +79,8 @@ export default function FleetPage() {
             <div className={styles.statsGrid}>
                 <div className={styles.statCard}><div className={styles.statHeader}><span className={styles.statLabel}>Vehicles</span><Truck className={styles.statIcon} size={20} /></div><div className={styles.statValue}>{vehicleQuery.data && !vehicleQuery.isError ? vehicles.length : '—'}</div></div>
                 <div className={styles.statCard}><div className={styles.statHeader}><span className={styles.statLabel}>Delivery Riders</span><Users className={styles.statIcon} size={20} /></div><div className={styles.statValue}>{riderQuery.data && !riderQuery.isError ? riders.length : '—'}</div></div>
-                <div className={styles.statCard}><div className={styles.statHeader}><span className={styles.statLabel}>Active Delivery Riders</span><Navigation className={styles.statIcon} style={{ color: 'var(--success)' }} size={20} /></div><div className={styles.statValue}>{riderQuery.data && !riderQuery.isError ? activeRiders : '—'}</div></div>
+                <div className={styles.statCard}><div className={styles.statHeader}><span className={styles.statLabel}>Available</span><UserCheck className={styles.statIcon} style={{ color: 'var(--success)' }} size={20} /></div><div className={styles.statValue}>{riderQuery.data && !riderQuery.isError ? availableRiders : '—'}</div></div>
+                <div className={styles.statCard}><div className={styles.statHeader}><span className={styles.statLabel}>On Delivery</span><Navigation className={styles.statIcon} style={{ color: 'var(--primary)' }} size={20} /></div><div className={styles.statValue}>{riderQuery.data && !riderQuery.isError ? onDeliveryRiders : '—'}</div></div>
             </div>
 
             <section className={styles.mapPanel} aria-labelledby="vehicle-locations-title">
@@ -155,7 +158,12 @@ export default function FleetPage() {
             <div className={styles.bottomLayout}>
                 <div className={styles.listPanel}>
                     <div className={styles.panelHeader}><h2 className={styles.panelTitle}>Branch Operating Hours</h2></div>
-                    <div className={styles.operatingHours}><Clock size={16} />6:00 AM – 10:00 PM</div>
+                    <div className={styles.operatingHours}>
+                        <Clock size={16} aria-hidden="true" />
+                        {account.branchIds.length === 1
+                            ? <BranchOperatingHours branchId={account.branchIds[0]} />
+                            : 'Operating hours unavailable.'}
+                    </div>
                 </div>
                 <div className={styles.listPanel}>
                     <div className={styles.panelHeader}><h2 className={styles.panelTitle}>Today&apos;s Fleet Activity</h2></div>

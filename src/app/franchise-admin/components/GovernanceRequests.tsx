@@ -1,10 +1,13 @@
 'use client';
 
-import { useState, type FormEvent } from 'react';
+import { useRef, useState, type FormEvent } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useRouter } from 'next/navigation';
 import { Clock3, ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
 import { Header } from '../../components/Header';
+import { fetchJson } from '../../lib/api';
+import { staffScreenPath } from '../../lib/staffRoutes';
 import { governanceApi } from '../../super-admin/api';
 import type { GovernanceRequest, GovernanceRequestType } from '../../super-admin/types';
 import { useSubmitGovernanceRequest } from '../useSubmitGovernanceRequest';
@@ -41,7 +44,10 @@ const inputClass =
   'mt-2 h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-[#007BC1] focus:ring-2 focus:ring-[#007BC1]/15';
 
 export function GovernanceRequests() {
+  const router = useRouter();
+  const formRef = useRef<HTMLFormElement>(null);
   const { mutate, isPending: submitting } = useSubmitGovernanceRequest();
+  const [revising, setRevising] = useState<GovernanceRequest | null>(null);
   const [slaSegment, setSlaSegment] = useState<(typeof SEGMENTS)[number][0]>(
     'request_to_dispatch',
   );
@@ -53,6 +59,26 @@ export function GovernanceRequests() {
     queryFn: () => governanceApi.requests(),
     staleTime: 30_000,
   });
+  const { data: thresholds, isError: thresholdsError } = useQuery({
+    queryKey: ['sla-thresholds'],
+    queryFn: () => fetchJson<{ thresholds: Record<string, number> }>('/governance/sla-thresholds'),
+    staleTime: 60_000,
+  });
+  const currentMinutes = thresholds?.thresholds?.[slaSegment];
+
+  // SLA requests are revised here; price and owner requests on the screen that made them.
+  function revise(request: GovernanceRequest) {
+    if (request.type === 'sla-threshold') {
+      setSlaSegment(request.payload.segment as typeof slaSegment);
+      setSlaMinutes(String(request.payload.thresholdMinutes ?? ''));
+      setSlaReason(request.reason);
+      setRevising(request);
+      formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return;
+    }
+    const screen = request.type === 'price-configuration' ? 'price-config' : 'franchise-registry';
+    router.push(`${staffScreenPath('franchise-admin', screen)}?revise=${request.id}`);
+  }
 
   function submitSla(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -73,7 +99,8 @@ export function GovernanceRequests() {
       reason: slaReason.trim(),
       riskLevel: 'high',
       payload: { segment: slaSegment, thresholdMinutes },
-    }, { onSuccess: () => setSlaReason('') });
+      revisesRequestId: revising?.id,
+    }, { onSuccess: () => { setSlaReason(''); setRevising(null); } });
   }
 
   return (
@@ -99,7 +126,18 @@ export function GovernanceRequests() {
               </span>
             </div>
 
-            <form onSubmit={submitSla} className="grid gap-5 sm:grid-cols-2">
+            <form ref={formRef} onSubmit={submitSla} className="grid gap-5 sm:grid-cols-2">
+              {revising && (
+                <div className="flex items-start justify-between gap-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-800 sm:col-span-2">
+                  <p>
+                    Revising <span className="font-semibold">{revising.title}</span>
+                    {revising.decision_reason && <><br /><span className="font-semibold">Reviewer note:</span> {revising.decision_reason}</>}
+                  </p>
+                  <button type="button" onClick={() => { setRevising(null); setSlaReason(''); }} className="shrink-0 font-semibold underline underline-offset-4">
+                    Cancel revision
+                  </button>
+                </div>
+              )}
               <label className="text-sm font-medium text-slate-700">
                 SLA segment
                 <select value={slaSegment} onChange={(e) => setSlaSegment(e.target.value as typeof slaSegment)} className={inputClass}>
@@ -109,6 +147,9 @@ export function GovernanceRequests() {
               <label className="text-sm font-medium text-slate-700">
                 Threshold in minutes
                 <input required type="number" min={1} max={1440} step={1} value={slaMinutes} onChange={(e) => setSlaMinutes(e.target.value)} className={inputClass} />
+                <span className="mt-1.5 block text-xs font-normal text-slate-500">
+                  {thresholdsError ? 'Could not load the current threshold.' : !thresholds ? 'Loading current threshold…' : currentMinutes === undefined ? 'Currently not set' : `Currently ${currentMinutes} minutes`}
+                </span>
               </label>
               <label className="text-sm font-medium text-slate-700 sm:col-span-2">
                 Business justification
@@ -116,7 +157,7 @@ export function GovernanceRequests() {
               </label>
               <div className="sm:col-span-2 flex justify-end">
                 <button disabled={submitting} className="rounded-lg bg-[#007BC1] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#00679f] disabled:opacity-50">
-                  {submitting ? 'Submitting…' : 'Submit SLA request'}
+                  {submitting ? 'Submitting…' : revising ? 'Resubmit SLA request' : 'Submit SLA request'}
                 </button>
               </div>
             </form>
@@ -159,6 +200,7 @@ export function GovernanceRequests() {
                     <th className="px-6 py-3 font-semibold">Submitted</th>
                     <th className="px-6 py-3 font-semibold">Status</th>
                     <th className="px-6 py-3 font-semibold">Decision note</th>
+                    <th className="px-6 py-3 font-semibold"><span className="sr-only">Actions</span></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -176,6 +218,13 @@ export function GovernanceRequests() {
                         </span>
                       </td>
                       <td className="max-w-[260px] px-6 py-4 text-xs text-slate-500">{request.decision_reason ?? 'Awaiting review'}</td>
+                      <td className="px-6 py-4 text-right">
+                        {request.status === 'revision-requested' && ['sla-threshold', 'price-configuration', 'branch-owner-change'].includes(request.type) && (
+                          <button type="button" onClick={() => revise(request)} className="text-sm font-semibold text-[#007BC1] hover:underline">
+                            Revise
+                          </button>
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>

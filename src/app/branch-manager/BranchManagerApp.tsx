@@ -24,7 +24,7 @@ const SCREEN_TITLES: Record<string, string> = {
   overview: 'Overview',
   orders: 'Order Management',
   inventory: 'Inventory',
-  customers: 'Customers & Loyalty',
+  customers: 'Customers',
   rewards: 'Reward Redemptions',
   csat: 'Customer Feedback',
   fleet: 'Fleet Management',

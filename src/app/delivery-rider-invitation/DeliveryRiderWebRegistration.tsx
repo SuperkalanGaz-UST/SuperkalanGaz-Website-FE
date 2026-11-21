@@ -24,6 +24,7 @@ import {
   acceptDeliveryRiderInvitation,
   clearDeliveryRiderWebSession,
   createDeliveryRiderAccount,
+  DeadInvitationError,
   getDeliveryRiderInvitation,
   type DeliveryRiderInvitation,
   type DeliveryRiderRegistrationCredential,
@@ -111,6 +112,7 @@ export function DeliveryRiderWebRegistration({
   const [loading, setLoading] = useState(Boolean(token || sessionMode));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [deadInvitation, setDeadInvitation] = useState(false);
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -133,6 +135,7 @@ export function DeliveryRiderWebRegistration({
       setStep('details');
     } catch (loadError) {
       setInvitation(null);
+      setDeadInvitation(loadError instanceof DeadInvitationError);
       setError(loadError instanceof Error ? loadError.message : 'This invitation is unavailable.');
     } finally {
       setLoading(false);
@@ -223,7 +226,9 @@ export function DeliveryRiderWebRegistration({
           <ShieldCheck size={34} aria-hidden="true" />
           <h1 id="invitation-title">Invitation unavailable</h1>
           <p>{error || 'The invitation may be invalid, expired, revoked, or already used.'}</p>
-          <button className={styles.primaryButton} type="button" onClick={() => void loadInvitation()}><RefreshCw size={18} />Try again</button>
+          {deadInvitation
+            ? <p>Contact your Branch Owner to send you a new invitation.</p>
+            : <button className={styles.primaryButton} type="button" onClick={() => void loadInvitation()}><RefreshCw size={18} />Try again</button>}
         </div>
       );
     }
@@ -234,7 +239,9 @@ export function DeliveryRiderWebRegistration({
           <p className={styles.eyebrow}>Secure invitation</p>
           <h1 id="invitation-title">Review your Delivery Rider invitation</h1>
           <p className={styles.lead}>Your identity and assigned branch were authorized by the Branch Owner and cannot be changed during registration.</p>
-          <div className={styles.verifiedPill}><CheckCircle2 size={16} />Email invitation verified</div>
+          {invitation.emailVerified
+            ? <div className={styles.verifiedPill}><CheckCircle2 size={16} />Email invitation verified</div>
+            : <div className={styles.expiryNote}><Mail size={16} />Open the link in your invitation email to verify it before continuing.</div>}
           <div className={styles.lockedGrid}>
             <LockedField icon={UserRound} label="Delivery Rider" value={invitation.recipientName} />
             <LockedField icon={Mail} label="Email address" value={invitation.email} />
@@ -256,6 +263,8 @@ export function DeliveryRiderWebRegistration({
           <p className={styles.eyebrow}>Step 1 of 2</p>
           <h1 id="invitation-title">Create your password</h1>
           <p className={styles.lead}>Choose a private password for your Delivery Rider account. You will verify your PH mobile number in the app after registration.</p>
+          {/* display: contents keeps the panel's spacing while Enter submits the step. */}
+          <form style={{ display: 'contents' }} onSubmit={(event) => { event.preventDefault(); void createAccount(); }}>
           <div className={styles.formFields}>
             <label className={styles.inputGroup}>
               <span>Password</span>
@@ -273,7 +282,8 @@ export function DeliveryRiderWebRegistration({
             </label>
           </div>
           {error ? <div className={styles.errorBanner}>{error}</div> : null}
-          <button className={styles.primaryButton} type="button" disabled={busy} onClick={() => void createAccount()}>{busy ? <Loader2 className={styles.spinner} size={18} /> : <LockKeyhole size={18} />}{busy ? 'Creating your account…' : 'Create account and continue'}</button>
+          <button className={styles.primaryButton} type="submit" disabled={busy}>{busy ? <Loader2 className={styles.spinner} size={18} /> : <LockKeyhole size={18} />}{busy ? 'Creating your account…' : 'Create account and continue'}</button>
+          </form>
         </>
       );
     }

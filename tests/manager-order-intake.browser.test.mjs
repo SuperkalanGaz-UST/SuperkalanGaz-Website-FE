@@ -31,15 +31,21 @@ try {
     if (url.pathname === '/api/users/me') return route.fulfill({ json: { user: { ...user.app_metadata, id: user.id, email: user.email } } });
     if (url.pathname === '/api/branches/assigned') return route.fulfill({ json: { branches: [branch] } });
     if (url.pathname === '/api/prices/assigned') return route.fulfill({ json: { prices } });
-    if (url.pathname === '/api/loyalty/redemptions/verify/ABC123') return route.fulfill({ json: { redemption: {
-      id: 'r1', branch_id: branch.id, customer_id: 'c1', track: 'commercial_30plus1', catalog_item_id: null, reward_description: null, points_spent: null,
-      status: 'approved', requested_at: '2026-11-01', approved_by: null, approved_at: null, rejected_reason: null, fulfilled_at: null,
-      redemption_code: 'ABC123', created_at: '2026-11-01', updated_at: '2026-11-01', customer_name: 'Ana Cruz', catalog_item_name: null,
-      points_balance: null, completed_cycles: 1, current_cycle_count: 0 } } });
-    if (url.pathname === '/api/loyalty/redemptions') { redemptionReads.push(url.search); return route.fulfill({ json: { redemptions: [] } }); }
+    if (url.pathname === '/api/loyalty/redemptions/r1/verify') {
+      assert.deepEqual(route.request().postDataJSON(), { code: 'ABC-123' });
+      return route.fulfill({ json: { verified: true } });
+    }
+    if (url.pathname === '/api/loyalty/redemptions') {
+      redemptionReads.push(url.search);
+      return route.fulfill({ json: { redemptions: url.searchParams.get('track') === 'commercial_30plus1' && url.searchParams.get('status') === 'all' ? [{
+        id: 'r1', branch_id: branch.id, track: 'commercial_30plus1', status: 'approved', requires_pickup_code: true,
+        requested_at: '2026-11-01', customer_name: 'Ana Cruz', completed_cycles: 1, current_cycle_count: 0,
+      }] : [] } });
+    }
     return route.fulfill({ json: { serviceRequests: [], requests: [], riders: [], notifications: [], unreadCount: 0, catalog: [], items: [] } });
   });
   const page = await context.newPage();
+  page.setDefaultTimeout(8_000);
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
 
@@ -50,18 +56,12 @@ try {
   assert.equal(await size.getAttribute('role'), 'combobox', 'label is linked to the size select');
   await size.focus();
   await page.keyboard.press('Enter');
-  await page.getByRole('option', { name: /^11kg/ }).waitFor();
-  await page.waitForFunction(() => document.activeElement?.getAttribute('role') === 'option');
-  for (let i = 0; i < 5; i++) {
-    if (/^11kg/.test(await page.evaluate(() => document.activeElement?.textContent ?? ''))) break;
-    await page.keyboard.press('ArrowDown');
-  }
-  await page.keyboard.press('Enter');
+  await page.getByRole('option', { name: /^11kg/ }).press('Enter');
   assert.match(await size.innerText(), /11kg/, 'keyboard selection shows readable label');
 
   const qty = page.getByLabel('Quantity', { exact: true });
   await qty.click();
-  await qty.press('Control+A');
+  await qty.press('ControlOrMeta+A');
   await qty.press('Backspace');
   assert.equal(await qty.inputValue(), '', 'cleared quantity stays empty');
   await qty.pressSequentially('2');
@@ -69,7 +69,7 @@ try {
   const total = await page.getByText(/^Total ₱/).innerText();
   assert.match(total, /1,358\.00/, `total is 2 x 679 (got "${total}")`);
 
-  await qty.press('Control+A');
+  await qty.press('ControlOrMeta+A');
   await qty.press('Backspace');
   await qty.blur();
   await page.getByText('Quantity must be at least 1').waitFor();
@@ -77,14 +77,15 @@ try {
 
   // Verify Code
   await page.goto(`${baseUrl}/branch-manager/rewards`);
-  await page.getByPlaceholder('Search by code…').fill('ABC123');
-  await page.getByRole('button', { name: 'Verify Code' }).click();
-  const status = page.getByRole('status').filter({ hasText: 'Code ABC123' });
-  await status.waitFor();
-  assert.match(await status.innerText(), /Ana Cruz/);
-  assert.equal(await page.getByRole('tab', { name: 'Commercial 30+1' }).getAttribute('aria-selected'), 'true', 'switched to commercial track');
-  await page.waitForTimeout(500);
-  assert.ok(redemptionReads.some(q => q.includes('track=commercial_30plus1') && q.includes('status=all')), `refetched commercial/all: ${redemptionReads.join(' | ')}`);
+  await page.getByRole('tab', { name: 'Commercial 30+1' }).click();
+  await page.getByRole('button', { name: 'All', exact: true }).click();
+  await page.getByRole('button', { name: 'Ready for Pickup', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Verify pickup code' });
+  await dialog.getByText('Ana Cruz', { exact: true }).waitFor();
+  await dialog.getByRole('textbox', { name: 'Pickup code' }).fill('ABC123');
+  await dialog.getByRole('button', { name: 'Verify code', exact: true }).click();
+  await dialog.getByRole('button', { name: 'Confirm pickup', exact: true }).waitFor();
+  assert.ok(redemptionReads.some(q => q.includes('track=commercial_30plus1') && q.includes('status=all')));
 
   assert.deepEqual(errors, []);
 } finally {

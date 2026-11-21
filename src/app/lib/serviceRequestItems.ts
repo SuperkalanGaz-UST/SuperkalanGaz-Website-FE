@@ -1,6 +1,8 @@
 export interface ServiceRequestItem {
     cylinder_size: string;
     quantity: number;
+    /** Price recorded on the order line; absent on lines the client builds. */
+    unit_price?: number | null;
 }
 
 export interface ServiceRequestCylinderFields extends ServiceRequestItem {

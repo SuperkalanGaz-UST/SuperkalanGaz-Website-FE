@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import Image from 'next/image';
-import { RefreshCw, Gift, Star, UsersRound, Clock3, RotateCw, Building2 } from 'lucide-react';
+import { RefreshCw, Gift, Star, PackageCheck, CircleCheck, Clock3, RotateCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { Badge } from '../../components/Badge';
 import { Button } from '../../components/Button';
@@ -11,6 +11,7 @@ import { Tabs, TabsList, TabsTrigger } from '../../components/Tabs';
 import { apiFetch, apiErrorMessage, fetchJson } from '../../../lib/api';
 import { catalogPhotoUrl } from '../../../lib/household-rewards';
 import { formatPHMobile } from '../../../lib/phMobile';
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from '../../../components/ui/dialog';
 import styles from './screen.module.css';
 
 /**
@@ -36,6 +37,7 @@ interface RedemptionRow {
     rejected_reason: string | null;
     fulfilled_at: string | null;
     redemption_code: string | null;
+    requires_pickup_code?: boolean;
     created_at: string;
     updated_at: string;
     // Enrichments appended by GET /loyalty/redemptions.
@@ -110,13 +112,37 @@ const STATUS_TABS: { value: string; label: string }[] = [
     { value: 'all', label: 'All' },
 ];
 
-/** Maps household reward catalog names to their product images in /public/catalog. */
+/** Display the same bundled reward photo for customized and legacy catalog names. */
 const REWARD_IMAGES: Record<string, string> = {
-    'Free Notebook and Pen': '/catalog/reward-notebook.png',
-    'Free Desk Calendar': '/catalog/reward-calendar.png',
-    'Free Umbrella': '/catalog/reward-umbrella.png',
-    'Free Mug': '/catalog/reward-mug.png',
+    notebook: '/catalog/reward-notebook.png',
+    calendar: '/catalog/reward-calendar.png',
+    umbrella: '/catalog/reward-umbrella.png',
+    mug: '/catalog/reward-mug.png',
 };
+
+function displayReward(row: RedemptionRow) {
+    return row.catalog_item_name ?? row.reward_description ?? (row.track === COMMERCIAL ? 'Free cylinder (30+1)' : 'Reward');
+}
+
+function RedemptionPhoto({ row, preview = false }: { row: RedemptionRow; preview?: boolean }) {
+    const reward = displayReward(row);
+    const fallback = Object.entries(REWARD_IMAGES).find(([key]) => reward.toLowerCase().includes(key))?.[1];
+    const url = catalogPhotoUrl(row.photo_path);
+    const [remoteFailed, setRemoteFailed] = useState(false);
+    const source = remoteFailed ? fallback : url ?? fallback;
+    if (!source) return <span className={styles.mutedText}>—</span>;
+    const size = preview ? 72 : 40;
+    return <div className={preview ? styles.pickupPhoto : styles.rewardThumb}>
+        <Image src={source} alt={reward} width={size} height={size} className={styles.rewardImg}
+            unoptimized={source === url} onError={() => setRemoteFailed(true)} />
+    </div>;
+}
+
+function normalizePickupCode(value: string) {
+    const code = value.trim().toUpperCase();
+    const short = code.replace(/[-\s]/g, '');
+    return /^[0-9A-HJKMNP-TV-Z]{6}$/.test(short) ? `${short.slice(0, 3)}-${short.slice(3)}` : code;
+}
 
 const formatDateTime = (iso: string | null) => {
     if (!iso) return '—';
@@ -199,11 +225,12 @@ export default function Rewards() {
     const [ledger, setLedger] = useState<LedgerView | null>(null);
     const [ledgerLoading, setLedgerLoading] = useState(false);
 
-    // Code verification: BM types/pastes a customer's code to look it up.
-    const [codeSearch, setCodeSearch] = useState('');
-    const [codeSearchLoading, setCodeSearchLoading] = useState(false);
-    const [codeSearchError, setCodeSearchError] = useState<string | null>(null);
-    const [codeResult, setCodeResult] = useState<RedemptionRow | null>(null);
+    const [pickup, setPickup] = useState<RedemptionRow | null>(null);
+    const [pickupCode, setPickupCode] = useState('');
+    const [verifyingCode, setVerifyingCode] = useState(false);
+    const [pickupError, setPickupError] = useState<string | null>(null);
+    const [verifiedCode, setVerifiedCode] = useState<string | null>(null);
+    const pickupTrigger = React.useRef<HTMLButtonElement | null>(null);
 
     const isCommercial = track === COMMERCIAL;
 
@@ -277,7 +304,6 @@ export default function Rewards() {
         if (t === track) return;
         setTrack(t);
         setActiveTab(t === COMMERCIAL ? 'pending' : 'approved');
-        setCodeResult(null);
         setRejectId(null);
         resetCreate();
     };
@@ -388,66 +414,68 @@ export default function Rewards() {
         }
     };
 
+    const openPickup = (row: RedemptionRow, trigger: HTMLButtonElement) => {
+        pickupTrigger.current = trigger;
+        setPickupCode('');
+        setPickupError(null);
+        setVerifiedCode(null);
+        setPickup(row);
+    };
+
+    const refreshRedemptions = () => {
+        void queryClient.invalidateQueries({ queryKey: ['loyalty-redemptions'] });
+        void queryClient.invalidateQueries({ queryKey: ['loyalty-summary'] });
+    };
+
     const handleFulfill = async (id: string, code?: string) => {
         setFulfillingId(id);
+        setPickupError(null);
         try {
             const res = await apiFetch(`/loyalty/redemptions/${id}/fulfill`, {
                 method: 'POST',
                 ...(code ? { body: JSON.stringify({ code }) } : {}),
             });
-            const data = await res.json();
+            const data = await res.json().catch(() => null);
             if (!res.ok) {
-                if (res.status === 409) {
-                    toast.error(apiErrorMessage(data, 'This reward is no longer ready for pickup'));
-                    setCodeResult((current) => current?.id === id ? null : current);
-                    void queryClient.invalidateQueries({ queryKey: ['loyalty-redemptions'] });
-            void queryClient.invalidateQueries({ queryKey: ['loyalty-summary'] });
-                    return;
+                if (res.status === 409 || res.status === 404) {
+                    setVerifiedCode(null);
+                    refreshRedemptions();
                 }
-                if (res.status === 404) { toast.error('Redemption not found'); return; }
-                toast.error(apiErrorMessage(data, 'Failed to mark fulfilled'));
-                return;
+                throw new Error(apiErrorMessage(data, 'Failed to confirm pickup'));
             }
             toast.success('Reward handed over.');
-            setCodeResult((current) => current?.id === id ? { ...current, status: 'fulfilled' } : current);
-            void queryClient.invalidateQueries({ queryKey: ['loyalty-redemptions'] });
-            void queryClient.invalidateQueries({ queryKey: ['loyalty-summary'] });
-        } catch (err) {
-            toast.error(err instanceof Error ? err.message : 'Failed to mark fulfilled');
+            if (code) setPickup(null);
+            refreshRedemptions();
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'Failed to confirm pickup';
+            if (code) setPickupError(message);
+            else toast.error(message);
         } finally {
             setFulfillingId(null);
         }
     };
 
-    /** Look up a redemption by code — the BM pastes the customer's code. */
-    const handleCodeSearch = async () => {
-        const code = codeSearch.trim();
-        if (!code) return;
-        setCodeSearchLoading(true);
-        setCodeSearchError(null);
-        setCodeResult(null);
+    const handleVerifyPickup = async () => {
+        const code = normalizePickupCode(pickupCode);
+        if (!pickup || !code || verifyingCode) return;
+        setPickupCode(code);
+        setVerifyingCode(true);
+        setPickupError(null);
         try {
-            const res = await apiFetch(`/loyalty/redemptions/verify/${encodeURIComponent(code)}`);
-            const data = await res.json();
-            if (!res.ok) {
-                setCodeSearchError(apiErrorMessage(data, 'Code not found'));
-                return;
+            const response = await apiFetch(`/loyalty/redemptions/${pickup.id}/verify`, {
+                method: 'POST',
+                body: JSON.stringify({ code }),
+            });
+            if (!response.ok) {
+                const data = await response.json().catch(() => null);
+                if (response.status === 409 || response.status === 404) refreshRedemptions();
+                throw new Error(apiErrorMessage(data, 'Could not verify this pickup code'));
             }
-            const found = data.redemption as RedemptionRow;
-            // Show the code's own track with every status so its row is visible in the queue.
-            if (found.track === HOUSEHOLD || found.track === COMMERCIAL) {
-                setTrack(found.track);
-                resetCreate();
-            }
-            setRejectId(null);
-            setActiveTab('all');
-            void queryClient.invalidateQueries({ queryKey: ['loyalty-redemptions'] });
-            setCodeResult(found);
-            setCodeSearch('');
-        } catch (err) {
-            setCodeSearchError(err instanceof Error ? err.message : 'Failed to look up code');
+            setVerifiedCode(code);
+        } catch (error) {
+            setPickupError(error instanceof Error ? error.message : 'Could not verify this pickup code');
         } finally {
-            setCodeSearchLoading(false);
+            setVerifyingCode(false);
         }
     };
 
@@ -480,62 +508,56 @@ export default function Rewards() {
             </div>
 
             {/* KPI summary — real counts for the active track, not illustrative data. */}
-            <div className={styles.metricsRow}>
+            <div className={`${styles.metricsRow} ${isCommercial ? styles.commercialMetricsRow : ''}`}>
                 <div className={styles.heroCard}>
                     <p className={styles.heroEyebrow}>
-                        {isCommercial ? '30+1 Cycle Overview' : 'Household Points Overview'}
+                        {isCommercial ? 'Commercial 30+1 Rewards' : 'Household Rewards'}
                     </p>
                     <p className={styles.heroLabel}>
-                        {isCommercial ? 'Pending Free-Cylinder Requests' : 'Ready for Pickup'}
+                        {isCommercial ? 'Pending Requests' : 'Ready for Pickup'}
                     </p>
                     <p className={styles.heroValue}>
-                        {trackSummary
-                            ? (isCommercial ? trackSummary.pending : trackSummary.approved)
-                            : '—'}
+                        {trackSummary ? (isCommercial ? trackSummary.pending : trackSummary.approved) : '—'}
                     </p>
-                    <div className={styles.heroIcon}>
+                    <div className={styles.heroIcon} aria-hidden="true">
                         {isCommercial ? <RotateCw size={26} /> : <Star size={26} fill="currentColor" />}
                     </div>
                 </div>
                 {isCommercial && (
-                <div className={styles.metricCard}>
-                    <div className={styles.metricIcon}>
-                        {isCommercial ? <Building2 size={22} /> : <UsersRound size={22} />}
+                    <div className={styles.metricCard}>
+                        <div className={`${styles.metricIcon} ${styles.metricIconAmber}`} aria-hidden="true">
+                            <Clock3 size={24} />
+                        </div>
+                        <div>
+                            <p className={styles.metricLabel}>Approved, Awaiting Pickup</p>
+                            <p className={styles.metricValue}>{trackSummary ? trackSummary.approved : '—'}</p>
+                        </div>
                     </div>
-                    <div>
-                        <p className={styles.metricLabel}>Pending Requests</p>
-                        <p className={styles.metricValue}>{trackSummary ? trackSummary.pending : '—'}</p>
-                        <p className={styles.metricDetail}>Awaiting your review</p>
-                    </div>
-                </div>
                 )}
                 <div className={styles.metricCard}>
-                    <div className={`${styles.metricIcon} ${styles.metricIconAmber}`}>
-                        <Clock3 size={22} />
+                    <div className={`${styles.metricIcon} ${styles.metricIconGreen}`} aria-hidden="true">
+                        {isCommercial ? <CircleCheck size={24} /> : <PackageCheck size={26} />}
                     </div>
                     <div>
-                        <p className={styles.metricLabel}>{isCommercial ? 'Approved, Awaiting Pickup' : 'Redeemed'}</p>
-                        <p className={styles.metricValue}>{trackSummary ? (isCommercial ? trackSummary.approved : trackSummary.fulfilled) : '—'}</p>
-                        {isCommercial && <p className={`${styles.metricDetail} ${styles.metricDetailAmber}`}>
-                            {trackSummary ? `${trackSummary.fulfilled} fulfilled to date` : ' '}
-                        </p>}
+                        <p className={styles.metricLabel}>{isCommercial ? 'Fulfilled' : 'Redeemed'}</p>
+                        <p className={styles.metricValue}>{trackSummary ? trackSummary.fulfilled : '—'}</p>
                     </div>
                 </div>
             </div>
 
             {isCommercial && (
-                <div className={styles.card}>
-                    <div className={styles.cardHeaderFlex}>
+                <div className={`${styles.card} ${styles.createCard}`}>
+                    <div className={`${styles.cardHeaderFlex} ${styles.createHeader} ${showCreate ? styles.createHeaderExpanded : ''}`}>
                         <div className={styles.cardTitle}>
                             Commercial Free-Cylinder Redemptions
                         </div>
-                        <Button
-                            variant={showCreate ? 'outline' : 'accent'}
-                            size="sm"
+                        <button
+                            type="button"
+                            className={`${styles.newRequestButton} ${showCreate ? styles.cancelRequestButton : ''}`}
                             onClick={() => (showCreate ? resetCreate() : setShowCreate(true))}
                         >
                             {showCreate ? 'Cancel' : 'New Request'}
-                        </Button>
+                        </button>
                     </div>
 
                     {showCreate && (
@@ -619,56 +641,10 @@ export default function Rewards() {
                             ))}
                         </TabsList>
                     </Tabs>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <input
-                            type="text"
-                            aria-label="Pickup code"
-                            placeholder="Enter pickup code…"
-                            value={codeSearch}
-                            onChange={(e) => { setCodeSearch(e.target.value); setCodeSearchError(null); }}
-                            onKeyDown={(e) => { if (e.key === 'Enter') handleCodeSearch(); }}
-                            disabled={codeSearchLoading}
-                            style={{
-                                padding: '6px 10px',
-                                border: '1px solid #d1d5db',
-                                borderRadius: 6,
-                                fontSize: 13,
-                                width: 180,
-                            }}
-                        />
-                        <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={handleCodeSearch}
-                            disabled={codeSearchLoading || !codeSearch.trim()}
-                        >
-                            {codeSearchLoading ? 'Searching…' : 'Verify Code'}
-                        </Button>
-                        <Button variant="ghost" size="sm" onClick={() => void queryClient.invalidateQueries({ queryKey: ['loyalty-redemptions'] })} disabled={loading}>
-                            <RefreshCw size={16} /> Refresh
-                        </Button>
-                    </div>
+                    <Button variant="ghost" size="sm" onClick={refreshRedemptions} disabled={loading}>
+                        <RefreshCw size={16} /> Refresh
+                    </Button>
                 </div>
-                {codeSearchError && (
-                    <div role="alert" style={{ padding: '8px 16px', color: '#dc2626', fontSize: 13 }}>{codeSearchError}</div>
-                )}
-                {codeResult && (
-                    <div role="status" style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', padding: '8px 16px', fontSize: 13, background: '#f0f9ff', borderBottom: '1px solid #e0f2fe' }}>
-                        <strong>Code {codeResult.redemption_code ?? '—'}</strong>
-                        <span>{codeResult.customer_name ?? 'Customer'} · {codeResult.catalog_item_name ?? codeResult.reward_description ?? (codeResult.track === COMMERCIAL ? 'Free cylinder' : 'Reward')}</span>
-                        <Badge variant={getStatusVariant(codeResult.status)}>{statusLabel(codeResult.status)}</Badge>
-                        {codeResult.track === HOUSEHOLD && codeResult.status === 'approved' && codeResult.redemption_code && (
-                            <Button
-                                size="sm"
-                                disabled={fulfillingId !== null}
-                                onClick={() => void handleFulfill(codeResult.id, codeResult.redemption_code ?? undefined)}
-                            >
-                                {fulfillingId === codeResult.id ? 'Confirming…' : 'Confirm pickup'}
-                            </Button>
-                        )}
-                        <button type="button" onClick={() => setCodeResult(null)} style={{ marginLeft: 'auto', color: '#475569' }} aria-label="Dismiss code result">Dismiss</button>
-                    </div>
-                )}
 
                 <div className={styles.tableWrapper}>
                     <table className={styles.table}>
@@ -697,11 +673,8 @@ export default function Rewards() {
                                 </td></tr>
                             )}
                             {!loading && !error && redemptions.map((r) => {
-                                const reward = isCommercial
-                                    ? (r.reward_description ?? 'Free cylinder (30+1)')
-                                    : (r.catalog_item_name ?? r.reward_description ?? '—');
-                                const photoUrl = catalogPhotoUrl(r.photo_path);
-                                const rewardImage = photoUrl ?? REWARD_IMAGES[reward] ?? null;
+                                const reward = displayReward(r);
+                                const canVerifyPickup = r.status === 'approved' && (!isCommercial || (r.requires_pickup_code ?? !!r.redemption_code));
                                 // Household: can't afford if balance < cost. Commercial: can't
                                 // redeem without a completed cycle.
                                 const cannotAct = isCommercial
@@ -713,22 +686,7 @@ export default function Rewards() {
                                         <tr>
                                             <td className={styles.boldText}>{r.customer_name ?? '—'}</td>
                                             <td>{reward}</td>
-                                            <td>
-                                                {rewardImage ? (
-                                                    <div className={styles.rewardThumb}>
-                                                        <Image
-                                                            src={rewardImage}
-                                                            alt={reward}
-                                                            width={40}
-                                                            height={40}
-                                                            className={styles.rewardImg}
-                                                            unoptimized={!!photoUrl}
-                                                        />
-                                                    </div>
-                                                ) : (
-                                                    <span className={styles.mutedText}>—</span>
-                                                )}
-                                            </td>
+                                            <td><RedemptionPhoto key={r.photo_path} row={r} /></td>
                                             <td className={styles.monoText}>
                                                 {isCommercial
                                                     ? (r.completed_cycles == null ? '—' : `${r.completed_cycles}`)
@@ -741,10 +699,12 @@ export default function Rewards() {
                                             </td>
                                             <td className={styles.mutedText}>{formatDateTime(r.requested_at)}</td>
                                             <td>
-                                                <Badge variant={getStatusVariant(r.status)}>{statusLabel(r.status)}</Badge>
-                                                {isCommercial && r.redemption_code && (
-                                                    <div className={styles.codeBadge} title="System-issued redemption code">{r.redemption_code}</div>
-                                                )}
+                                                {canVerifyPickup ? (
+                                                    <button type="button" className={styles.pickupLink}
+                                                        aria-haspopup="dialog" onClick={event => openPickup(r, event.currentTarget)}>
+                                                        Ready for Pickup
+                                                    </button>
+                                                ) : <Badge variant={getStatusVariant(r.status)}>{statusLabel(r.status)}</Badge>}
                                                 {r.status === 'rejected' && r.rejected_reason && (
                                                     <div className={styles.mutedText} title={r.rejected_reason}>{r.rejected_reason}</div>
                                                 )}
@@ -777,7 +737,7 @@ export default function Rewards() {
                                                             </Button>
                                                         </>
                                                     )}
-                                                    {isCommercial && r.status === 'approved' && (
+                                                    {isCommercial && r.status === 'approved' && !canVerifyPickup && (
                                                         <Button variant="secondary" size="sm" onClick={() => handleFulfill(r.id)} disabled={fulfillingId === r.id}>
                                                             {fulfillingId === r.id ? 'Saving…' : 'Mark Fulfilled'}
                                                         </Button>
@@ -876,6 +836,46 @@ export default function Rewards() {
                     </table>
                 </div>
             </div>
+            <Dialog open={!!pickup} onOpenChange={open => {
+                if (!open && !verifyingCode && !fulfillingId) setPickup(null);
+            }}>
+                <DialogContent className={styles.pickupDialog}
+                    onCloseAutoFocus={event => { event.preventDefault(); pickupTrigger.current?.focus(); }}>
+                    <DialogTitle>Verify pickup code</DialogTitle>
+                    <DialogDescription>Enter the code shown by the customer. Confirm pickup after handing over the reward.</DialogDescription>
+                    {pickup && <>
+                        <div className={styles.pickupReward}>
+                            <RedemptionPhoto key={pickup.photo_path} row={pickup} preview />
+                            <div>
+                                <strong>{displayReward(pickup)}</strong>
+                                <div className={styles.mutedText}>{pickup.customer_name ?? 'Customer'}</div>
+                            </div>
+                        </div>
+                        <form className={styles.pickupForm} onSubmit={event => {
+                            event.preventDefault();
+                            if (verifiedCode) void handleFulfill(pickup.id, verifiedCode);
+                            else void handleVerifyPickup();
+                        }}>
+                            <label htmlFor="reward-pickup-code" className={styles.fieldLabel}>Pickup code</label>
+                            <input id="reward-pickup-code" className={styles.pickupInput} placeholder="XXX-XXX"
+                                value={pickupCode} maxLength={64} autoComplete="off" spellCheck={false}
+                                disabled={verifyingCode || !!fulfillingId} onChange={event => {
+                                    setPickupCode(event.target.value.toUpperCase());
+                                    setVerifiedCode(null);
+                                    setPickupError(null);
+                                }} />
+                            {pickupError && <div role="alert" className={styles.fieldError}>{pickupError}</div>}
+                            {verifiedCode && <div className={styles.pickupVerified} role="status">Pickup code verified</div>}
+                            <div className={`${styles.codeSearchActions} ${styles.pickupActions}`}>
+                                <Button type="button" variant="outline" onClick={() => setPickup(null)} disabled={verifyingCode || !!fulfillingId}>Cancel</Button>
+                                <button type="submit" className={styles.verifyCodeButton} disabled={verifyingCode || !!fulfillingId || !pickupCode.trim()}>
+                                    {fulfillingId ? 'Confirming…' : verifyingCode ? 'Verifying…' : verifiedCode ? 'Confirm pickup' : 'Verify code'}
+                                </button>
+                            </div>
+                        </form>
+                    </>}
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }

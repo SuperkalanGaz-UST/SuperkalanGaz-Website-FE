@@ -8,12 +8,14 @@ import { OrdersReport, reportPercent, useFranchiseReport } from '../lib/franchis
 import { ReportBranchSelect, ReportMetric, ReportScope, ReportStatus, ReportTable, reportCell } from './FranchiseReportUi';
 import styles from './FranchiseReports.module.css';
 
+const manilaMonth = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit' }).format(new Date());
+
 export function OrderAnalytics({ onViewCustomer }: { onViewCustomer: (id: string) => void }) {
   const [branchId, setBranchId] = useState('');
   const query = useFranchiseReport<OrdersReport>('orders', { branchId });
   const report = query.data;
   return <div className={styles.page}>
-    <Header title="Branch Accounts" />
+    <Header title="Order Analytics" />
     <div className={styles.content}>
       <div className={styles.toolbar}><ReportScope label="Current month (Manila)" /><ReportBranchSelect value={branchId} onChange={setBranchId} /></div>
       <ReportStatus loading={query.isLoading} error={query.error} retry={query.refetch} />
@@ -25,7 +27,11 @@ export function OrderAnalytics({ onViewCustomer }: { onViewCustomer: (id: string
           <ReportMetric title="Completion Rate" value={reportPercent(report.delivered, report.total)} description="Delivered out of all monthly orders" icon={<Truck size={18} />} />
         </div>
         <div className={styles.charts}><DailyOrderVolumeChart data={report.daily} /><OrdersByStatusChart data={report.statuses} /></div>
-        <DeliveryCompletionTable rows={report.completion} />
+        <DeliveryCompletionTable
+          rows={report.completion.filter((row) => row.month === manilaMonth())}
+          scope="Current month"
+          action={<button className={styles.linkButton} onClick={() => window.dispatchEvent(new CustomEvent('navigate', { detail: 'delivery-completion-full' }))}>Last 6 months<ArrowUpRight size={14} aria-hidden="true" /></button>}
+        />
         <div className={styles.panel}>
           <div className={styles.panelHeader}><div><h3 className={styles.panelTitle}>Top customers</h3><p className={styles.panelSubtitle}>Highest order volumes for the current month</p></div><span className={styles.badge}>Top 5</span></div>
           <ReportTable headers={['Rank', 'Customer', 'Branch', 'Orders', '']} empty={!report.topCustomers.length}>
