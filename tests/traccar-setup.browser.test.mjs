@@ -11,7 +11,7 @@ test('Branch Manager guide registers via the cloud API without claiming live GPS
     assert.ok(supabaseUrl, 'Local public Supabase URL is required');
     const projectRef = new URL(supabaseUrl).hostname.split('.')[0];
     const baseUrl = process.env.TEST_BASE_URL ?? 'http://localhost:3000';
-    const cloudOrigin = 'https://superkalan-crm-api-7icfrdyg5a-as.a.run.app';
+    const cloudOrigin = new URL(env.match(/^NEXT_PUBLIC_API_URL=(.+)$/m)?.[1]?.trim() ?? 'http://localhost:3001').origin;
     const user = {
         id: '00000000-0000-4000-8000-000000000001',
         email: 'browser-test@example.invalid',
@@ -53,14 +53,16 @@ test('Branch Manager guide registers via the cloud API without claiming live GPS
                 assert.deepEqual(request.postDataJSON(), { hardwareUniqueId: '8160528336' });
                 writes.push(url.pathname);
                 vehicle.gps_provisioning_status = 'provisioned';
+                vehicle.gps_mileage = { status: 'waiting', position_at: null, pending_m: 0 };
                 return route.fulfill({ json: { vehicle } });
             }
             if (url.pathname === '/api/vehicles') return route.fulfill({ json: { vehicles: [vehicle] } });
+            if (url.pathname === '/api/branches/assigned') return route.fulfill({ json: { branches: [{ id: vehicle.branch_id, name: 'Test branch', geofence: null }] } });
+            if (url.pathname === '/api/users/me') return route.fulfill({ json: { user: { ...user.app_metadata, id: user.id, email: user.email, phone: null } } });
             return route.fulfill({ json: { serviceRequests: [], riders: [], summary: null, ratings: [], stockLevels: [], notifications: [], unreadCount: 0 } });
         });
         const page = await context.newPage();
-        await page.goto(baseUrl);
-        await page.getByRole('link', { name: 'Vehicles', exact: true }).click();
+        await page.goto(`${baseUrl}/branch-manager/vehicles`);
         await page.getByRole('button', { name: 'Connect SinoTrack', exact: true }).click();
         const dialog = page.getByRole('dialog');
         for (let step = 0; step < 3; step++) await dialog.getByRole('button', { name: 'Next', exact: true }).click();
@@ -76,7 +78,7 @@ test('Branch Manager guide registers via the cloud API without claiming live GPS
         await dialog.getByRole('button', { name: 'Enter device ID', exact: true }).click();
         await dialog.getByLabel('SinoTrack Hardware ID').fill('8160528336');
         await dialog.getByRole('button', { name: 'Register device in Traccar', exact: true }).click();
-        await page.getByText('Registered in Traccar', { exact: true }).waitFor();
+        await page.getByText('Waiting for a distance update', { exact: true }).waitFor();
         await page.getByText('TEST 123: device registered in Traccar. Live GPS reception still needs verification.', { exact: true }).waitFor();
         assert.equal(writes.length, 1);
         assert.deepEqual(unexpected, [], 'No browser requests should target local NestJS or private Traccar');

@@ -241,7 +241,10 @@ export function PriceConfiguration() {
     savingRef.current = true;
     setIsSaving(true);
     try {
-      const response = await apiFetch('/governance/requests', {
+      const path = revision
+        ? `/governance/requests/${encodeURIComponent(revision.id)}/revise`
+        : '/governance/requests';
+      const response = await apiFetch(path, {
         method: 'POST',
         body: JSON.stringify({
           type: 'price-configuration',
@@ -256,10 +259,12 @@ export function PriceConfiguration() {
               unitPrice: parsePrice(prices[size]),
             })),
           },
-          ...(revision ? { revisesRequestId: revision.id } : {}),
         }),
         signal: AbortSignal.timeout(15000),
       });
+      if (revision && response.status === 404) {
+        throw new Error('Revisions are temporarily unavailable. Please try again later.');
+      }
       const data: unknown = await response.json().catch(() => null);
       if (!response.ok)
         throw new Error(

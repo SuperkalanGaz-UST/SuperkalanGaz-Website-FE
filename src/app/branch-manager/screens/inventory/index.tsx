@@ -157,7 +157,9 @@ export default function Inventory() {
     const rewardStock = !rewardQuery.isFetching && !rewardQuery.isError ? rewardQuery.data ?? [] : [];
     const { data: stockData, error: stockQueryError, isLoading: stockLoading, refetch: loadStockLevels } = useQuery({
         queryKey: ['stock-levels', managerBranchId],
-        queryFn: () => fetchJson<{ stockLevels: StockLevelRow[] }>('/inventory/stock-levels'),
+        queryFn: ({ signal }) => fetchJson<{ stockLevels: StockLevelRow[] }>('/inventory/stock-levels', { signal, cache: 'no-store' }),
+        staleTime: 0,
+        refetchInterval: 30_000,
     });
     // For local optimism, we track stockLevels in state but initialize from query.
     // Wait, tracking in state defeats query caching if we don't sync them.

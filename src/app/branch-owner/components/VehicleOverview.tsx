@@ -5,21 +5,16 @@ import { useQuery } from '@tanstack/react-query';
 import { AlertTriangle, Eye, History, ShieldCheck, Truck } from 'lucide-react';
 import { useBranch } from '../contexts/BranchContext';
 import { fetchJson } from '../../lib/api';
-import { gpsRegistrationBadge } from '../../branch-manager/screens/vehicles/traccar-setup';
+import { isVehicleServiceDue, VehicleMileageSummary, type VehicleMileageSummaryData } from '../../components/VehicleMileageSummary';
 import styles from './VehicleOverview.module.css';
 
-interface VehicleRow {
+interface VehicleRow extends VehicleMileageSummaryData {
   id: string;
   plate_number: string;
   /** Optional Branch Manager label; Owners see it read-only. */
   display_name?: string | null;
   vehicle_type: string | null;
   assigned_rider_name: string | null;
-  status: 'active' | 'maintenance' | 'inactive';
-  gps_provisioning_status: 'unconfigured' | 'pending' | 'provisioned' | 'failed';
-  current_odometer_km: number;
-  km_since_last_pms: number;
-  maintenance_threshold_km: number;
 }
 
 interface MaintenanceLog {
@@ -41,12 +36,12 @@ function VehicleHistory({ vehicleId, branchId }: { vehicleId: string; branchId: 
 
   return (
     <div className={styles.history} aria-live="polite">
-      {isLoading ? <p>Loading maintenance history…</p>
-        : error ? <p role="alert">Could not load maintenance history. <button type="button" onClick={() => void refetch()}>Try again</button></p>
-          : !data?.maintenanceLogs.length ? <p>No mileage entries logged yet.</p>
+      {isLoading ? <p>Loading saved readings…</p>
+        : error ? <p role="alert">Couldn’t load saved readings. <button type="button" onClick={() => void refetch()}>Try again</button></p>
+          : !data?.maintenanceLogs.length ? <p>No readings added by staff yet.</p>
             : <table>
-              <caption className="sr-only">Maintenance history</caption>
-              <thead><tr><th>Date</th><th>Odometer</th><th>Fuel</th></tr></thead>
+              <caption className="sr-only">Readings added by staff</caption>
+              <thead><tr><th>Date</th><th>Total distance</th><th>Fuel</th></tr></thead>
               <tbody>{data.maintenanceLogs.map(log => (
                 <tr key={log.id}>
                   <td>{new Date(log.logged_at).toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' })}</td>
@@ -61,32 +56,20 @@ function VehicleHistory({ vehicleId, branchId }: { vehicleId: string; branchId: 
 
 function VehicleCard({ vehicle, branchId }: { vehicle: VehicleRow; branchId: string }) {
   const [historyOpen, setHistoryOpen] = useState(false);
-  const due = vehicle.status === 'maintenance';
-  const status = due ? 'Maintenance Due' : vehicle.status === 'inactive' ? 'Inactive' : 'Healthy';
-  const gps = gpsRegistrationBadge(vehicle.gps_provisioning_status);
-  const percent = vehicle.maintenance_threshold_km > 0
-    ? Math.min(100, Math.max(0, vehicle.km_since_last_pms / vehicle.maintenance_threshold_km * 100)) : 0;
 
   return (
     <article className={styles.vehicle} aria-label={`Vehicle ${vehicle.plate_number}`}>
-      <div className={styles.cardHeader}>
-        <div><h3>{vehicle.display_name || vehicle.plate_number}</h3><p className={styles.plate}>{vehicle.plate_number}{vehicle.vehicle_type ? ` · ${vehicle.vehicle_type}` : ''} · {vehicle.assigned_rider_name ?? 'Unassigned'}</p></div>
-        <div className={styles.badges}>
-          <span className={due ? styles.due : vehicle.status === 'inactive' ? styles.neutral : styles.healthy}>{status}</span>
-          <span className={styles.neutral} title={vehicle.gps_provisioning_status === 'provisioned' ? 'Device registration succeeded; this does not confirm live GPS reception.' : undefined}>{gps.label}</span>
-        </div>
-      </div>
-      <div className={styles.metrics}>
-        <div><span>Current odometer</span><strong>{vehicle.current_odometer_km.toLocaleString()} <small>km</small></strong></div>
-        <div><span>Since last PMS</span><strong className={due ? styles.dueText : undefined}>{vehicle.km_since_last_pms.toLocaleString()} <small>km</small></strong></div>
-      </div>
-      <div>
-        <div className={styles.progressLabel}><span>PMS Interval: {vehicle.maintenance_threshold_km.toLocaleString()} km</span><strong>{Math.round(percent)}%</strong></div>
-        <div className={styles.progress} role="progressbar" aria-label="Distance toward next PMS" aria-valuenow={Math.round(percent)} aria-valuemin={0} aria-valuemax={100}><div style={{ width: `${percent}%` }} /></div>
-      </div>
+      <header className={styles.cardHeader}>
+        <h3>{vehicle.display_name || vehicle.plate_number}</h3>
+        <p className={styles.plate}>
+          {vehicle.display_name && vehicle.display_name !== vehicle.plate_number ? `${vehicle.plate_number} · ` : null}
+          {vehicle.vehicle_type ? `${vehicle.vehicle_type} · ` : null}{vehicle.assigned_rider_name ?? 'No Delivery Rider assigned'}
+        </p>
+      </header>
+      <VehicleMileageSummary vehicle={vehicle} />
       <div className={styles.actions}>
-        <button type="button" aria-expanded={historyOpen} aria-controls={`history-${vehicle.id}`} onClick={() => setHistoryOpen(open => !open)}><History size={16} />{historyOpen ? 'Hide History' : 'View History'}</button>
-        {historyOpen && <div id={`history-${vehicle.id}`}><VehicleHistory vehicleId={vehicle.id} branchId={branchId} /></div>}
+        <button type="button" aria-expanded={historyOpen} aria-controls={`history-${vehicle.id}`} onClick={() => setHistoryOpen(open => !open)}><History size={16} />{historyOpen ? 'Hide staff readings' : 'View staff readings'}</button>
+        <div id={`history-${vehicle.id}`} hidden={!historyOpen}>{historyOpen ? <VehicleHistory vehicleId={vehicle.id} branchId={branchId} /> : null}</div>
       </div>
     </article>
   );
@@ -108,16 +91,17 @@ export function VehicleOverview() {
   // Older API releases may still include inactive (soft-archived) records.
   const vehicles = (data?.vehicles ?? []).filter(vehicle => vehicle.status !== 'inactive');
   const ready = !!selectedBranchId && !!data && !error;
+  const serviceDueCount = vehicles.filter(isVehicleServiceDue).length;
   const stats = [
-    { label: 'Total Fleet', value: vehicles.length, icon: Truck },
-    { label: 'Healthy Vehicles', value: vehicles.filter(vehicle => vehicle.status === 'active').length, icon: ShieldCheck, color: '#22c55e' },
-    { label: 'PMS Due / Overdue', value: vehicles.filter(vehicle => vehicle.status === 'maintenance').length, icon: AlertTriangle, color: '#ef123c' },
+    { label: 'Vehicles', value: vehicles.length, icon: Truck },
+    { label: 'Service up to date', value: vehicles.length - serviceDueCount, icon: ShieldCheck, color: '#15803d' },
+    { label: 'Service due', value: serviceDueCount, icon: AlertTriangle, color: '#b91c1c' },
   ];
 
   return (
       <section className={styles.main} aria-label="Vehicles">
         <div className={styles.toolbar}>
-          <div><h2>Branch Vehicle Roster</h2><p>View delivery vehicles and their recorded PMS mileage. Vehicle updates are managed by your Branch Manager.</p></div>
+          <div><h2>Branch vehicles</h2><p>See how far each vehicle has gone and when it needs service.</p></div>
           <span className={styles.viewOnly}><Eye size={16} />View-only</span>
         </div>
         <section className={styles.stats} aria-label="Fleet summary">

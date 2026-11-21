@@ -1,0 +1,63 @@
+.summary {
+  display: grid;
+  gap: .75rem;
+}
+
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: .625rem;
+  margin: 0;
+}
+
+.metric {
+  padding: .75rem;
+  border-radius: .75rem;
+  background: #eff4f8;
+  color: #172033;
+  overflow-wrap: anywhere;
+}
+
+.metric dt {
+  font-size: .8125rem;
+  font-weight: 600;
+}
+
+.value {
+  margin: .2rem 0 0;
+  font-size: 1.125rem;
+  font-weight: 700;
+  line-height: 1.35;
+  font-variant-numeric: tabular-nums;
+}
+
+.detail, .gps {
+  margin: 0;
+  color: #52647b;
+  font-size: .8125rem;
+  line-height: 1.5;
+}
+
+.metric[data-service='due'] {
+  background: #fff0f1;
+  color: #9b1c2d;
+}
+
+.metric[data-service='soon'] {
+  background: #fff6e6;
+  color: #7c4a0a;
+}
+
+.gps {
+  display: grid;
+  gap: .15rem;
+}
+
+.gps strong {
+  color: #27364d;
+  font-weight: 600;
+}
+
+.gps time {
+  display: inline-block;
+}

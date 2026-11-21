@@ -57,6 +57,9 @@ test('manager dispatch and Fleet show independent phone and vehicle fixes, refre
         assert.equal(request.method(), 'GET', 'Location display must not issue operational writes');
         assert.equal(request.headers().authorization, `Bearer ${session.access_token}`);
         if (url.pathname === '/api/branches/assigned') return route.fulfill({ json: { branches: [{ id: branchId, name: 'Test branch', geofence }] } });
+        if (url.pathname === `/api/branches/${branchId}/operating-hours`) return route.fulfill({ json: {
+          operatingHours: { openingTime: '07:45', closingTime: '18:15' },
+        } });
         if (url.pathname === '/api/users/me') return route.fulfill({ json: { user: { ...user.app_metadata, id: user.id, email: user.email, phone: null } } });
         if (url.pathname === '/api/riders') {
           riderReads++;
@@ -138,6 +141,8 @@ test('manager dispatch and Fleet show independent phone and vehicle fixes, refre
     await panel.getByRole('button', { name: 'Show map', exact: true }).click();
     await stalePin.waitFor();
     await page.goto(`${baseUrl}/branch-manager/fleet`);
+    await page.getByText('7:45 AM – 6:15 PM Philippine time', { exact: true }).waitFor();
+    assert.equal(await page.getByRole('button', { name: 'Save operating hours', exact: true }).count(), 0);
     const vehiclePanel = page.getByRole('region', { name: 'Vehicle locations', exact: true });
     const vehiclePin = vehiclePanel.getByRole('button', { name: 'Vehicle HW 123 location', exact: true });
     await vehiclePin.waitFor();

@@ -10,6 +10,7 @@ import { Badge } from '../../components/Badge';
 import { fetchJson } from '../../../lib/api';
 import { assignedBranchesFrom } from '../../../lib/branchGeofence';
 import { useAccount } from '../../../contexts/AccountContext';
+import { BranchOperatingHours } from '../../../components/BranchOperatingHours';
 import { DeliveryRiderLocations } from '../orders/DeliveryRiderLocations';
 import type { DispatchRider } from '../../../lib/deliveryRiderLocation';
 import { serviceRequestCylinderSummary, type ServiceRequestCylinderFields } from '../../../lib/serviceRequestItems';
@@ -157,7 +158,12 @@ export default function FleetPage() {
             <div className={styles.bottomLayout}>
                 <div className={styles.listPanel}>
                     <div className={styles.panelHeader}><h2 className={styles.panelTitle}>Branch Operating Hours</h2></div>
-                    <div className={styles.operatingHours}><Clock size={16} />6:00 AM – 10:00 PM</div>
+                    <div className={styles.operatingHours}>
+                        <Clock size={16} aria-hidden="true" />
+                        {account.branchIds.length === 1
+                            ? <BranchOperatingHours branchId={account.branchIds[0]} />
+                            : 'Operating hours unavailable.'}
+                    </div>
                 </div>
                 <div className={styles.listPanel}>
                     <div className={styles.panelHeader}><h2 className={styles.panelTitle}>Today&apos;s Fleet Activity</h2></div>

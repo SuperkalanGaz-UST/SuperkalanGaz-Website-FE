@@ -36,6 +36,7 @@ const requests = [
 test('Franchise Administrator navigation and governance fixes', { timeout: 180000 }, async () => {
   const writes = [];
   const errors = [];
+  let revisionsAvailable = false;
   const browser = await chromium.launch({ headless: true });
   try {
     const context = await browser.newContext({ viewport: { width: 1440, height: 1100 } });
@@ -51,6 +52,10 @@ test('Franchise Administrator navigation and governance fixes', { timeout: 18000
         if (url.pathname.startsWith('/api/branches/')) {
           const target = url.pathname.includes(inactive.id) ? inactive : active;
           return route.fulfill({ json: { branch: { ...target, status: req.method() === 'DELETE' ? 'inactive' : 'active' } } });
+        }
+        if (url.pathname.endsWith('/revise')) {
+          if (!revisionsAvailable) return route.fulfill({ status: 404, json: { message: 'Route unavailable' } });
+          return route.fulfill({ status: 201, json: { request: { id: url.pathname.split('/').at(-2), status: 'pending' } } });
         }
         return route.fulfill({ status: 201, json: { request: { id: 'new', status: 'pending' } } });
       }
@@ -90,8 +95,14 @@ test('Franchise Administrator navigation and governance fixes', { timeout: 18000
     assert.equal(await page.getByLabel('Threshold in minutes').inputValue(), '50');
     writes.length = 0;
     await page.getByRole('button', { name: 'Resubmit SLA request' }).click();
+    await page.getByText('Revisions are temporarily unavailable. Please try again later.').waitFor();
+    assert.deepEqual(writes.map(write => write.path), ['/api/governance/requests/sla-1/revise']);
+    assert.equal(await page.getByLabel('Threshold in minutes').inputValue(), '50');
+    revisionsAvailable = true;
+    writes.length = 0;
+    await page.getByRole('button', { name: 'Resubmit SLA request' }).click();
     await page.getByRole('button', { name: 'Submit SLA request' }).waitFor();
-    assert.equal(writes[0].body.revisesRequestId, 'sla-1');
+    assert.deepEqual(writes.map(write => write.path), ['/api/governance/requests/sla-1/revise']);
     assert.deepEqual(writes[0].body.payload, { segment: 'dispatch_to_in_transit', thresholdMinutes: 50 });
 
     // A returned price proposal reopens on Price Configuration, prefilled.
@@ -104,7 +115,7 @@ test('Franchise Administrator navigation and governance fixes', { timeout: 18000
     writes.length = 0;
     await page.getByRole('button', { name: 'Resubmit proposal' }).click();
     await page.getByRole('button', { name: 'Submit proposal' }).waitFor();
-    assert.equal(writes[0].body.revisesRequestId, 'price-1');
+    assert.deepEqual(writes.map(write => write.path), ['/api/governance/requests/price-1/revise']);
     assert.equal(writes[0].body.payload.regionCode, 'NCR');
     assert.equal(writes[0].body.payload.prices.find(p => p.cylinderSize === '11kg').unitPrice, 700);
     assert.ok(price11);
@@ -123,7 +134,7 @@ test('Franchise Administrator navigation and governance fixes', { timeout: 18000
     writes.length = 0;
     await page.getByRole('button', { name: 'Resubmit request' }).click();
     await page.getByRole('heading', { name: 'Revise Branch Owner reassignment' }).waitFor({ state: 'hidden' });
-    assert.equal(writes[0].body.revisesRequestId, 'owner-1');
+    assert.deepEqual(writes.map(write => write.path), ['/api/governance/requests/owner-1/revise']);
     assert.deepEqual(writes[0].body.payload, { newOwnerId: proposed.id });
 
     // Registry: no dead "View All Branches"; status changes need a reason.

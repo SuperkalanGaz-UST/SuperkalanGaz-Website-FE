@@ -1,21 +1,13 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Clock3, Gift, LockKeyhole, PackageSearch } from 'lucide-react';
 import { toast } from 'sonner';
 import { useBranch } from '../../contexts/BranchContext';
+import { useAccount } from '../../../contexts/AccountContext';
 import { apiErrorMessage, apiFetch, fetchJson } from '../../../lib/api';
-
-interface BranchConfiguration {
-  openingTime: string;
-  closingTime: string;
-}
-
-const defaultConfiguration: BranchConfiguration = {
-  openingTime: '07:00',
-  closingTime: '20:00',
-};
+import { operatingHoursKey, saveOperatingHours, useOperatingHours, type OperatingHours } from '../../../lib/branchOperatingHours';
 
 interface StockThresholdRow {
   product_id: string;
@@ -27,24 +19,92 @@ interface StockThresholdRow {
 const numberFieldClassName =
   'h-10 w-full min-w-0 rounded-lg border border-gray-300 bg-white px-3 text-sm text-gray-900 outline-none transition focus:border-[#007BC1] focus:ring-2 focus:ring-[#007BC1]/15';
 
+const emptyHours: OperatingHours = { openingTime: '', closingTime: '' };
+
+function OperatingHoursForm({ branchId, branchName }: { branchId: string; branchName: string }) {
+  const account = useAccount();
+  const queryClient = useQueryClient();
+  const hours = useOperatingHours(account.id, branchId);
+  const [draft, setDraft] = useState<OperatingHours | null>(null);
+  const saved = hours.data?.operatingHours ?? emptyHours;
+  const form = draft ?? saved;
+  const changed = form.openingTime !== saved.openingTime || form.closingTime !== saved.closingTime;
+  const save = useMutation({
+    mutationFn: (values: OperatingHours) => saveOperatingHours(branchId, values),
+    onSuccess: async (result) => {
+      const queryKey = operatingHoursKey(account.id, branchId);
+      await queryClient.cancelQueries({ queryKey, exact: true });
+      queryClient.setQueryData(queryKey, result);
+      setDraft(null);
+      toast.success(`Operating hours saved for ${branchName}.`);
+    },
+    onError: (error) => toast.error(error.message || 'Could not save operating hours. Try again.'),
+  });
+
+  const submit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!hours.isSuccess || !changed || save.isPending) return;
+    if (form.openingTime === form.closingTime) {
+      toast.error('Opening and closing times must be different.');
+      return;
+    }
+    save.mutate(form);
+  };
+
+  if (hours.isPending) return <p className="mt-4 text-sm text-gray-500" role="status">Loading operating hours…</p>;
+  if (hours.isError) return (
+    <p className="mt-4 text-sm text-red-600" role="alert">
+      Operating hours unavailable.{' '}
+      <button type="button" className="underline" disabled={hours.isFetching} onClick={() => void hours.refetch()}>Retry</button>
+    </p>
+  );
+
+  return (
+    <form onSubmit={submit} className="mt-4">
+      <p className="text-sm text-gray-500">Daily schedule in Philippine time.</p>
+      <fieldset disabled={save.isPending} className="mt-4 grid grid-cols-2 gap-4">
+        <label className="block text-xs font-medium text-gray-600">
+          Opening time
+          <input
+            type="time"
+            required
+            value={form.openingTime}
+            onChange={(event) => setDraft({ ...form, openingTime: event.target.value })}
+            className={`${numberFieldClassName} mt-2`}
+          />
+        </label>
+        <label className="block text-xs font-medium text-gray-600">
+          Closing time
+          <input
+            type="time"
+            required
+            value={form.closingTime}
+            onChange={(event) => setDraft({ ...form, closingTime: event.target.value })}
+            className={`${numberFieldClassName} mt-2`}
+          />
+        </label>
+      </fieldset>
+      {form.closingTime && form.openingTime && form.closingTime < form.openingTime && (
+        <p className="mt-2 text-xs text-gray-500">Closing time is on the following day.</p>
+      )}
+      <div className="mt-4 flex flex-wrap gap-3">
+        <button type="submit" disabled={!changed || save.isPending} className="h-10 rounded-lg bg-[#007BC1] px-4 text-sm font-medium text-white hover:bg-[#0068A4] disabled:opacity-50">
+          {save.isPending ? 'Saving…' : 'Save operating hours'}
+        </button>
+        <button type="button" disabled={!changed || save.isPending} onClick={() => setDraft(null)} className="h-10 rounded-lg border border-[#007BC1] px-4 text-sm font-medium text-[#007BC1] hover:bg-blue-50 disabled:opacity-50">
+          Discard hours changes
+        </button>
+      </div>
+    </form>
+  );
+}
+
 /** Inventory and operating-hours settings for the selected branch. */
 export function BranchConfigurationSettings() {
   const { selectedBranch, selectedBranchId } = useBranch();
   // selectedBranch is the placeholder "Select branch" when none is chosen.
   const branchLabel = selectedBranchId ? selectedBranch : 'no branch selected';
-  const [savedByBranch, setSavedByBranch] = useState<Record<string, BranchConfiguration>>({});
-  const savedConfiguration = useMemo(
-    () =>
-      (selectedBranchId ? savedByBranch[selectedBranchId] : undefined) ??
-      defaultConfiguration,
-    [savedByBranch, selectedBranchId],
-  );
-  const [form, setForm] = useState<BranchConfiguration>(savedConfiguration);
   const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    setForm(savedConfiguration);
-  }, [savedConfiguration]);
 
   const queryClient = useQueryClient();
 
@@ -72,10 +132,6 @@ export function BranchConfigurationSettings() {
   useEffect(() => {
     setThresholds(savedThresholds);
   }, [savedThresholds]);
-
-  const updateField = <K extends keyof BranchConfiguration>(field: K, value: BranchConfiguration[K]) => {
-    setForm((current) => ({ ...current, [field]: value }));
-  };
 
   const handleSave = async () => {
     if (!selectedBranchId) {
@@ -106,8 +162,7 @@ export function BranchConfigurationSettings() {
         void queryClient.invalidateQueries({ queryKey: ['owner-inventory', selectedBranchId] });
       }
 
-      setSavedByBranch((current) => ({ ...current, [selectedBranchId]: form }));
-      toast.success(`Branch settings saved for ${selectedBranch}.`);
+      toast.success(`Inventory alerts saved for ${selectedBranch}.`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to save branch settings');
     } finally {
@@ -192,6 +247,24 @@ export function BranchConfigurationSettings() {
               </p>
             )}
           </div>
+          <div className="mt-6 flex flex-wrap gap-3">
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={saving || !selectedBranchId || !!stockError || !stockRows.some(row => thresholds[row.product_id] !== savedThresholds[row.product_id])}
+              className="h-10 rounded-lg bg-[#007BC1] px-4 text-sm font-medium text-white hover:bg-[#0068A4] disabled:opacity-50"
+            >
+              {saving ? 'Saving…' : 'Save inventory alerts'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setThresholds(savedThresholds)}
+              disabled={saving}
+              className="h-10 rounded-lg border border-[#007BC1] bg-white px-4 text-sm font-medium text-[#007BC1] hover:bg-blue-50 disabled:opacity-50"
+            >
+              Discard inventory changes
+            </button>
+          </div>
         </section>
       </div>
 
@@ -203,26 +276,9 @@ export function BranchConfigurationSettings() {
             </span>
             <h2 id="operating-hours-heading" className="text-base font-semibold text-gray-900">Branch Operating Hours</h2>
           </div>
-          <div className="mt-4 grid grid-cols-2 gap-4">
-            <label className="block text-xs font-medium text-gray-600">
-              Opening time
-              <input
-                type="time"
-                value={form.openingTime}
-                onChange={(event) => updateField('openingTime', event.target.value)}
-                className={`${numberFieldClassName} mt-2`}
-              />
-            </label>
-            <label className="block text-xs font-medium text-gray-600">
-              Closing time
-              <input
-                type="time"
-                value={form.closingTime}
-                onChange={(event) => updateField('closingTime', event.target.value)}
-                className={`${numberFieldClassName} mt-2`}
-              />
-            </label>
-          </div>
+          {selectedBranchId ? (
+            <OperatingHoursForm branchId={selectedBranchId} branchName={selectedBranch} />
+          ) : <p className="mt-4 text-sm text-gray-500">Select a branch to set its operating hours.</p>}
         </section>
 
         <section className="flex items-center gap-4 rounded-xl border border-[#B9DFF4] bg-[#EFF8FD] p-5" aria-labelledby="sla-policy-heading">
@@ -236,26 +292,6 @@ export function BranchConfigurationSettings() {
         </section>
       </div>
 
-      <div className="mt-6 flex items-center gap-3">
-        <button
-          type="button"
-          onClick={handleSave}
-          disabled={saving || !selectedBranchId}
-          className="h-10 rounded-lg bg-[#007BC1] px-5 text-sm font-medium text-white transition hover:bg-[#0068A4]"
-        >
-          {saving ? 'Saving…' : 'Save branch settings'}
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            setForm(savedConfiguration);
-            setThresholds(savedThresholds);
-          }}
-          className="h-10 rounded-lg border border-[#007BC1] bg-white px-5 text-sm font-medium text-[#007BC1] transition hover:bg-blue-50"
-        >
-          Discard changes
-        </button>
-      </div>
     </div>
   );
 }

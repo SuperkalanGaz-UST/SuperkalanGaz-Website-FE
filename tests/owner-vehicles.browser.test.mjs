@@ -94,7 +94,9 @@ test('Owner Vehicles stays view-only and scopes roster/history across branch swi
         return route.fulfill({ json: { vehicles: rosterMode === 'empty' ? [] : [{
           id: branchId === branches[0].id ? 'vehicle-a' : 'vehicle-b', branch_id: branchId,
           plate_number: branchId === branches[0].id ? 'OWNER-A' : 'OWNER-B', vehicle_type: 'motorcycle', assigned_rider_name: 'Test Delivery Rider',
-          status: branchId === branches[0].id ? 'maintenance' : 'active', gps_provisioning_status: 'unconfigured',
+          status: branchId === branches[0].id ? 'maintenance' : 'active',
+          gps_provisioning_status: branchId === branches[0].id ? 'unconfigured' : 'provisioned',
+          gps_mileage: branchId === branches[0].id ? null : { status: 'synced', position_at: '2026-11-21T04:19:09Z', pending_m: 140 },
           current_odometer_km: branchId === branches[0].id ? 14500 : 8900, km_since_last_pms: branchId === branches[0].id ? 3300 : 2100, maintenance_threshold_km: 3000,
         }] } });
       }
@@ -106,21 +108,24 @@ test('Owner Vehicles stays view-only and scopes roster/history across branch swi
     assert.equal(requests.length, 0, 'No automatic first-branch selection');
     await page.getByRole('button', { name: 'Select branch', exact: true }).click();
     await page.getByRole('button', { name: branches[0].name, exact: true }).click();
-    await page.getByText('OWNER-A · motorcycle · Test Delivery Rider', { exact: true }).waitFor();
+    const branchAVehicle = page.getByRole('article', { name: 'Vehicle OWNER-A' });
+    await branchAVehicle.getByRole('heading', { name: 'OWNER-A', exact: true }).waitFor();
     await page.getByText('View-only', { exact: true }).waitFor();
-    await page.getByText('Maintenance Due', { exact: true }).waitFor();
-    assert.equal(await page.getByRole('button', { name: /Register Vehicle|Reset PMS|Update Odo|Connect SinoTrack|Retry SinoTrack/ }).count(), 0);
-    await page.getByRole('button', { name: 'View History', exact: true }).click();
-    await page.getByText('Could not load maintenance history.', { exact: false }).waitFor();
+    await page.getByText('Service overdue', { exact: true }).waitFor();
+    assert.equal(await page.getByRole('button', { name: /Register Vehicle|Mark service complete|Update distance|Connect SinoTrack|Retry SinoTrack/ }).count(), 0);
+    await page.getByRole('button', { name: 'View staff readings', exact: true }).click();
+    await page.getByText('Couldn’t load saved readings.', { exact: false }).waitFor();
     historyMode = 'success';
     await page.getByRole('button', { name: 'Try again', exact: true }).click();
     await page.getByRole('cell', { name: '1,234 km', exact: true }).waitFor();
     await page.getByRole('button', { name: branches[0].name, exact: true }).click();
     await page.getByRole('button', { name: branches[1].name, exact: true }).click();
-    await page.getByText('OWNER-B · motorcycle · Test Delivery Rider', { exact: true }).waitFor();
-    assert.equal(await page.getByText('OWNER-A · motorcycle · Test Delivery Rider', { exact: true }).count(), 0);
+    const branchBVehicle = page.getByRole('article', { name: 'Vehicle OWNER-B' });
+    await branchBVehicle.getByText('900 km left', { exact: true }).waitFor();
+    await branchBVehicle.getByText('140 m already counted toward the next kilometre.', { exact: true }).waitFor();
+    assert.equal(await branchAVehicle.count(), 0);
     assert.equal(await page.getByRole('cell', { name: '1,234 km', exact: true }).count(), 0, 'History closes on branch switch');
-    await page.getByRole('button', { name: 'View History', exact: true }).click();
+    await page.getByRole('button', { name: 'View staff readings', exact: true }).click();
     await page.getByRole('cell', { name: '1,234 km', exact: true }).waitFor();
     assert.ok(requests.some(url => url.pathname.endsWith('/vehicle-b') && url.searchParams.get('branchId') === branches[1].id));
     if (process.env.TEST_ARTIFACT_DIR) await page.screenshot({ path: `${process.env.TEST_ARTIFACT_DIR}/owner-vehicles-desktop.png`, fullPage: true });
@@ -173,6 +178,8 @@ test('Owner Vehicles stays view-only and scopes roster/history across branch swi
     await routeDialogA.waitFor({ state: 'detached' });
     await page.getByRole('button', { name: branches[0].name, exact: true }).click();
     await page.getByRole('button', { name: branches[1].name, exact: true }).click();
+    await mapPanel.getByRole('button', { name: 'Vehicle OWNER-B location', exact: true }).waitFor();
+    await roster.getByLabel('Roster view').selectOption('vehicles');
     await roster.getByRole('button', { name: 'Show vehicle OWNER-B on map', exact: true }).waitFor();
     assert.equal(await page.getByRole('alert', { name: 'Vehicles outside assigned area', exact: true }).count(), 0, 'Old branch alerts clear on branch switch');
     assert.equal(await mapPanel.getByRole('button', { name: 'Vehicle OWNER-A location', exact: true }).count(), 0);

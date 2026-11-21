@@ -124,7 +124,7 @@ test('Branch Manager logs the first response and sees the refreshed Incident met
   }
 });
 
-test('a stale pickup confirmation clears the action and the same code shows Redeemed', { timeout: 30_000 }, async () => {
+test('the pickup status opens a row-specific dialog, handles a race, and accepts issued legacy codes', { timeout: 30_000 }, async () => {
   const browser = await chromium.launch({ headless: true });
   const session = sessionFor('branch-manager');
   session.user.app_metadata.branch_ids = [branches[0].id];
@@ -133,34 +133,62 @@ test('a stale pickup confirmation clears the action and the same code shows Rede
   try {
     await context.route(`${apiOrigin}/api/branches/assigned`, route => route.fulfill({ json: { branches: [branches[0]] } }));
     const id = '00000000-0000-4000-8000-000000000010';
-    const code = 'RDM-TESTCODE';
-    await context.route(url => url.origin === apiOrigin && url.pathname === '/api/loyalty/redemptions',
-      route => route.fulfill({ json: { redemptions: [] } }));
-    let redeemed = false;
-    await context.route(`${apiOrigin}/api/loyalty/redemptions/verify/${code}`, route => route.fulfill({ json: {
-      redemption: { id, redemption_code: code, status: redeemed ? 'fulfilled' : 'approved',
-        track: 'household_points', customer_name: 'Fixture customer', catalog_item_name: 'Fixture Mug' },
-    } }));
+    const legacyId = '00000000-0000-4000-8000-000000000011';
+    const current = { id, status: 'approved', track: 'household_points', customer_name: 'Fixture customer', catalog_item_name: 'Notebook and Pen', requested_at: '2026-11-19' };
+    const legacy = { ...current, id: legacyId, customer_name: 'Legacy customer' };
+    await context.route(url => url.origin === apiOrigin && url.pathname === '/api/loyalty/redemptions', route => {
+      const status = new URL(route.request().url()).searchParams.get('status');
+      return route.fulfill({ json: { redemptions: [current, legacy].filter(row => row.status === status || status === 'all') } });
+    });
+    await context.route(`${apiOrigin}/api/loyalty/redemptions/${id}/verify`, route => {
+      const { code } = route.request().postDataJSON();
+      return code === 'ABC-123' ? route.fulfill({ json: { verified: true } })
+        : route.fulfill({ status: 400, json: { message: 'That pickup code does not match this redemption' } });
+    });
     await context.route(`${apiOrigin}/api/loyalty/redemptions/${id}/fulfill`, route => {
-      assert.deepEqual(route.request().postDataJSON(), { code });
-      redeemed = true;
+      assert.deepEqual(route.request().postDataJSON(), { code: 'ABC-123' });
+      current.status = 'fulfilled';
       return route.fulfill({ status: 409, json: { message: 'This reward is no longer ready for pickup' } });
+    });
+    await context.route(`${apiOrigin}/api/loyalty/redemptions/${legacyId}/verify`, route => {
+      assert.deepEqual(route.request().postDataJSON(), { code: 'RDM-TESTCODE' });
+      return route.fulfill({ json: { verified: true } });
+    });
+    await context.route(`${apiOrigin}/api/loyalty/redemptions/${legacyId}/fulfill`, route => {
+      assert.deepEqual(route.request().postDataJSON(), { code: 'RDM-TESTCODE' });
+      legacy.status = 'fulfilled';
+      return route.fulfill({ json: { redemption: legacy } });
     });
     const page = await context.newPage();
     page.setDefaultTimeout(5_000);
     await page.goto(`${baseUrl}/branch-manager/rewards`);
-    const verify = async () => {
-      await page.getByRole('textbox', { name: 'Pickup code' }).fill(code);
-      await page.getByRole('button', { name: 'Verify Code', exact: true }).click();
-    };
-    await verify();
-    const confirm = page.getByRole('button', { name: 'Confirm pickup', exact: true });
+    const entry = name => page.getByRole('row').filter({ hasText: name });
+    await entry('Fixture customer').getByRole('img', { name: 'Notebook and Pen' }).waitFor();
+    assert.equal(await page.getByRole('textbox', { name: 'Pickup code' }).count(), 0);
+    await entry('Fixture customer').getByRole('button', { name: 'Ready for Pickup' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Verify pickup code' });
+    await dialog.getByRole('img', { name: 'Notebook and Pen' }).waitFor();
+    const field = dialog.getByRole('textbox', { name: 'Pickup code' });
+    const verify = dialog.getByRole('button', { name: 'Verify code', exact: true });
+    const confirm = dialog.getByRole('button', { name: 'Confirm pickup', exact: true });
+    await field.fill('def456');
+    await verify.click();
+    await dialog.getByRole('alert').getByText('That pickup code does not match this redemption').waitFor();
+    await field.fill('abc123');
+    await verify.click();
+    assert.equal(await field.inputValue(), 'ABC-123');
     await confirm.click();
-    await page.getByText('This reward is no longer ready for pickup', { exact: true }).waitFor();
+    await dialog.getByRole('alert').getByText('This reward is no longer ready for pickup').waitFor();
     assert.equal(await confirm.count(), 0);
-    await verify();
-    await page.getByRole('status').filter({ hasText: code }).getByText('Redeemed', { exact: true }).waitFor();
-    assert.equal(await confirm.count(), 0);
+    await dialog.getByRole('button', { name: 'Cancel' }).click();
+    await entry('Legacy customer').getByRole('button', { name: 'Ready for Pickup' }).click();
+    await field.fill('RDM-TESTCODE');
+    await verify.click();
+    await confirm.click();
+    await dialog.waitFor({ state: 'hidden' });
+    await page.getByRole('button', { name: 'All', exact: true }).click();
+    await entry('Fixture customer').getByText('Redeemed', { exact: true }).waitFor();
+    await entry('Legacy customer').getByText('Redeemed', { exact: true }).waitFor();
   } finally {
     await context.close();
     await browser.close();

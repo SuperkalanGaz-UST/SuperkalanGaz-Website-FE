@@ -5,17 +5,16 @@ import React, { useCallback, useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Wrench, PenLine, AlertTriangle, ShieldCheck, Truck, History, Plus, RefreshCw, Check, ArrowLeft, ArrowRight } from "lucide-react";
-import { Badge } from "../../components/Badge";
 import { Button } from "../../components/Button";
 import { ConfirmActionDialog } from "../../../components/ConfirmActionDialog";
-import { Progress } from "../../components/Progress";
 import { Input } from "../../components/Input";
+import { isVehicleServiceDue, VehicleMileageSummary, type VehicleMileageSummaryData } from "../../../components/VehicleMileageSummary";
 import { apiFetch, apiErrorMessage, fetchJson } from "../../../lib/api";
-import { gpsRegistrationBadge, gpsRegistrationNotice, trackerDestination, trackerManualUrl, trackerSmsCommands } from "./traccar-setup";
+import { gpsRegistrationNotice, trackerDestination, trackerManualUrl, trackerSmsCommands } from "./traccar-setup";
 import styles from "./screen.module.css";
 
 /** A vehicle row from GET /vehicles (story BM-US-09). */
-interface VehicleRow {
+interface VehicleRow extends VehicleMileageSummaryData {
     id: string;
     branch_id: string;
     plate_number: string;
@@ -24,19 +23,6 @@ interface VehicleRow {
     vehicle_type: string | null;
     assigned_rider_id: string | null;
     assigned_rider_name: string | null;
-    status: "active" | "maintenance" | "inactive";
-    gps_provisioning_status: "unconfigured" | "pending" | "provisioned" | "failed";
-    gps_provisioning_error: string | null;
-    gps_provisioned_at: string | null;
-    gps_mileage?: {
-        status: 'waiting' | 'synced' | 'unavailable' | 'counter-reset' | 'stale' | 'disabled';
-        position_at: string | null;
-        synced_at: string | null;
-    } | null;
-    current_odometer_km: number;
-    last_pms_odometer_km: number;
-    km_since_last_pms: number;
-    maintenance_threshold_km: number;
     updated_at: string;
 }
 
@@ -180,8 +166,7 @@ export default function VehicleManagementPage() {
     }
 
     const totalVehicles = vehicles.length;
-    const overdueVehicles = vehicles.filter(v => v.status === "maintenance").length;
-    const healthyVehicles = vehicles.filter(v => v.status !== "maintenance" && v.km_since_last_pms < v.maintenance_threshold_km * 0.8).length;
+    const serviceDueCount = vehicles.filter(isVehicleServiceDue).length;
     const activeSetupStep = vehicleSetupSteps[Math.min(gpsSetupStep, vehicleSetupSteps.length - 1)];
 
     const openRegistrationDialog = () => {
@@ -225,7 +210,7 @@ export default function VehicleManagementPage() {
             return;
         }
         if (!initialOdometerKm.trim() || !Number.isInteger(odometerKm) || odometerKm < 0) {
-            setRegistrationError('Enter a valid non-negative odometer reading.');
+            setRegistrationError('Enter a whole number of kilometres, starting at 0.');
             return;
         }
         if (normalizedName && normalizedName.length > VEHICLE_NAME_MAX_LENGTH) {
@@ -315,7 +300,7 @@ export default function VehicleManagementPage() {
     const handleSaveOdometer = async () => {
         if (!updateDialogVehicleId) return;
         const odometerKm = parseInt(odometerValue, 10);
-        if (isNaN(odometerKm)) { setDialogError('Enter a valid odometer reading'); return; }
+        if (isNaN(odometerKm)) { setDialogError('Enter the total kilometres shown on the vehicle.'); return; }
         const fuelLiters = fuelValue.trim() ? parseInt(fuelValue, 10) : undefined;
         if (fuelValue.trim() && isNaN(fuelLiters as number)) { setDialogError('Enter a valid fuel amount'); return; }
 
@@ -340,9 +325,9 @@ export default function VehicleManagementPage() {
             const updated = data.vehicle as VehicleRow;
             void queryClient.invalidateQueries({ queryKey: ['vehicles'] });
             if (updated.status === 'maintenance') {
-                toast.warning(`${updated.plate_number} reached its PMS interval and is flagged for maintenance.`);
+                toast.warning(`${updated.plate_number} is due for service.`);
             } else {
-                toast.success('Odometer reading logged.');
+                toast.success('Distance saved.');
             }
             closeUpdateDialog();
         } catch (err) {
@@ -359,18 +344,18 @@ export default function VehicleManagementPage() {
             const data = await res.json();
             if (!res.ok) {
                 if (res.status === 409) {
-                    toast.error('This vehicle is not currently flagged for maintenance.');
+                    toast.error('Check the refreshed vehicle list to see if service is still due.');
                     void queryClient.invalidateQueries({ queryKey: ['vehicles'] });
                     return;
                 }
-                toast.error(apiErrorMessage(data, 'Failed to reset PMS'));
+                toast.error(apiErrorMessage(data, 'Couldn’t mark service complete.'));
                 return;
             }
             const updated = data.vehicle as VehicleRow;
             void queryClient.invalidateQueries({ queryKey: ['vehicles'] });
-            toast.success(`${updated.plate_number} marked serviced — PMS counter reset.`);
+            toast.success(`Service marked complete for ${updated.plate_number}.`);
         } catch (err) {
-            toast.error(err instanceof Error ? err.message : 'Failed to reset PMS');
+            toast.error(err instanceof Error ? err.message : 'Couldn’t mark service complete.');
         } finally {
             setResettingId(null);
         }
@@ -450,10 +435,10 @@ export default function VehicleManagementPage() {
         try {
             const res = await apiFetch(`/vehicles/${vehicleId}`);
             const data = await res.json();
-            if (!res.ok) throw new Error(apiErrorMessage(data, 'Failed to load history'));
+            if (!res.ok) throw new Error(apiErrorMessage(data, 'Couldn’t load saved readings.'));
             setHistoryLogs(data.maintenanceLogs as MaintenanceLogRow[]);
         } catch (err) {
-            toast.error(err instanceof Error ? err.message : 'Failed to load history');
+            toast.error(err instanceof Error ? err.message : 'Couldn’t load saved readings.');
             setHistoryLogs([]);
         } finally {
             setHistoryLoading(false);
@@ -464,8 +449,8 @@ export default function VehicleManagementPage() {
         <div className={styles.pageWrapper}>
             <div className={styles.toolbar}>
                 <div>
-                    <div className={styles.toolbarTitle}>Branch Vehicle Roster</div>
-                    <div className={styles.toolbarDescription}>Register delivery motorcycles and track their PMS mileage.</div>
+                    <div className={styles.toolbarTitle}>Branch vehicles</div>
+                    <div className={styles.toolbarDescription}>Update how far vehicles have gone and see when they need service.</div>
                 </div>
                 <Button variant="primary" onClick={() => void openRegistrationDialog()}>
                     <Plus size={17} /> Register Vehicle
@@ -474,16 +459,16 @@ export default function VehicleManagementPage() {
 
             <section className={styles.statsGrid}>
                 <div className={styles.statCard}>
-                    <div className={styles.statHeader}><span className={styles.statLabel}>Total Fleet</span><Truck className={styles.statIcon} size={20} /></div>
+                    <div className={styles.statHeader}><span className={styles.statLabel}>Vehicles</span><Truck className={styles.statIcon} size={20} /></div>
                     <div className={styles.statValue}>{totalVehicles}</div>
                 </div>
                 <div className={styles.statCard}>
-                    <div className={styles.statHeader}><span className={styles.statLabel}>Healthy Vehicles</span><ShieldCheck className={styles.statIcon} style={{ color: "var(--success)" }} size={20} /></div>
-                    <div className={styles.statValue} style={{ color: "var(--success)" }}>{healthyVehicles}</div>
+                    <div className={styles.statHeader}><span className={styles.statLabel}>Service up to date</span><ShieldCheck className={styles.statIcon} style={{ color: "var(--success)" }} size={20} /></div>
+                    <div className={styles.statValue} style={{ color: "var(--success)" }}>{totalVehicles - serviceDueCount}</div>
                 </div>
-                <div className={styles.statCard} style={overdueVehicles > 0 ? { borderColor: "var(--error)" } : {}}>
-                    <div className={styles.statHeader}><span className={styles.statLabel}>PMS Due / Overdue</span><AlertTriangle className={styles.statIcon} style={{ color: "var(--error)" }} size={20} /></div>
-                    <div className={styles.statValue} style={{ color: "var(--error)" }}>{overdueVehicles}</div>
+                <div className={styles.statCard} style={serviceDueCount > 0 ? { borderColor: "var(--error)" } : {}}>
+                    <div className={styles.statHeader}><span className={styles.statLabel}>Service due</span><AlertTriangle className={styles.statIcon} style={{ color: "var(--error)" }} size={20} /></div>
+                    <div className={styles.statValue} style={{ color: "var(--error)" }}>{serviceDueCount}</div>
                 </div>
             </section>
 
@@ -499,108 +484,43 @@ export default function VehicleManagementPage() {
             ) : (
                 <section className={styles.vehiclesGrid}>
                     {vehicles.map(vehicle => {
-                        const sinceLastPms = vehicle.km_since_last_pms;
-                        const threshold = vehicle.maintenance_threshold_km;
-                        const progressPercent = Math.min((sinceLastPms / threshold) * 100, 100);
-                        const isOverdue = vehicle.status === "maintenance";
-                        const isWarning = !isOverdue && sinceLastPms >= threshold * 0.8;
-                        const gpsBadge = gpsRegistrationBadge(vehicle.gps_provisioning_status);
+                        const historyOpen = historyVehicleId === vehicle.id;
 
                         return (
-                            <div key={vehicle.id} className={styles.vehicleCard}>
-                                <div className={styles.cardHeader}>
-                                    <div className={styles.vehicleIdentity}>
-                                        <div className={styles.vehicleNameRow}>
-                                            <div className={styles.vehicleName}>{vehicleLabel(vehicle)}</div>
-                                            <button
-                                                type="button"
-                                                className={styles.renameButton}
-                                                onClick={() => openRenameDialog(vehicle)}
-                                                aria-label={`Edit name of ${vehicle.plate_number}`}
-                                                title="Edit vehicle name"
-                                            >
-                                                <PenLine size={14} />
-                                            </button>
-                                        </div>
-                                        <div className={styles.vehiclePlate}>{vehicle.plate_number}{vehicle.vehicle_type ? ` · ${vehicle.vehicle_type}` : ''}</div>
-                                        <div className={styles.vehicleRider}>{vehicle.assigned_rider_name ? `Delivery Rider: ${vehicle.assigned_rider_name}` : 'No Delivery Rider assigned'}</div>
-                                    </div>
-                                    <div className={styles.statusStack}>
-                                        <Badge variant={isOverdue ? "destructive" : isWarning ? "warning" : "success"}>
-                                            {isOverdue ? "Overdue" : isWarning ? "Due Soon" : "Healthy"}
-                                        </Badge>
-                                        <Badge
-                                            variant={gpsBadge.variant}
-                                            title={vehicle.gps_provisioning_error ?? (vehicle.gps_provisioning_status === 'provisioned' ? 'Device registration succeeded; live GPS reception is not verified by this badge.' : undefined)}
+                            <article key={vehicle.id} className={styles.vehicleCard} aria-label={`Vehicle ${vehicle.plate_number}`}>
+                                <header className={styles.vehicleIdentity}>
+                                    <div className={styles.vehicleNameRow}>
+                                        <h3 className={styles.vehicleName}>{vehicleLabel(vehicle)}</h3>
+                                        <button
+                                            type="button"
+                                            className={styles.renameButton}
+                                            onClick={() => openRenameDialog(vehicle)}
+                                            aria-label={`Edit name of ${vehicle.plate_number}`}
+                                            title="Edit vehicle name"
                                         >
-                                            {gpsBadge.label}
-                                        </Badge>
+                                            <PenLine size={14} />
+                                        </button>
                                     </div>
-                                </div>
-
-                                {vehicle.gps_provisioning_status === 'provisioned' && (
-                                    <p className={styles.gpsMileageNote} role="status">
-                                        {vehicle.gps_mileage?.status === 'synced'
-                                            ? 'GPS mileage updates automatically while this screen is open.'
-                                            : vehicle.gps_mileage?.status === 'disabled'
-                                                ? 'Automatic GPS mileage is disabled. Use Update Odo to record a reading.'
-                                                : vehicle.gps_mileage?.status === 'unavailable'
-                                                    ? 'GPS mileage unavailable. Showing the last saved odometer; retrying automatically.'
-                                                    : vehicle.gps_mileage?.status === 'stale'
-                                                        ? 'No recent GPS reading. Showing the last saved odometer.'
-                                                        : vehicle.gps_mileage?.status === 'counter-reset'
-                                                            ? 'GPS distance counter reset. Odometer preserved; tracking resumes from the new baseline.'
-                                                            : 'Waiting for a new GPS distance reading. Odometer is preserved.'}
-                                        {vehicle.gps_mileage?.position_at && (
-                                            <span> Last GPS reading: {new Date(vehicle.gps_mileage.position_at).toLocaleString()}.</span>
-                                        )}
+                                    <p className={styles.vehicleDetails}>
+                                        {vehicle.display_name && vehicle.display_name !== vehicle.plate_number ? `${vehicle.plate_number} · ` : null}
+                                        {vehicle.vehicle_type ? `${vehicle.vehicle_type} · ` : null}{vehicle.assigned_rider_name ?? 'No Delivery Rider assigned'}
                                     </p>
-                                )}
-
-                                <div className={styles.metricsRow}>
-                                    <div className={styles.metricBox}>
-                                        <div className={styles.metricLabel}>Current Odometer</div>
-                                        <div className={styles.metricValueWrapper}>
-                                            <span className={styles.metricValue}>{vehicle.current_odometer_km.toLocaleString()}</span>
-                                            <span className={styles.metricUnit}>km</span>
-                                        </div>
-                                    </div>
-                                    <div className={styles.metricBox}>
-                                        <div className={styles.metricLabel}>Since Last PMS</div>
-                                        <div className={styles.metricValueWrapper}>
-                                            <span className={styles.metricValue} style={{ color: isOverdue ? "var(--error)" : isWarning ? "var(--warning)" : "inherit" }}>
-                                                {sinceLastPms.toLocaleString()}
-                                            </span>
-                                            <span className={styles.metricUnit}>km</span>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div className={styles.progressSection}>
-                                    <div className={styles.progressHeader}>
-                                        <span className={styles.progressText}>PMS Interval: {threshold.toLocaleString()} km</span>
-                                        <span className={styles.progressPercentage}>{Math.round(progressPercent)}%</span>
-                                    </div>
-                                    <Progress value={progressPercent} style={{ backgroundColor: "rgba(0,0,0,0.05)" }} className={isOverdue ? "progress-error" : isWarning ? "progress-warning" : ""} />
-                                </div>
+                                </header>
+                                <VehicleMileageSummary vehicle={vehicle} />
 
                                 <div className={styles.actionRow}>
-                                    <div style={{ display: 'flex', gap: '0.5rem', width: '100%' }}>
-                                        <Button
-                                            variant="outline"
-                                            size="sm"
-                                            style={{ flex: 1 }}
-                                            disabled={!isOverdue || resettingId === vehicle.id}
-                                            onClick={() => setResetTarget(vehicle)}
-                                        >
-                                            <Wrench size={16} style={{ marginRight: '0.3rem' }} /> {resettingId === vehicle.id ? 'Resetting…' : 'Reset PMS'}
+                                    <div className={styles.mileageActions}>
+                                        <Button variant="primary" size="sm" onClick={() => openUpdateDialog(vehicle)}>
+                                            <PenLine size={16} /> Update distance
                                         </Button>
-                                        <Button variant="primary" size="sm" style={{ flex: 1 }} onClick={() => openUpdateDialog(vehicle)}>
-                                            <PenLine size={16} style={{ marginRight: '0.3rem' }} /> Update Odo
-                                        </Button>
+                                        {vehicle.status === 'maintenance' && (
+                                            <Button variant="outline" size="sm" disabled={resettingId === vehicle.id} onClick={() => setResetTarget(vehicle)}>
+                                                <Wrench size={16} /> {resettingId === vehicle.id ? 'Saving…' : 'Mark service complete'}
+                                            </Button>
+                                        )}
                                     </div>
-                                    <Button variant="ghost" size="sm" style={{ width: '100%', marginTop: '0.4rem' }} onClick={() => void toggleHistory(vehicle.id)}>
-                                        <History size={14} style={{ marginRight: '0.3rem' }} /> {historyVehicleId === vehicle.id ? 'Hide History' : 'View History'}
+                                    <Button variant="ghost" size="sm" aria-expanded={historyOpen} aria-controls={`history-${vehicle.id}`} onClick={() => void toggleHistory(vehicle.id)}>
+                                        <History size={14} /> {historyOpen ? 'Hide staff readings' : 'View staff readings'}
                                     </Button>
                                     {vehicle.gps_provisioning_status === 'unconfigured' && (
                                         <Button
@@ -624,25 +544,27 @@ export default function VehicleManagementPage() {
                                             {retryingGpsId === vehicle.id ? 'Retrying…' : 'Retry SinoTrack Connection'}
                                         </Button>
                                     )}
-                                    {historyVehicleId === vehicle.id && (
-                                        <div className={styles.historyPanel}>
-                                            {historyLoading ? (
-                                                <div className={styles.historyEmpty}>Loading…</div>
-                                            ) : historyLogs.length === 0 ? (
-                                                <div className={styles.historyEmpty}>No mileage entries logged yet.</div>
-                                            ) : (
-                                                historyLogs.map(log => (
-                                                    <div key={log.id} className={styles.historyRow}>
-                                                        <span>{new Date(log.logged_at).toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' })}</span>
-                                                        <span>{log.odometer_km.toLocaleString()} km</span>
-                                                        <span>{log.fuel_liters != null ? `${log.fuel_liters} L` : '—'}</span>
-                                                    </div>
-                                                ))
-                                            )}
-                                        </div>
-                                    )}
+                                    <div id={`history-${vehicle.id}`} hidden={!historyOpen}>
+                                        {historyOpen ? (
+                                            <div className={styles.historyPanel}>
+                                                {historyLoading ? (
+                                                    <div className={styles.historyEmpty}>Loading…</div>
+                                                ) : historyLogs.length === 0 ? (
+                                                    <div className={styles.historyEmpty}>No readings added by staff yet.</div>
+                                                ) : (
+                                                    historyLogs.map(log => (
+                                                        <div key={log.id} className={styles.historyRow}>
+                                                            <span>{new Date(log.logged_at).toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' })}</span>
+                                                            <span>{log.odometer_km.toLocaleString()} km</span>
+                                                            <span>{log.fuel_liters != null ? `${log.fuel_liters} L` : '—'}</span>
+                                                        </div>
+                                                    ))
+                                                )}
+                                            </div>
+                                        ) : null}
+                                    </div>
                                 </div>
-                            </div>
+                            </article>
                         );
                     })}
                 </section>
@@ -650,16 +572,17 @@ export default function VehicleManagementPage() {
 
             {updateDialogVehicleId && (
                 <div className={styles.dialogOverlay}>
-                    <div className={styles.dialogContent}>
+                    <div className={styles.dialogContent} role="dialog" aria-modal="true" aria-labelledby="record-mileage-title">
                         <div className={styles.dialogHeader}>
-                            <h2 className={styles.dialogTitle}>Update Odometer</h2>
-                            <p className={styles.dialogDescription}>Log the latest odometer reading and, optionally, fuel added. This updates the distance since the last PMS.</p>
+                            <h2 id="record-mileage-title" className={styles.dialogTitle}>Update distance</h2>
+                            <p className={styles.dialogDescription}>Use the total kilometres shown on the vehicle’s dashboard. You can also add how much fuel was put in.</p>
                         </div>
 
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                             <div>
-                                <label style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--foreground)', display: 'block', marginBottom: '0.35rem' }}>New Reading (km)</label>
+                                <label className={styles.fieldLabel} htmlFor="mileage-reading">Total distance (km)</label>
                                 <Input
+                                    id="mileage-reading"
                                     type="number"
                                     value={odometerValue}
                                     onChange={(e) => setOdometerValue(e.target.value)}
@@ -668,12 +591,12 @@ export default function VehicleManagementPage() {
                                 />
                             </div>
                             <div>
-                                <label style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--foreground)', display: 'block', marginBottom: '0.35rem' }}>Fuel Added (L) — optional</label>
-                                <Input type="number" value={fuelValue} onChange={(e) => setFuelValue(e.target.value)} min={0} />
+                                <label className={styles.fieldLabel} htmlFor="mileage-fuel">Fuel added (L, optional)</label>
+                                <Input id="mileage-fuel" type="number" value={fuelValue} onChange={(e) => setFuelValue(e.target.value)} min={0} />
                             </div>
                             <div>
-                                <label style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--foreground)', display: 'block', marginBottom: '0.35rem' }}>Date</label>
-                                <Input type="date" value={dateValue} onChange={(e) => setDateValue(e.target.value)} max={todayIso()} />
+                                <label className={styles.fieldLabel} htmlFor="mileage-date">Date</label>
+                                <Input id="mileage-date" type="date" value={dateValue} onChange={(e) => setDateValue(e.target.value)} max={todayIso()} />
                             </div>
                             {dialogError && <div className={styles.fieldError}>{dialogError}</div>}
                         </div>
@@ -681,7 +604,7 @@ export default function VehicleManagementPage() {
                         <div className={styles.dialogFooter}>
                             <Button variant="ghost" onClick={closeUpdateDialog} disabled={saving}>Cancel</Button>
                             <Button variant="primary" onClick={() => void handleSaveOdometer()} disabled={saving}>
-                                {saving ? 'Saving…' : 'Save Record'}
+                                {saving ? 'Saving…' : 'Save reading'}
                             </Button>
                         </div>
                     </div>
@@ -724,18 +647,17 @@ export default function VehicleManagementPage() {
                                     <div className={styles.fieldHint}>A friendly label to tell motorcycles apart. The plate number stays the official identifier.</div>
                                 </div>
                                 <div>
-                                    <label className={styles.fieldLabel} htmlFor="vehicle-odometer">Current Odometer (km)</label>
+                                    <label className={styles.fieldLabel} htmlFor="vehicle-odometer">Total distance (km)</label>
                                     <Input
                                         id="vehicle-odometer"
                                         type="number"
                                         required
-                                        placeholder="Enter the actual odometer reading"
                                         value={initialOdometerKm}
                                         onChange={(event) => setInitialOdometerKm(event.target.value)}
                                         min={0}
                                         step={1}
                                     />
-                                    <div className={styles.fieldHint}>Enter the vehicle’s actual reading. This becomes the starting PMS baseline.</div>
+                                    <div className={styles.fieldHint}>Use the total kilometres shown on the vehicle’s dashboard. The distance to the next service starts from this number.</div>
                                 </div>
                                 {registrationError && <div className={styles.fieldError} role="alert">{registrationError}</div>}
                             </div>

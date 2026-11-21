@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import ReactDOM from 'react-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
     AlertTriangle,
     CalendarDays,
@@ -200,6 +200,7 @@ interface OrdersProps {
 }
 
 export default function Orders({ initialSearch }: OrdersProps = {}) {
+    const queryClient = useQueryClient();
     const [mounted, setMounted] = useState(false);
     useEffect(() => { setMounted(true); }, []);
 
@@ -762,6 +763,7 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                 return;
             }
             toast.success('Service request updated.');
+            void queryClient.invalidateQueries({ queryKey: ['stock-levels'] });
             closeEdit();
             await loadRequests();
         } catch (err) {
@@ -817,6 +819,7 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                 return;
             }
             toast.success('Service request cancelled.');
+            void queryClient.invalidateQueries({ queryKey: ['stock-levels'] });
             closeCancel();
             await loadRequests();
         } catch (err) {
@@ -1043,6 +1046,7 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
             const data = await res.json();
             if (!res.ok) throw new Error(apiErrorMessage(data, 'Failed to create service request'));
             toast.success('Walk-in/phone service request created.');
+            void queryClient.invalidateQueries({ queryKey: ['stock-levels'] });
             resetIntake();
             if (!startAnotherRef.current) setIsCreateFormVisible(false);
             await loadRequests();

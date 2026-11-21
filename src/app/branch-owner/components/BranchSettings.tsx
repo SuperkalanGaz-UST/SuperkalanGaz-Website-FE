@@ -5,6 +5,7 @@ import { Building2, UserRound } from 'lucide-react';
 import { Header } from './Header';
 import { BranchConfigurationSettings } from './settings/BranchConfigurationSettings';
 import { BranchOwnerAccountSettings } from './settings/BranchOwnerAccountSettings';
+import { useBranch } from '../contexts/BranchContext';
 
 type SettingsTab = 'account' | 'branch';
 
@@ -16,6 +17,7 @@ const tabs: { id: SettingsTab; label: string; icon: typeof UserRound }[] = [
 /** Branch Owner settings are split between personal identity and branch-scoped configuration. */
 export function BranchSettings() {
   const [activeTab, setActiveTab] = useState<SettingsTab>('account');
+  const { selectedBranchId } = useBranch();
 
   return (
     <div className="flex-1 overflow-y-auto bg-[#F8FAFC]">
@@ -54,7 +56,7 @@ export function BranchSettings() {
         {activeTab === 'account' ? (
           <BranchOwnerAccountSettings />
         ) : (
-          <BranchConfigurationSettings />
+          <BranchConfigurationSettings key={selectedBranchId ?? 'no-branch'} />
         )}
       </main>
     </div>

@@ -11,6 +11,7 @@ import { fetchJson } from '../../lib/api';
 import { DeliveryRiderAccess } from './DeliveryRiderAccess';
 import { VehicleOverview } from './VehicleOverview';
 import { FleetTabs, type FleetTab } from '../../components/FleetTabs';
+import { BranchOperatingHours } from '../../components/BranchOperatingHours';
 import VehicleRouteHistory from '../../branch-manager/screens/fleet/VehicleRouteHistory';
 import { vehicleFixTime, type VehicleLocationsResponse } from '../../branch-manager/screens/fleet/vehicleLocations';
 
@@ -290,11 +291,12 @@ export function FleetOverview({ vehiclesActive, onNavigate }: {
 
         <div className="mb-8">
           <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <h3 className="font-semibold text-gray-900 mb-4">Curfew & Active Alerts</h3>
+            <h3 className="font-semibold text-gray-900 mb-4">Operating Hours &amp; Geofence Alerts</h3>
             <div className="mb-4 pb-4 border-b border-gray-200">
               <div className="text-xs text-gray-500 mb-2">Branch Operating Hours</div>
-              <div className="text-sm text-gray-500 font-medium">Not configured</div>
-              <div className="text-xs text-gray-500 mt-1">Curfew settings are not available for this branch.</div>
+              <div className="text-sm text-gray-700 font-medium">
+                {selectedBranchId && <BranchOperatingHours branchId={selectedBranchId} />}
+              </div>
             </div>
             <div>
               <div className="text-xs text-gray-500 mb-3">Active Geofence Alerts</div>
