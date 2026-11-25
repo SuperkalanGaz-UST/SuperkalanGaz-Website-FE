@@ -130,7 +130,7 @@ test('Franchise Administrator navigation and governance fixes', { timeout: 18000
     await page.waitForURL(/franchise-registry\?revise=owner-1/);
     await page.getByRole('heading', { name: 'Revise Branch Owner reassignment' }).waitFor();
     await page.getByText('Confirm the handover date').waitFor();
-    assert.equal(await page.getByLabel('Proposed Branch Owner').inputValue(), proposed.id);
+    assert.equal((await page.getByRole('combobox', { name: 'Proposed Branch Owner' }).innerText()).trim(), proposed.display_name);
     writes.length = 0;
     await page.getByRole('button', { name: 'Resubmit request' }).click();
     await page.getByRole('heading', { name: 'Revise Branch Owner reassignment' }).waitFor({ state: 'hidden' });

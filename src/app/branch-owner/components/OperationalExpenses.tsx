@@ -25,6 +25,8 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { fetchExpenses } from '../../lib/expenses';
+import { FranchiseDropdown } from '../../components/FranchiseDropdown';
+import { buildOwnerExpenseTrend } from '../../lib/owner-expense-trend';
 import {
   expenseMonth,
   fetchSalaries,
@@ -100,6 +102,9 @@ function ExpenseWorkspace({ branchId }: { branchId: string }) {
           return { key, expenses, salaries };
         }),
       ),
+    refetchInterval: 30_000,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
     staleTime: 30_000,
   });
   const months = useMemo(() => query.data ?? [], [query.data]);
@@ -139,59 +144,10 @@ function ExpenseWorkspace({ branchId }: { branchId: string }) {
       categories: ['Facility Costs'],
     },
   ];
-  const trend = useMemo(() => {
-    const buckets = new Map<
-      string,
-      { label: string; operating: number; salary: number }
-    >();
-    const bucketKey = (date: string) => {
-      if (granularity === 'month') return date.slice(0, 7);
-      if (granularity === 'day') return date;
-      const d = new Date(`${date}T00:00:00Z`);
-      d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));
-      return d.toISOString().slice(0, 10);
-    };
-    const ensure = (date: string) => {
-      const key = bucketKey(date);
-      if (!buckets.has(key))
-        buckets.set(key, {
-          label:
-            granularity === 'month'
-              ? monthLabel(key, true)
-              : new Intl.DateTimeFormat('en-PH', {
-                  timeZone: 'UTC',
-                  month: 'short',
-                  day: 'numeric',
-                }).format(new Date(`${key}T00:00:00Z`)),
-          operating: 0,
-          salary: 0,
-        });
-      return buckets.get(key)!;
-    };
-    if (granularity === 'month')
-      descriptors.forEach((key) => ensure(`${key}-01`));
-    if (granularity === 'day') {
-      const [year, m] = month.split('-').map(Number);
-      for (
-        let day = 1;
-        day <= new Date(Date.UTC(year, m, 0)).getUTCDate();
-        day++
-      )
-        ensure(`${month}-${String(day).padStart(2, '0')}`);
-    }
-    for (const period of months) {
-      if (granularity === 'day' && period.key !== month) continue;
-      for (const row of period.expenses)
-        ensure(row.expense_date)[
-          row.category === 'Salary & Wages' ? 'salary' : 'operating'
-        ] += Number(row.amount);
-      for (const row of period.salaries)
-        ensure(row.periodEnd).salary += row.total;
-    }
-    return [...buckets.entries()]
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([, entry]) => entry);
-  }, [months, descriptors, granularity, month]);
+  const trend = useMemo(
+    () => buildOwnerExpenseTrend(months, descriptors, month, granularity),
+    [months, descriptors, granularity, month],
+  );
 
   return (
     <div className={styles.workspace}>
@@ -218,24 +174,21 @@ function ExpenseWorkspace({ branchId }: { branchId: string }) {
             <LockKeyhole size={16} aria-hidden="true" /> Salaries & Overtime
           </button>
         </div>
-        <label className={styles.monthPicker}>
+        <div className={styles.monthPicker}>
           <span className="sr-only">Expense month</span>
           <CalendarDays size={16} aria-hidden="true" />
-          <select
+          <FranchiseDropdown
             aria-label="Expense month"
             value={month}
-            onChange={(event) => {
-              setMonth(event.target.value);
+            onChange={(value) => {
+              setMonth(value);
               setRecording(false);
             }}
-          >
-            {monthOptions.map((key) => (
-              <option key={key} value={key}>
-                {monthLabel(key)}
-              </option>
-            ))}
-          </select>
-        </label>
+            options={monthOptions.map((key) => ({ value: key, label: monthLabel(key) }))}
+            wrapperClassName="w-[190px] shrink-0"
+            className="h-10"
+          />
+        </div>
       </div>
       {query.isError ? (
         <div className={styles.error} role="alert">
@@ -320,7 +273,9 @@ function ExpenseWorkspace({ branchId }: { branchId: string }) {
                   <p>
                     {granularity === 'day'
                       ? monthLabel(month)
-                      : 'Last six months'}
+                      : granularity === 'week'
+                        ? `Weeks in ${monthLabel(month)}`
+                        : 'Last six months'}
                   </p>
                 </div>
                 <div

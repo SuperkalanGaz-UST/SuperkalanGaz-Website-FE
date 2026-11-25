@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Loader2, RefreshCw, Search } from 'lucide-react';
 import { DeliveryProofViewer } from '../../components/DeliveryProofViewer';
+import { FranchiseDropdown } from '../../components/FranchiseDropdown';
 import { fetchJson } from '../../lib/api';
 import { useBranch } from '../contexts/BranchContext';
 import { Header } from './Header';
@@ -25,6 +26,7 @@ function formatDeliveredAt(value: string | null): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return '—';
   return new Intl.DateTimeFormat('en-PH', {
+    timeZone: 'Asia/Manila',
     month: 'short',
     day: 'numeric',
     year: 'numeric',
@@ -46,6 +48,8 @@ export function DeliveryProofRecordsFull({ onBack }: { onBack: () => void }) {
     queryFn: () => fetchJson<{ serviceRequests: DeliveryRecord[] }>(`/service-requests/delivery-records?branchId=${encodeURIComponent(selectedBranchId!)}`),
     enabled: !!selectedBranchId,
     staleTime: 30_000,
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: true,
   });
 
   const records = recordsData?.serviceRequests ?? [];
@@ -115,16 +119,14 @@ export function DeliveryProofRecordsFull({ onBack }: { onBack: () => void }) {
                 className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-[#007BC1]"
               />
             </div>
-            <select
+            <FranchiseDropdown
+              aria-label="Filter by cylinder size"
               value={filterSize}
-              onChange={(e) => { setFilterSize(e.target.value); setCurrentPage(1); }}
-              className="text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-[#007BC1]"
-            >
-              <option value="all">All Sizes</option>
-              {uniqueSizes.map((size) => (
-                <option key={size} value={size}>{size}</option>
-              ))}
-            </select>
+              onChange={(value) => { setFilterSize(value); setCurrentPage(1); }}
+              options={[{ value: 'all', label: 'All Sizes' }, ...uniqueSizes.map(size => ({ value: size, label: size }))]}
+              wrapperClassName="w-[150px] max-w-full shrink-0"
+              className="h-10"
+            />
             {hasFilters && (
               <button
                 onClick={clearFilters}

@@ -258,21 +258,23 @@ function InventoryList({
 }) {
   return (
     <section className={`${styles.list} overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm`}>
-      <div className={`${styles.listHeader} flex flex-col gap-4 border-b border-gray-100 py-5 md:flex-row md:items-center md:justify-between`}>
-        <div>
+      <div className={`${styles.listHeader} border-b border-gray-100`}>
+        <div className={styles.titleRow}>
           <h2 className="text-lg font-semibold text-gray-950">Current Inventory</h2>
-          <p className="mt-1 text-sm text-gray-500">
-            Read-only stock visibility for this branch, including configured reorder thresholds.
-          </p>
           <button
             type="button"
             onClick={() => window.dispatchEvent(new CustomEvent('navigate', { detail: 'reorder-log-full' }))}
-            className="mt-2 text-sm font-semibold text-[#007BC1] hover:text-[#005a8f]"
+            className="text-xs font-semibold text-[#007BC1] hover:text-[#005a8f]"
           >
             View reorder request log
           </button>
         </div>
-        <CategoryFilter activeCategory={activeCategory} onChange={onChangeCategory} />
+        <div className={styles.detailsRow}>
+          <p className="text-sm text-gray-500">
+            Read-only stock visibility for this branch, including configured reorder thresholds.
+          </p>
+          <CategoryFilter activeCategory={activeCategory} onChange={onChangeCategory} />
+        </div>
       </div>
 
       <div className={`${styles.columnHead} bg-gray-50 text-xs font-semibold uppercase tracking-wide text-gray-500`}>

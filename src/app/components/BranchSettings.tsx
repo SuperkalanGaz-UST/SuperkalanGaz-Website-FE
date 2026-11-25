@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Building2, PowerOff } from "lucide-react";
 import { Header } from "./Header";
-import { Select } from "./Select";
+import { FranchiseDropdown as Select } from "./FranchiseDropdown";
 import { RegisterBranchModal } from "./RegisterBranchModal";
 import { EditBranchModal } from "./EditBranchModal";
 import { apiFetch, apiErrorMessage } from "../lib/api";
@@ -367,6 +367,7 @@ export function BranchSettings() {
                 SLA Breach Notification Method
               </label>
               <Select
+                aria-label="SLA Breach Notification Method"
                 value={notificationMethod}
                 onChange={setNotificationMethod}
                 options={[

@@ -318,7 +318,9 @@ function CylinderPointRates() {
             {CYLINDER_SIZES.map((size) => (
               <label key={size} className="grid gap-3 rounded-xl border border-gray-100 bg-white p-4 text-sm font-semibold text-gray-900">
                 <span className="grid h-28 place-items-center rounded-lg bg-gray-50">
-                  <Image src={`/catalog/${size}.png`} alt="" width={96} height={104} className="h-24 w-24 object-contain" />
+                  <span className="relative block h-24 w-24">
+                    <Image src={`/catalog/${size}.png`} alt="" fill sizes="96px" className="object-contain" />
+                  </span>
                 </span>
                 <span>{size.replace('kg', ' kg')} cylinder</span>
                 <span className="flex items-center gap-2">

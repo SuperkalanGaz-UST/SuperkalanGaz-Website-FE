@@ -54,6 +54,41 @@ function initials(firstName: string, lastName: string): string {
 const fieldClassName =
   'h-12 w-full rounded-lg border border-gray-300 bg-white px-3.5 text-sm text-gray-900 outline-none transition focus:border-[#007BC1] focus:ring-2 focus:ring-[#007BC1]/15 disabled:cursor-not-allowed disabled:bg-gray-50 disabled:text-gray-500';
 
+function PasswordField({ id, label, value, onChange, autoComplete, autoFocus = false }: {
+  id: string;
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  autoComplete: 'current-password' | 'new-password';
+  autoFocus?: boolean;
+}) {
+  const [visible, setVisible] = useState(false);
+  return (
+    <span className="relative mt-2 block">
+      <input
+        id={id}
+        type={visible ? 'text' : 'password'}
+        value={value}
+        onChange={event => onChange(event.target.value)}
+        className={`${fieldClassName} pr-12 [&::-ms-reveal]:hidden [&::-ms-clear]:hidden`}
+        autoComplete={autoComplete}
+        autoFocus={autoFocus}
+      />
+      <button
+        type="button"
+        onMouseDown={event => event.preventDefault()}
+        onClick={() => setVisible(current => !current)}
+        aria-label={`${visible ? 'Hide' : 'Show'} ${label.toLowerCase()}`}
+        aria-controls={id}
+        aria-pressed={visible}
+        className="absolute inset-y-0 right-0 flex w-12 cursor-pointer items-center justify-center rounded-r-lg text-gray-500 hover:text-gray-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#007BC1]"
+      >
+        {visible ? <Eye aria-hidden="true" className="h-4 w-4" /> : <EyeOff aria-hidden="true" className="h-4 w-4" />}
+      </button>
+    </span>
+  );
+}
+
 /** Franchise Administrator self-service profile. All persistence goes through the NestJS API. */
 export function FranchiseAdminSettings() {
   const account = useAccount();
@@ -74,7 +109,6 @@ export function FranchiseAdminSettings() {
   const [currentPassword, setCurrentPassword] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [passwordSaving, setPasswordSaving] = useState(false);
 
@@ -178,7 +212,6 @@ export function FranchiseAdminSettings() {
     setPassword('');
     setConfirmPassword('');
     setPasswordError(null);
-    setShowPassword(false);
   };
 
   const handlePasswordSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -404,46 +437,31 @@ export function FranchiseAdminSettings() {
             <p className="mt-1 text-sm text-gray-500">Use at least 8 characters.</p>
 
             <form onSubmit={handlePasswordSubmit} className="mt-5">
-              <label className="block text-sm font-medium text-gray-700">
+              <label htmlFor="settings-current-password" className="block text-sm font-medium text-gray-700">
                 Current password
-                <input
-                  type={showPassword ? 'text' : 'password'}
+                <PasswordField
+                  id="settings-current-password"
+                  label="Current password"
                   value={currentPassword}
-                  onChange={(event) => setCurrentPassword(event.target.value)}
-                  className={`${fieldClassName} mt-2`}
+                  onChange={setCurrentPassword}
                   autoComplete="current-password"
                   autoFocus
                 />
               </label>
 
-              <label className="mt-4 block text-sm font-medium text-gray-700">
+              <label htmlFor="settings-new-password" className="mt-4 block text-sm font-medium text-gray-700">
                 New password
-                <span className="relative mt-2 block">
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    value={password}
-                    onChange={(event) => setPassword(event.target.value)}
-                    className={`${fieldClassName} pr-11`}
-                    autoComplete="new-password"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword((visible) => !visible)}
-                    className="absolute right-3 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center text-gray-400 hover:text-gray-600"
-                    aria-label={showPassword ? 'Hide password' : 'Show password'}
-                  >
-                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </button>
-                </span>
+                <PasswordField id="settings-new-password" label="New password" value={password}
+                  onChange={setPassword} autoComplete="new-password" />
               </label>
 
-              <label className="mt-4 block text-sm font-medium text-gray-700">
+              <label htmlFor="settings-confirm-password" className="mt-4 block text-sm font-medium text-gray-700">
                 Confirm new password
-                <input
-                  type={showPassword ? 'text' : 'password'}
+                <PasswordField
+                  id="settings-confirm-password"
+                  label="Confirm new password"
                   value={confirmPassword}
-                  onChange={(event) => setConfirmPassword(event.target.value)}
-                  className={`${fieldClassName} mt-2`}
+                  onChange={setConfirmPassword}
                   autoComplete="new-password"
                 />
               </label>

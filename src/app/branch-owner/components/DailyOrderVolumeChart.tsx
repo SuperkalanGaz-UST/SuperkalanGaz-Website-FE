@@ -16,7 +16,7 @@ export function DailyOrderVolumeChart({ dailyData, hourlyData }: DailyOrderVolum
     <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
       <div className="flex items-center justify-between mb-4">
         <h3 className="font-semibold text-gray-900">
-          {isDay ? 'Daily Order Volume' : 'Hourly Order Volume (Today)'}
+          {isDay ? 'Daily Order Volume (Last 7 Days)' : 'Hourly Order Volume (Today)'}
         </h3>
         <div className="flex rounded-lg border border-gray-200 p-0.5">
           <button

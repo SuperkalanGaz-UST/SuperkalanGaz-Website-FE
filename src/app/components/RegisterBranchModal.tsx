@@ -131,7 +131,7 @@ export function RegisterBranchModal({ isOpen, onClose }: RegisterBranchModalProp
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
-  // Set once the Email field is blurred so we don't flag an untouched field.
+  // Validate after the user edits or leaves the field, keeping untouched fields quiet.
   const [emailTouched, setEmailTouched] = useState(false);
   // Holds the editable national digits as the display string "9XX XXX XXXX";
   // the +63 prefix lives in the UI, never in this value.
@@ -638,7 +638,10 @@ export function RegisterBranchModal({ isOpen, onClose }: RegisterBranchModalProp
                         type="email"
                         aria-label="Owner email address"
                         value={email}
-                        onChange={(e) => setEmail(e.target.value)}
+                        onChange={(e) => {
+                          setEmail(e.target.value);
+                          setEmailTouched(true);
+                        }}
                         // Canonicalize (trim + lowercase) as the value leaves the
                         // field, then surface any format error inline.
                         onBlur={() => {
@@ -646,6 +649,7 @@ export function RegisterBranchModal({ isOpen, onClose }: RegisterBranchModalProp
                           setEmailTouched(true);
                         }}
                         aria-invalid={showEmailError}
+                        aria-describedby={showEmailError ? 'owner-email-error' : undefined}
                         className={`w-full h-[34px] px-3 text-[13px] border rounded-lg bg-[#F7F7F6] outline-none ${
                           showEmailError
                             ? 'border-[#C0392B] focus:border-[#C0392B]'
@@ -653,7 +657,7 @@ export function RegisterBranchModal({ isOpen, onClose }: RegisterBranchModalProp
                         }`}
                       />
                       {showEmailError && (
-                        <p className="mt-1 text-[11px] text-[#C0392B]">
+                        <p id="owner-email-error" role="alert" className="mt-1 text-[11px] text-[#C0392B]">
                           Enter a valid email address.
                         </p>
                       )}

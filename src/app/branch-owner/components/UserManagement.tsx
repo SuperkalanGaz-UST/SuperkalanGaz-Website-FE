@@ -1,6 +1,7 @@
 import { useState, useCallback, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Header } from './Header';
+import { FranchiseDropdown } from '../../components/FranchiseDropdown';
 import {
   MailPlus,
   Pencil,
@@ -585,32 +586,12 @@ export function UserManagement() {
 
             <label className="block">
               <span className="mb-1.5 block text-xs font-medium text-gray-600">Role</span>
-              <select
-                value={roleFilter}
-                onChange={(event) => setRoleFilter(event.target.value as RoleFilter)}
-                className="h-10 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-700 outline-none transition focus:border-[#007BC1] focus:ring-2 focus:ring-blue-100"
-              >
-                <option value="all">All roles</option>
-                <option value="branch-manager">Branch Manager</option>
-                <option value="driver">Delivery Rider</option>
-              </select>
+              <FranchiseDropdown aria-label="Filter user role" value={roleFilter} onChange={value => setRoleFilter(value as RoleFilter)} className="h-10 px-3" matchTriggerWidth placeholder="Choose a branch" options={[{"value":"all","label":"All roles"},{"value":"branch-manager","label":"Branch Manager"},{"value":"driver","label":"Delivery Rider"}]} />
             </label>
 
             <label className="block">
               <span className="mb-1.5 block text-xs font-medium text-gray-600">Status</span>
-              <select
-                value={statusFilter}
-                onChange={(event) => setStatusFilter(event.target.value as StatusFilter)}
-                className="h-10 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-700 outline-none transition focus:border-[#007BC1] focus:ring-2 focus:ring-blue-100"
-              >
-                <option value="all">All statuses</option>
-                <option value="Active">Active</option>
-                <option value="Inactive">Inactive</option>
-                <option value="Pending">Invitation pending</option>
-                <option value="Expired">Invitation expired</option>
-                <option value="Revoked">Invitation revoked</option>
-                <option value="Accepted">Invitation accepted</option>
-              </select>
+              <FranchiseDropdown aria-label="Filter user status" value={statusFilter} onChange={value => setStatusFilter(value as StatusFilter)} className="h-10 px-3" matchTriggerWidth placeholder="Choose a branch" options={[{"value":"all","label":"All statuses"},{"value":"Active","label":"Active"},{"value":"Inactive","label":"Inactive"},{"value":"Pending","label":"Invitation pending"},{"value":"Expired","label":"Invitation expired"},{"value":"Revoked","label":"Invitation revoked"},{"value":"Accepted","label":"Invitation accepted"}]} />
             </label>
 
             <button
@@ -904,21 +885,7 @@ export function UserManagement() {
                     <span className="mb-1.5 block text-sm text-gray-700">
                       Authorized branch <span className="text-red-500">*</span>
                     </span>
-                    <select
-                      required
-                      value={inviteForm.branchId}
-                      onChange={(event) =>
-                        setInviteForm({ ...inviteForm, branchId: event.target.value })
-                      }
-                      className="h-11 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm outline-none focus:border-transparent focus:ring-2 focus:ring-[#007BC1]"
-                    >
-                      <option value="" disabled>Choose a branch</option>
-                      {availableBranchOptions.map((branch) => (
-                        <option key={branch.id} value={branch.id}>
-                          {branch.name}
-                        </option>
-                      ))}
-                    </select>
+                    <FranchiseDropdown aria-label="Authorized branch" value={inviteForm.branchId} onChange={branchId => setInviteForm({ ...inviteForm, branchId })} className="h-11 px-3" matchTriggerWidth required placeholder="Choose a branch" options={availableBranchOptions.map(branch => ({ value: branch.id, label: branch.name }))} />
                   </label>
                 ) : (
                   <div>
@@ -1052,16 +1019,7 @@ export function UserManagement() {
                     <label className="block text-sm text-gray-700 mb-1.5">
                       Branch <span className="text-red-500">*</span>
                     </label>
-                    <select
-                      value={formData.branchId}
-                      onChange={(e) => setFormData({ ...formData, branchId: e.target.value })}
-                      className="w-full h-[44px] px-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#007BC1] focus:border-transparent outline-none text-sm bg-white"
-                    >
-                      <option value="" disabled>Choose a branch</option>
-                      {availableBranchOptions.map((branch) => (
-                        <option key={branch.id} value={branch.id}>{branch.name}</option>
-                      ))}
-                    </select>
+                    <FranchiseDropdown aria-label="Branch" value={formData.branchId} onChange={branchId => setFormData({ ...formData, branchId })} className="h-11 px-3" matchTriggerWidth placeholder="Choose a branch" options={availableBranchOptions.map(branch => ({ value: branch.id, label: branch.name }))} />
                   </div>
                 )}
 

@@ -228,13 +228,16 @@ export function BranchConfigurationSettings() {
                 {row.product_name}
                 <span className="mt-2 flex overflow-hidden rounded-lg border border-gray-300 bg-white transition focus-within:border-[#007BC1] focus-within:ring-2 focus-within:ring-[#007BC1]/15">
                   <input
-                    type="number"
-                    min="0"
-                    step="1"
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
                     value={thresholds[row.product_id] ?? ''}
-                    onChange={(event) =>
-                      setThresholds((current) => ({ ...current, [row.product_id]: event.target.value }))
-                    }
+                    onChange={(event) => {
+                      const value = event.target.value;
+                      if (/^[0-9]*$/.test(value)) {
+                        setThresholds((current) => ({ ...current, [row.product_id]: value }));
+                      }
+                    }}
                     className="h-10 min-w-0 flex-1 bg-transparent px-3 text-sm text-gray-900 outline-none"
                   />
                   <span className="flex items-center border-l border-gray-200 bg-gray-50 px-3 text-xs font-normal text-gray-500">units</span>

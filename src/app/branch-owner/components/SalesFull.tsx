@@ -1,9 +1,9 @@
 import { useState, useMemo, useEffect } from 'react';
 import { Header } from './Header';
 import { Pagination } from './Pagination';
-import { Select } from './Select';
 import { ArrowLeft, Search } from 'lucide-react';
 import { apiFetch } from '../../lib/api';
+import { FranchiseDropdown } from '../../components/FranchiseDropdown';
 import { useBranch } from '../contexts/BranchContext';
 
 type SaleRow = { id: string; date: string; receipt: string; customer: string; orders: number; spent: number; paid: string };
@@ -105,7 +105,8 @@ export function SalesFull({ onBack }: { onBack: () => void }) {
                 className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#007BC1] focus:border-transparent outline-none text-sm"
               />
             </div>
-            <Select
+            <FranchiseDropdown
+              aria-label="Filter by payment status"
               value={filterStatus}
               onChange={(value) => { setFilterStatus(value); setCurrentPage(1); }}
               options={[
@@ -113,6 +114,8 @@ export function SalesFull({ onBack }: { onBack: () => void }) {
                 { value: 'paid', label: 'Paid' },
                 { value: 'unpaid', label: 'Unpaid' }
               ]}
+              wrapperClassName="w-[150px] shrink-0"
+              className="h-10"
             />
             {hasActiveFilters && (
               <button

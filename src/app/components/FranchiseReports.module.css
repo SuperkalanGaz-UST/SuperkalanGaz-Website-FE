@@ -95,6 +95,27 @@
 .search input::placeholder { color: #94a3b8; }
 .search > svg { flex-shrink: 0; }
 
+.reportSelect {
+  display: inline-grid;
+  grid-template-areas: 'control';
+  min-width: 160px;
+  max-width: 100%;
+  vertical-align: middle;
+}
+
+.reportSelectSizer {
+  grid-area: control;
+  visibility: hidden;
+  height: 0;
+  padding: 0 34px 0 36px;
+  font-size: 13px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.reportSelectControl { grid-area: control; }
+.reportSelectTrigger { height: 42px; font-size: 13px; }
+
 .selectControl {
   position: relative;
   display: inline-flex;
@@ -167,6 +188,7 @@
 :global(.bm-root) .managerKpiLabelWrap,
 :global(.bm-root) .managerKpiValueGap { transform: translateY(-4px); }
 .metricPrimary { background: #007bc1; border-color: #007bc1; }
+.metricPrimary .metricValue { color: white; }
 .metricPrimary .metricTitle, .metricPrimary .metricDescription { color: rgb(255 255 255 / 80%); }
 .metricPrimary .metricIcon { color: white; background: rgb(255 255 255 / 15%); }
 

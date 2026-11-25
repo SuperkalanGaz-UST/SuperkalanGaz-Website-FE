@@ -40,6 +40,7 @@ import { apiFetch, apiErrorMessage, fetchJson } from '../../../lib/api';
 import { DeliveryProofViewer } from '../../../components/DeliveryProofViewer';
 import { DeliveryRiderLocations } from './DeliveryRiderLocations';
 import { operationalLocationLabel, type DispatchRider } from '../../../lib/deliveryRiderLocation';
+import { usePortalContainer } from '../../../hooks/usePortalContainer';
 import { CYLINDER_SIZES, fetchAssignedLpgPrices, formatPeso, LpgPrice } from '../../../lib/pricing';
 import { formatPHMobile, normalizePhMobile, toE164PhMobile } from '../../../lib/phMobile';
 import { serviceRequestItems, type ServiceRequestCylinderFields, type ServiceRequestItem } from '../../../lib/serviceRequestItems';
@@ -281,6 +282,7 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
     // Inline "create new customer" sub-form — now surfaced as a modal overlay.
     const [showCreateCustomer, setShowCreateCustomer] = useState(false);
     const [showNewCustomerModal, setShowNewCustomerModal] = useState(false);
+    const portalContainer = usePortalContainer(showNewCustomerModal);
     const [newCustomer, setNewCustomer] = useState<{
         name: string;
         contactNumber: string;
@@ -1999,7 +2001,7 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                 onRefresh={() => { void loadRoster(); }}
             />
             {/* ── New Customer Modal ── portal so it escapes overflow:hidden on .card */}
-            {mounted && showNewCustomerModal && ReactDOM.createPortal(
+            {mounted && showNewCustomerModal && portalContainer && ReactDOM.createPortal(
                 <div
                     style={{
                         position: 'fixed', inset: 0, zIndex: 9999,
@@ -2076,7 +2078,7 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                         </div>
                     </div>
                 </div>,
-                document.body
+                portalContainer
             )}
             {deliverTarget && (
                 <ConfirmActionDialog

@@ -1,7 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Image as ImageIcon, Loader2, X } from 'lucide-react';
+import { usePortalContainer } from '../hooks/usePortalContainer';
 import { apiErrorMessage, apiFetch } from '../lib/api';
 
 interface DeliveryProofViewerProps {
@@ -24,6 +26,7 @@ export function DeliveryProofViewer({
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const portalContainer = usePortalContainer(open);
 
   useEffect(() => {
     return () => {
@@ -74,7 +77,7 @@ export function DeliveryProofViewer({
         View Proof
       </button>
 
-      {open && (
+      {open && portalContainer && createPortal(
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" role="presentation">
           <div
             className="relative flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-xl bg-white shadow-2xl"
@@ -120,7 +123,8 @@ export function DeliveryProofViewer({
               )}
             </div>
           </div>
-        </div>
+        </div>,
+        portalContainer,
       )}
     </>
   );

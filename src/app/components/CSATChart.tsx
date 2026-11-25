@@ -57,11 +57,15 @@ export function CSATChart({ branches, series, isLoading, activeBranches }: Props
 
   // ── Chart data ───────────────
   const chartData = useMemo(() => {
-    const monthSet = new Set(series.map((s) => s.month));
+    const activeBranchIds = new Set(activeBranches.map((branch) => branch.id));
+    const selectedSeries = series.filter((row) => activeBranchIds.has(row.branchId));
+    if (!selectedSeries.some((row) => row.totalRatings > 0)) return [];
+
+    const monthSet = new Set(selectedSeries.map((s) => s.month));
     const months = Array.from(monthSet).sort();
 
     return months.map((month) => {
-      const rows = series.filter((s) => s.month === month);
+      const rows = selectedSeries.filter((s) => s.month === month);
 
       const point: any = { month: formatMonth(month) };
 

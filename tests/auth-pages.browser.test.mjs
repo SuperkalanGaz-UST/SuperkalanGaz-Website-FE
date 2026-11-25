@@ -42,9 +42,14 @@ test('Sign In eye icon, forgot password keeps the email, expired invite link and
     await page.getByLabel('Username or email').fill('owner@example.invalid');
     await page.locator('#password').fill('secret123');
     const eye = page.getByRole('button', { name: 'Show password' });
-    assert.match(await eye.locator('svg').getAttribute('class'), /lucide-eye(?!-off)/, 'hidden password shows the open eye');
+    assert.equal(await page.locator('#password').getAttribute('type'), 'password');
+    assert.match(await eye.locator('svg').getAttribute('class'), /lucide-eye-off/, 'hidden password shows the crossed-out eye');
     await eye.click();
-    assert.match(await page.getByRole('button', { name: 'Hide password' }).locator('svg').getAttribute('class'), /lucide-eye-off/);
+    assert.equal(await page.locator('#password').getAttribute('type'), 'text');
+    assert.match(await page.getByRole('button', { name: 'Hide password' }).locator('svg').getAttribute('class'), /lucide-eye(?!-off)/);
+    await page.getByRole('button', { name: 'Hide password' }).click();
+    assert.equal(await page.locator('#password').getAttribute('type'), 'password');
+    assert.equal(await page.locator('#password').inputValue(), 'secret123');
     await page.getByRole('button', { name: 'Forgot password?' }).click();
     assert.equal(await page.getByLabel('Email address').inputValue(), 'owner@example.invalid');
     await page.getByRole('button', { name: 'Back to login' }).click();

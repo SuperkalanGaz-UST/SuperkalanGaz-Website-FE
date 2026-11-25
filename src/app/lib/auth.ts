@@ -8,7 +8,7 @@
  * NestJS privately resolves protected usernames for password exchanges.
  */
 import { supabase } from './supabase/client';
-import type { User } from '@supabase/supabase-js';
+import { isAuthSessionMissingError, isAuthRetryableFetchError, type User } from '@supabase/supabase-js';
 import { apiErrorMessage, apiFetch, apiPublicFetch } from './api';
 
 export type Role = 'super-admin' | 'franchise-admin' | 'branch-owner' | 'branch-manager';
@@ -196,9 +196,28 @@ export async function refreshProfileSession(): Promise<void> {
 /** Updates the password for the session created by a verified recovery code. */
 export async function updatePassword(password: string): Promise<AuthActionResult> {
   const { error } = await supabase.auth.updateUser({ password });
-  return {
-    error: error ? 'Your recovery session expired. Request a new reset code.' : null,
-  };
+  if (!error) return { error: null };
+
+  if (error.code === 'same_password') {
+    return { error: 'Choose a new password different from your current password.' };
+  }
+  if (error.code === 'weak_password') {
+    return { error: error.message };
+  }
+  if (isAuthSessionMissingError(error) || [
+    'session_not_found', 'session_expired', 'refresh_token_not_found',
+    'refresh_token_already_used', 'bad_jwt', 'reauthentication_needed',
+    'reauthentication_not_valid',
+  ].includes(error.code ?? '')) {
+    return { error: 'Your recovery session expired. Request a new reset code.' };
+  }
+  if (isAuthRetryableFetchError(error)) {
+    return { error: 'Could not reach the password service. Please try again.' };
+  }
+  if (error.status === 429) {
+    return { error: 'Too many attempts. Please wait a moment and try again.' };
+  }
+  return { error: 'Could not update your password. Please try again.' };
 }
 
 /**

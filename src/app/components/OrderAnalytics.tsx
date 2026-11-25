@@ -14,10 +14,13 @@ export function OrderAnalytics({ onViewCustomer }: { onViewCustomer: (id: string
   const [branchId, setBranchId] = useState('');
   const query = useFranchiseReport<OrdersReport>('orders', { branchId });
   const report = query.data;
+  const monthLabel = new Intl.DateTimeFormat('en-PH', {
+    timeZone: 'Asia/Manila', month: 'long', year: 'numeric',
+  }).format(new Date());
   return <div className={styles.page}>
     <Header title="Order Analytics" />
     <div className={styles.content}>
-      <div className={styles.toolbar}><ReportScope label="Current month (Manila)" /><ReportBranchSelect value={branchId} onChange={setBranchId} /></div>
+      <div className={styles.toolbar}><ReportScope label={monthLabel} /><ReportBranchSelect value={branchId} onChange={setBranchId} /></div>
       <ReportStatus loading={query.isLoading} error={query.error} retry={query.refetch} />
       {!query.error && report && <>
         <div className={styles.metrics}>
