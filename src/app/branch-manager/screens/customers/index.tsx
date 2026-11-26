@@ -2,14 +2,14 @@
 
 import { serviceRequestCylinderSummary, serviceRequestTotalQuantity, type ServiceRequestCylinderFields } from '../../../lib/serviceRequestItems';
 import React, { useMemo, useState, useEffect } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { RefreshCw, Search, UserRound, X, Coins, Boxes, Users } from 'lucide-react';
 import { KPICard } from '../../../components/KPICard';
 import { Badge } from '../../components/Badge';
 import { Progress } from '../../components/Progress';
 import { Pagination } from '../../../components/Pagination';
 import { apiErrorMessage, fetchJson } from '../../../lib/api';
-import { formatPHMobile } from '../../../lib/phMobile';
+import { formatPHMobile, toE164PhMobile } from '../../../lib/phMobile';
 import styles from './screen.module.css';
 
 /**
@@ -26,11 +26,18 @@ interface CustomerRow {
     contact_number: string;
     delivery_address: string;
     registration_source: 'staff-created' | 'self-registered';
+    account_type: 'household' | 'commercial';
     /** Per-track human-readable ID assigned by a DB trigger at insert
      * (migration 0029): H-00001 for household, C-00001 for commercial. */
     customer_code: string | null;
     last_order_date: string | null;
     created_at: string;
+}
+
+interface CustomerProfileFields {
+    name: string;
+    contactNumber: string;
+    deliveryAddress: string;
 }
 
 /** One order from GET /service-requests/customers/:id — trimmed to what the
@@ -77,6 +84,8 @@ const getStatusVariant = (status: string) => {
 
 const COMMERCIAL_CYCLE_LENGTH = 30;
 const ITEMS_PER_PAGE = 10;
+const HISTORY_ITEMS_PER_PAGE = 7;
+const EMPTY_CUSTOMERS: CustomerRow[] = [];
 const SOURCE_FILTERS = ['All Sources', 'Staff-created', 'Self-registered'] as const;
 
 const initials = (name: string) =>
@@ -105,7 +114,7 @@ interface CustomersProps {
  * to the Orders screen, pre-filtered to them, for the full interactive queue.
  */
 export default function Customers({ onViewOrders }: CustomersProps = {}) {
-
+    const queryClient = useQueryClient();
     const [search, setSearch] = useState('');
     const [debouncedSearch, setDebouncedSearch] = useState('');
 
@@ -126,11 +135,31 @@ export default function Customers({ onViewOrders }: CustomersProps = {}) {
         },
     });
 
-    const customers = customersData?.customers ?? [];
+    const customers = customersData?.customers ?? EMPTY_CUSTOMERS;
     const loading = isLoading;
     const error = queryError ? queryError.message : null;
 
     const [selectedCustomer, setSelectedCustomer] = useState<CustomerRow | null>(null);
+    const [historyPage, setHistoryPage] = useState(1);
+    const [profileDraft, setProfileDraft] = useState<CustomerProfileFields | null>(null);
+    const saveProfile = useMutation({
+        mutationFn: async ({ id, fields }: { id: string; fields: CustomerProfileFields }) => {
+            const contactNumber = toE164PhMobile(fields.contactNumber);
+            if (!contactNumber) throw new Error('Enter a valid PH mobile number.');
+            const name = fields.name.trim();
+            const deliveryAddress = fields.deliveryAddress.trim();
+            if (!name || !deliveryAddress) throw new Error('Enter a name and delivery address.');
+            return fetchJson<{ customer: CustomerRow }>(`/customers/${id}`, {
+                method: 'PATCH',
+                body: JSON.stringify({ name, contactNumber, deliveryAddress }),
+            });
+        },
+        onSuccess: ({ customer }) => {
+            setSelectedCustomer((current) => current?.id === customer.id ? customer : current);
+            setProfileDraft(null);
+            void queryClient.invalidateQueries({ queryKey: ['customers'] });
+        },
+    });
 
     const { data: ordersData, error: ordersQueryError, isLoading: ordersLoading } = useQuery({
         queryKey: ['customer-orders', selectedCustomer?.id],
@@ -138,6 +167,9 @@ export default function Customers({ onViewOrders }: CustomersProps = {}) {
         enabled: !!selectedCustomer,
     });
     const orders = ordersData?.serviceRequests ?? [];
+    const historyPages = Math.max(1, Math.ceil(orders.length / HISTORY_ITEMS_PER_PAGE));
+    const visibleHistoryPage = Math.min(historyPage, historyPages);
+    const historyOffset = (visibleHistoryPage - 1) * HISTORY_ITEMS_PER_PAGE;
     const ordersError = ordersQueryError ? ordersQueryError.message : null;
 
     const { data: loyaltyData, error: loyaltyQueryError, isLoading: loyaltyLoading } = useQuery({
@@ -172,9 +204,13 @@ export default function Customers({ onViewOrders }: CustomersProps = {}) {
 
     const openCustomer = (customer: CustomerRow) => {
         setSelectedCustomer(customer);
+        setHistoryPage(1);
     };
 
     const closeCustomer = () => {
+        if (saveProfile.isPending) return;
+        setProfileDraft(null);
+        saveProfile.reset();
         setSelectedCustomer(null);
     };
 
@@ -328,10 +364,10 @@ export default function Customers({ onViewOrders }: CustomersProps = {}) {
 
             {selectedCustomer && (
                 <div className={styles.dialogOverlay} onClick={closeCustomer}>
-                    <div className={styles.dialogContent} onClick={(e) => e.stopPropagation()}>
+                    <div className={styles.dialogContent} role="dialog" aria-modal="true" aria-labelledby="customer-profile-title" onClick={(e) => e.stopPropagation()}>
                         <div className={styles.dialogHeader}>
                             <div>
-                                <h2 className={styles.dialogTitle}>
+                                <h2 id="customer-profile-title" className={styles.dialogTitle}>
                                     {selectedCustomer.name}
                                     {selectedCustomer.customer_code && (
                                         <span className={styles.monoText}> · {selectedCustomer.customer_code}</span>
@@ -340,13 +376,40 @@ export default function Customers({ onViewOrders }: CustomersProps = {}) {
                                 <p className={styles.dialogSubtitle}>
                                     {formatPHMobile(selectedCustomer.contact_number)} · {selectedCustomer.delivery_address}
                                 </p>
+                                <p className={styles.dialogSubtitle}>
+                                    {selectedCustomer.account_type === 'commercial' ? 'Commercial' : 'Household'}
+                                </p>
                             </div>
-                            <button type="button" className={styles.closeButton} onClick={closeCustomer} aria-label="Close">
+                            <button type="button" className={styles.closeButton} onClick={closeCustomer} aria-label="Close" disabled={saveProfile.isPending}>
                                 <X size={18} />
                             </button>
                         </div>
 
                         <div className={styles.dialogBody}>
+                            {profileDraft ? (
+                                <form className={styles.profileForm} onSubmit={(event) => {
+                                    event.preventDefault();
+                                    if (!saveProfile.isPending) saveProfile.mutate({ id: selectedCustomer.id, fields: profileDraft });
+                                }}>
+                                    <label>Name<input required value={profileDraft.name} onChange={(event) => setProfileDraft({ ...profileDraft, name: event.target.value })} disabled={saveProfile.isPending} /></label>
+                                    <label>Contact number<input required type="tel" value={profileDraft.contactNumber} onChange={(event) => setProfileDraft({ ...profileDraft, contactNumber: formatPHMobile(event.target.value) })} disabled={saveProfile.isPending} /></label>
+                                    <label>Delivery address<textarea required value={profileDraft.deliveryAddress} onChange={(event) => setProfileDraft({ ...profileDraft, deliveryAddress: event.target.value })} disabled={saveProfile.isPending} /></label>
+                                    {saveProfile.error && <p role="alert">{saveProfile.error.message}</p>}
+                                    <div className={styles.profileActions}>
+                                        <button type="button" disabled={saveProfile.isPending} onClick={() => { setProfileDraft(null); saveProfile.reset(); }}>Cancel</button>
+                                        <button type="submit" disabled={saveProfile.isPending}>{saveProfile.isPending ? 'Saving…' : 'Save changes'}</button>
+                                    </div>
+                                </form>
+                            ) : (
+                                <div className={styles.profileActions}>
+                                    <button type="button" onClick={() => setProfileDraft({
+                                        name: selectedCustomer.name,
+                                        contactNumber: formatPHMobile(selectedCustomer.contact_number),
+                                        deliveryAddress: selectedCustomer.delivery_address,
+                                    })}>Edit profile</button>
+                                    {saveProfile.isSuccess && <span role="status">Profile updated.</span>}
+                                </div>
+                            )}
                             <section className={styles.detailSection}>
                                 <h3 className={styles.sectionTitle}><Coins size={15} /> Loyalty Standing</h3>
                                 {loyaltyLoading && <div className={styles.mutedText}>Loading…</div>}
@@ -404,7 +467,7 @@ export default function Customers({ onViewOrders }: CustomersProps = {}) {
                                                 </tr>
                                             </thead>
                                             <tbody>
-                                                {orders.slice(0, 7).map((o) => (
+                                                {orders.slice(historyOffset, historyOffset + HISTORY_ITEMS_PER_PAGE).map((o) => (
                                                     <tr key={o.id}>
                                                         <td className={styles.mutedText}>{formatDate(o.requested_at)}</td>
                                                         <td>{serviceRequestCylinderSummary(o)}</td>
@@ -415,6 +478,11 @@ export default function Customers({ onViewOrders }: CustomersProps = {}) {
                                                 ))}
                                             </tbody>
                                         </table>
+                                    </div>
+                                )}
+                                {historyPages > 1 && (
+                                    <div className={styles.paginationRow}>
+                                        <Pagination currentPage={visibleHistoryPage} totalPages={historyPages} onPageChange={setHistoryPage} />
                                     </div>
                                 )}
                             </section>
