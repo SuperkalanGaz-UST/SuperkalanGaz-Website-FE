@@ -596,7 +596,15 @@ export default function VehicleManagementPage() {
                             </div>
                             <div>
                                 <label className={styles.fieldLabel} htmlFor="mileage-date">Date</label>
-                                <Input id="mileage-date" type="date" value={dateValue} onChange={(e) => setDateValue(e.target.value)} max={todayIso()} />
+                                <Input
+                                    id="mileage-date"
+                                    type="date"
+                                    value={dateValue}
+                                    onChange={(e) => setDateValue(e.target.value)}
+                                    max={todayIso()}
+                                    className={styles.dateInput}
+                                    style={{ display: 'block', position: 'relative', paddingRight: '2.5rem' }}
+                                />
                             </div>
                             {dialogError && <div className={styles.fieldError}>{dialogError}</div>}
                         </div>

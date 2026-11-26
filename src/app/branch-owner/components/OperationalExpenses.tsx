@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { fetchExpenses } from '../../lib/expenses';
+import { ExpenseReceiptViewer } from '../../components/ExpenseReceiptViewer';
 import { FranchiseDropdown } from '../../components/FranchiseDropdown';
 import { buildOwnerExpenseTrend } from '../../lib/owner-expense-trend';
 import {
@@ -456,12 +457,13 @@ function ExpenseWorkspace({ branchId }: { branchId: string }) {
                     <th>Category</th>
                     <th>Description</th>
                     <th>Amount</th>
+                    <th>Receipt</th>
                   </tr>
                 </thead>
                 <tbody>
                   {loading || operational.length === 0 ? (
                     <tr>
-                      <td colSpan={4} className={styles.empty}>
+                      <td colSpan={5} className={styles.empty}>
                         {loading
                           ? 'Loading expenses…'
                           : 'No operational expenses recorded for this month.'}
@@ -487,6 +489,9 @@ function ExpenseWorkspace({ branchId }: { branchId: string }) {
                         </td>
                         <td>{row.description}</td>
                         <td>{peso(Number(row.amount))}</td>
+                        <td>{row.receipt_name
+                          ? <ExpenseReceiptViewer key={`${branchId}:${row.id}`} id={row.id} name={row.receipt_name} branchId={branchId} />
+                          : <span className="text-xs text-gray-500">No receipt attached</span>}</td>
                       </tr>
                     ))
                   )}

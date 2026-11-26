@@ -891,7 +891,7 @@ export function UserManagement() {
                   <div>
                     <span className="mb-1.5 block text-sm text-gray-700">Authorized branch</span>
                     <div className="flex h-11 items-center justify-between rounded-lg border border-gray-200 bg-gray-50 px-3 text-sm text-gray-700">
-                      <span>{selectedBranch}</span>
+                      <span className="text-gray-500">{selectedBranch}</span>
                       <span className="text-xs text-gray-400">Locked</span>
                     </div>
                   </div>

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, Search } from 'lucide-react';
 import { FranchiseDropdown } from '../../components/FranchiseDropdown';
 import { Header } from './Header';
+import { ExpenseReceiptViewer } from '../../components/ExpenseReceiptViewer';
 import { Pagination } from './Pagination';
 import { useBranch } from '../contexts/BranchContext';
 import {
@@ -171,13 +172,14 @@ export function ExpensesLogFull({ onBack }: { onBack?: () => void }) {
                   <th className="pb-3 pr-4 text-left text-xs font-semibold  text-gray-700">Description</th>
                   <th className="pb-3 pr-4 text-right text-xs font-semibold  text-gray-700">Amount</th>
                   <th className="pb-3 text-left text-xs font-semibold  text-gray-700">Recorded by</th>
+                  <th className="pb-3 text-left text-xs font-semibold text-gray-700">Receipt</th>
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
-                  <tr><td colSpan={6} className="py-10 text-center text-sm text-gray-400">Loading expenses…</td></tr>
+                  <tr><td colSpan={7} className="py-10 text-center text-sm text-gray-400">Loading expenses…</td></tr>
                 ) : pageData.length === 0 ? (
-                  <tr><td colSpan={6} className="py-10 text-center text-sm text-gray-400">No expenses match this month and filter.</td></tr>
+                  <tr><td colSpan={7} className="py-10 text-center text-sm text-gray-400">No expenses match this month and filter.</td></tr>
                 ) : pageData.map((expense, index) => (
                   <tr key={expense.id} className={`border-b border-gray-100 ${index % 2 === 1 ? 'bg-gray-50' : ''}`}>
                     <td className="whitespace-nowrap py-4 pr-4 text-[13px] text-gray-900">{formatDate(expense.expense_date)}</td>
@@ -186,6 +188,9 @@ export function ExpensesLogFull({ onBack }: { onBack?: () => void }) {
                     <td className="max-w-[300px] truncate py-4 pr-4 text-[13px] text-gray-700">{expense.description}</td>
                     <td className="whitespace-nowrap py-4 pr-4 text-right text-[13px] font-medium text-gray-900">{formatPeso(Number(expense.amount))}</td>
                     <td className="whitespace-nowrap py-4 text-[13px] text-gray-600">Branch Manager</td>
+                    <td className="py-4 text-xs text-gray-500">{expense.receipt_name && selectedBranchId
+                      ? <ExpenseReceiptViewer key={`${selectedBranchId}:${expense.id}`} id={expense.id} name={expense.receipt_name} branchId={selectedBranchId} />
+                      : 'No receipt attached'}</td>
                   </tr>
                 ))}
               </tbody>

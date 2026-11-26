@@ -390,7 +390,7 @@ export default function AnalyticsPage() {
                 <div className={styles.headerActions}>
                     <div className={styles.periodSelect}>
                         <Select value={period} onValueChange={setPeriod}>
-                            <SelectTrigger><SelectValue placeholder="Select period" /></SelectTrigger>
+                            <SelectTrigger className="bg-white text-slate-600"><SelectValue placeholder="Select period" /></SelectTrigger>
                             <SelectContent>
                                 <SelectItem value="7 Days">Last 7 days</SelectItem>
                                 <SelectItem value="30 Days">Last 30 days</SelectItem>

@@ -11,6 +11,11 @@
 }
 
 .crm-toaster [data-sonner-toast].crm-toast[data-styled='true'] {
+  width: max-content;
+  max-width: 100%;
+  left: 0;
+  right: 0;
+  margin-inline: auto;
   min-height: 54px;
   padding: 14px 16px;
   gap: 10px;

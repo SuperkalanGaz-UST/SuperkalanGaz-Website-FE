@@ -8,6 +8,8 @@ import {
   ReactNode,
 } from 'react';
 import { apiErrorMessage, apiFetch } from '../../lib/api';
+import { useAccount } from '../../contexts/AccountContext';
+import { clearBranchSelection, readBranchSelection, saveBranchSelection } from '../../lib/branchSelection';
 import {
   assignedBranchesFrom,
   type AssignedBranch,
@@ -72,6 +74,7 @@ interface BranchProviderProps {
 }
 
 export function BranchProvider({ children }: BranchProviderProps) {
+  const { id: ownerId } = useAccount();
   // Saved Auth labels can lag branch renames or ownership changes. Resolve both
   // the label and selectable UUID through the API before loading branch data.
   const [selectedBranchId, setSelectedBranchIdState] = useState<string | null>(null);
@@ -96,12 +99,13 @@ export function BranchProvider({ children }: BranchProviderProps) {
       window.clearTimeout(branchAnimationTimer.current);
     }
     setIsBranchSwitching(true);
+    saveBranchSelection(ownerId, branchId);
     setSelectedBranchIdState(branchId);
     branchAnimationTimer.current = window.setTimeout(() => {
       setIsBranchSwitching(false);
       branchAnimationTimer.current = null;
     }, 60);
-  }, [availableBranchOptions, selectedBranchId]);
+  }, [availableBranchOptions, selectedBranchId, ownerId]);
 
   const refreshAssignedBranches = useCallback(async () => {
     assignmentRequest.current?.abort();
@@ -113,12 +117,15 @@ export function BranchProvider({ children }: BranchProviderProps) {
     try {
       const resolved = await loadAssignedBranches(controller.signal);
       if (controller.signal.aborted) return;
+      const saved = readBranchSelection(ownerId);
+      const restored = saved && resolved.some((branch) => branch.id === saved) ? saved : null;
+      if (saved && !restored) clearBranchSelection();
       setAssignedBranches(resolved);
       setAvailableBranchOptions(resolved);
       setSelectedBranchIdState((current) =>
         current && resolved.some((branch) => branch.id === current)
           ? current
-          : resolved.length === 1 ? resolved[0].id : null,
+          : restored ?? (resolved.length === 1 ? resolved[0].id : null),
       );
     } catch (error) {
       if (controller.signal.aborted) return;
@@ -133,7 +140,7 @@ export function BranchProvider({ children }: BranchProviderProps) {
         setAssignedBranchesLoading(false);
       }
     }
-  }, []);
+  }, [ownerId]);
 
   // Prefetch once when the Branch Owner app mounts, before Fleet is opened.
   useEffect(() => {

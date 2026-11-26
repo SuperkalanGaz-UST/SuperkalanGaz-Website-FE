@@ -34,6 +34,23 @@
 .table tbody tr:hover { background-color: rgba(0, 116, 188, 0.04); }
 
 .clickableRow { cursor: pointer; }
+.headerActions { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+.headerEdit { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 36px; padding: 0 12px; white-space: nowrap; border: 1px solid #bfdbfe; border-radius: 7px; background: #fff; color: var(--primary); font-size: 12px; cursor: pointer; }
+.dialogHeader .headerEdit { margin-top: 16px; margin-right: 8px; }
+.headerEdit:hover { background: #eff6ff; }
+
+.customerTable { min-width: 1100px; }
+.customerTable th:nth-child(2) { width: 18%; }
+.customerTable th:nth-child(4) { width: 28%; }
+.customerTable td:nth-child(3),
+.customerTable td:nth-child(5),
+.customerTable td:nth-child(5) span,
+.customerTable td:nth-child(6),
+.customerTable td:nth-child(7) { white-space: nowrap; }
+.customerTable th:nth-child(3) { min-width: 165px; }
+.customerTable th:nth-child(5) { min-width: 155px; }
+.customerTable th:nth-child(6),
+.customerTable th:nth-child(7) { min-width: 135px; }
 
 .nameCell { display: flex; align-items: center; gap: 0.65rem; }
 .avatarCircle { display: inline-flex; align-items: center; justify-content: center; width: 2rem; height: 2rem; flex-shrink: 0; border-radius: 9999px; background-color: #e0f0fb; color: var(--primary); font-size: 0.6875rem; font-weight: 600; }
@@ -42,6 +59,7 @@
 .viewButton { opacity: 0; transition: opacity 0.15s; padding: 0.3rem 0.75rem; font-size: 0.75rem; font-weight: 500; color: var(--primary); border: 1px solid var(--primary); border-radius: 0.375rem; background: transparent; cursor: pointer; }
 .clickableRow:hover .viewButton { opacity: 1; }
 .viewButton:hover { background-color: var(--primary); color: #fff; }
+.viewButton { white-space: nowrap; }
 
 .nameLink { background: none; border: none; padding: 0; font: inherit; font-weight: 600; color: var(--primary); cursor: pointer; text-align: left; }
 .nameLink:hover { text-decoration: underline; }
@@ -55,7 +73,11 @@
 .dialogOverlay { position: fixed; inset: 0; background-color: rgba(0, 0, 0, 0.5); z-index: 50; display: flex; align-items: center; justify-content: center; padding: 1rem; }
 .dialogContent { background-color: var(--card); border-radius: var(--radius-lg); width: 100%; max-width: 640px; max-height: calc(100vh - 2rem); overflow-y: auto; box-shadow: var(--shadow-lg); display: flex; flex-direction: column; scrollbar-width: none; }
 .dialogContent::-webkit-scrollbar { display: none; }
-.dialogHeader { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--border); }
+.dialogContent { position: relative; }
+.profileNotification { position: absolute; z-index: 1; top: 10px; left: 50%; transform: translateX(-50%); width: max-content; max-width: calc(100% - 100px); padding: 8px 12px; border: 1px solid #abefc6; border-radius: 8px; background: #ecfdf3; color: #067647; font-size: 13px; box-shadow: 0 1px 2px rgb(16 24 40 / 6%); }
+.dialogHeader .headerActions { position: absolute; top: 10px; right: 16px; flex-direction: column-reverse; align-items: flex-end; gap: 12px; }
+.dialogHeader .closeButton { position: static; }
+.dialogHeader { position: relative; display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; padding: 58px 7rem .5rem 1.5rem; border-bottom: 1px solid var(--border); }
 .dialogTitle { font-size: 1.125rem; font-weight: 700; color: var(--foreground); margin-bottom: 0.25rem; }
 .dialogSubtitle { font-size: 0.8125rem; color: var(--muted-foreground); }
 .closeButton { display: inline-flex; align-items: center; justify-content: center; width: 2rem; height: 2rem; border: none; border-radius: 0.375rem; background: transparent; color: var(--muted-foreground); cursor: pointer; flex-shrink: 0; }
@@ -63,11 +85,13 @@
 
 .dialogBody { display: flex; flex-direction: column; gap: 1.5rem; padding: 1.25rem 1.5rem 1.5rem; }
 .profileForm { display: grid; gap: .75rem; }
-.profileForm label { display: grid; gap: .35rem; font-size: .875rem; font-weight: 500; }
-.profileForm input, .profileForm textarea { padding: .5rem; border: 1px solid var(--border); border-radius: .375rem; background: var(--card); }
+.profileForm label { display: grid; gap: .3rem; font-size: .8125rem; font-weight: 500; }
+.profileForm input, .profileForm textarea { padding: .375rem .625rem; border: 1px solid var(--border); border-radius: .375rem; background: var(--card); font: inherit; font-size: .8125rem; font-weight: 400; color: #475569; }
+.profileForm input { height: 34px; }
+.profileForm textarea { min-height: 56px; resize: vertical; }
 .profileForm [role='alert'] { color: var(--destructive); font-size: .875rem; }
 .profileActions { display: flex; align-items: center; gap: .75rem; }
-.profileActions button { padding: .4rem .75rem; border: 1px solid var(--primary); border-radius: .375rem; color: var(--primary); cursor: pointer; }
+.profileActions button { min-height: 32px; padding: .3rem .625rem; border: 1px solid var(--primary); border-radius: .375rem; color: var(--primary); font-size: .75rem; cursor: pointer; }
 .profileActions button[type='submit'] { background: var(--primary); color: white; }
 .profileActions button:disabled { cursor: wait; opacity: .65; }
 .profileActions span { font-size: .875rem; }

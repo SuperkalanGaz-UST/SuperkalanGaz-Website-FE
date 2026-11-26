@@ -1,6 +1,7 @@
 'use client';
 
 import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { toast } from 'sonner';
 import {
   CalendarDays,
   CheckCircle2,
@@ -20,6 +21,8 @@ import {
   saveExpense,
 } from '../../../lib/expenses';
 import { KPICard } from '../../../components/KPICard';
+import { ExpenseReceiptViewer } from '../../../components/ExpenseReceiptViewer';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../../components/ui/select';
 import styles from './screen.module.css';
 
 interface MonthPeriod {
@@ -42,6 +45,7 @@ interface ExpenseRecord {
 }
 
 interface ExpenseDraft {
+  receiptData?: string | null;
   date: string;
   category: '' | ExpenseCategory;
   amount: string;
@@ -140,7 +144,6 @@ export default function MonthlyExpenses() {
   const [query, setQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<'all' | ExpenseCategory>('all');
   const [showPreviousMonth, setShowPreviousMonth] = useState(false);
-  const [successMessage, setSuccessMessage] = useState('');
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -209,7 +212,6 @@ export default function MonthlyExpenses() {
   const updateDraft = <Key extends keyof ExpenseDraft>(key: Key, value: ExpenseDraft[Key]) => {
     setDraft((current) => ({ ...current, [key]: value }));
     setErrors((current) => ({ ...current, [key]: undefined }));
-    setSuccessMessage('');
     setLoadError(null);
   };
 
@@ -246,6 +248,7 @@ export default function MonthlyExpenses() {
         reference: draft.reference.trim() || null,
         description: draft.description.trim(),
         receiptName: draft.receiptName,
+        receiptData: draft.receiptData,
       }, editingId ?? undefined);
       const saved = toExpenseRecord(savedRow);
       setExpenses((current) =>
@@ -253,10 +256,11 @@ export default function MonthlyExpenses() {
           ? current.map((expense) => expense.id === editingId ? saved : expense)
           : [saved, ...current],
       );
-      setSuccessMessage(
+      toast.success(
         editingId
           ? 'Expense updated in the current month log.'
           : `Expense saved to the ${currentPeriod.label} log.`,
+        { className: 'crm-toast--expense' },
       );
       setDraft({ ...EMPTY_DRAFT, date: toDateInputValue(new Date()) });
       setEditingId(null);
@@ -268,9 +272,25 @@ export default function MonthlyExpenses() {
     }
   };
 
-  const handleReceipt = (event: ChangeEvent<HTMLInputElement>) => {
+  const handleReceipt = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    updateDraft('receiptName', file?.name ?? null);
+    if (!file) return;
+    if (!['application/pdf', 'image/jpeg', 'image/png'].includes(file.type) || file.size > 5 * 1024 * 1024) {
+      toast.error('Choose a PDF, JPG or PNG up to 5 MB.');
+      event.target.value = '';
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const data = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.onerror = () => reject(new Error('Could not read receipt.'));
+        reader.readAsDataURL(file);
+      });
+      setDraft(current => ({ ...current, receiptName: file.name, receiptData: data }));
+    } catch { toast.error('Could not read receipt. Please choose it again.'); }
+    finally { setSubmitting(false); }
   };
 
   const handleEdit = (expense: ExpenseRecord) => {
@@ -284,7 +304,6 @@ export default function MonthlyExpenses() {
       receiptName: expense.receiptName,
     });
     setErrors({});
-    setSuccessMessage('');
   };
 
   const togglePeriod = () => {
@@ -292,7 +311,6 @@ export default function MonthlyExpenses() {
     setQuery('');
     setCategoryFilter('all');
     resetDraft();
-    setSuccessMessage('');
   };
 
   if (!currentPeriod || !previousPeriod || !viewedPeriod) {
@@ -329,30 +347,30 @@ export default function MonthlyExpenses() {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-8">
         <KPICard
             title={showPreviousMonth ? previousPeriod.label : 'This month'}
-            value={formatPeso(total)}
+            value={<span className="block text-2xl leading-8">{formatPeso(total)}</span>}
             icon={<WalletCards className="w-4 h-4 text-[#007BC1]" />}
             accentColor="#007BC1"
         />
         <KPICard
             title="Expense entries"
-            value={String(viewedExpenses.length)}
+            value={<span className="block text-2xl leading-8">{viewedExpenses.length}</span>}
             icon={<FileText className="w-4 h-4 text-[#16A34A]" />}
             accentColor="#16A34A"
         />
         <KPICard
             title={showPreviousMonth ? 'Period status' : 'Last recorded'}
-            value={showPreviousMonth ? 'Closed' : lastRecorded ? formatRecordedTime(lastRecorded) : 'No entries'}
+            value={<span className="block text-2xl leading-8">{showPreviousMonth ? 'Closed' : lastRecorded ? formatRecordedTime(lastRecorded) : 'No entries'}</span>}
             icon={<Clock3 className="w-4 h-4 text-[#f59e0b]" />}
             accentColor="#f59e0b"
         />
       </div>
 
-      <div className={styles.workspace}>
+      <div className={styles.workspace} style={showPreviousMonth ? { gridTemplateColumns: 'minmax(0, 1fr)' } : undefined}>
         <div className={styles.logCard}>
           <div className={styles.cardHeading}>
             <div>
               <h2>Expense Entries</h2>
-              <p>{showPreviousMonth ? `Reviewing ${previousPeriod.label}` : `Recorded for ${currentPeriod.label}`}</p>
+              {!showPreviousMonth && <p>Recorded for {currentPeriod.label}</p>}
             </div>
           </div>
 
@@ -369,19 +387,31 @@ export default function MonthlyExpenses() {
             </label>
             <label className={styles.filterField}>
               <span className={styles.srOnly}>Filter by category</span>
-              <select
+              <Select
                 value={categoryFilter}
-                onChange={(event) => setCategoryFilter(event.target.value as 'all' | ExpenseCategory)}
+                onValueChange={(value) => setCategoryFilter(value as 'all' | ExpenseCategory)}
               >
-                <option value="all">All categories</option>
-                {OPERATIONAL_EXPENSE_CATEGORIES.map((category) => <option key={category} value={category}>{category}</option>)}
-              </select>
+                <SelectTrigger aria-label="Filter by category" className="min-h-[2.65rem] bg-white text-slate-600"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All categories</SelectItem>
+                  {OPERATIONAL_EXPENSE_CATEGORIES.map((category) => <SelectItem key={category} value={category}>{category}</SelectItem>)}
+                </SelectContent>
+              </Select>
             </label>
             <span className={styles.resultCount}>{filteredExpenses.length} {filteredExpenses.length === 1 ? 'entry' : 'entries'}</span>
           </div>
 
           <div className={styles.tableWrapper}>
             <table className={styles.table}>
+              <colgroup>
+                <col style={{ width: '12%' }} />
+                <col style={{ width: '18%' }} />
+                <col style={{ width: '20%' }} />
+                <col style={{ width: showPreviousMonth ? '26%' : 'calc(26% - 3rem)' }} />
+                <col style={{ width: '12%' }} />
+                <col style={{ width: '12%' }} />
+                {!showPreviousMonth && <col style={{ width: '3rem' }} />}
+              </colgroup>
               <thead>
                 <tr>
                   <th>Date</th>
@@ -403,7 +433,7 @@ export default function MonthlyExpenses() {
                     <td className={`${styles.amountColumn} ${styles.amount}`}>{formatPeso(expense.amount)}</td>
                     <td>
                       {expense.receiptName ? (
-                        <span className={styles.receiptAttached}><Paperclip aria-hidden="true" /> File noted</span>
+                        <ExpenseReceiptViewer id={expense.id} name={expense.receiptName} />
                       ) : <span className={styles.noReceipt}>None noted</span>}
                     </td>
                     {!showPreviousMonth && (
@@ -426,14 +456,7 @@ export default function MonthlyExpenses() {
           </div>
         </div>
 
-        {showPreviousMonth ? (
-          <aside className={styles.readOnlyCard}>
-            <div className={styles.readOnlyIcon}><ShieldCheck aria-hidden="true" /></div>
-            <h2>{previousPeriod.label} is view-only</h2>
-            <p>Closed-month entries cannot be added or changed. Return to the current month when you need to log an expense.</p>
-            <button type="button" onClick={togglePeriod}>Back to {currentPeriod.label}</button>
-          </aside>
-        ) : (
+        {!showPreviousMonth && (
           <aside className={styles.formCard}>
             <div className={styles.formHeading}>
               <div>
@@ -461,15 +484,17 @@ export default function MonthlyExpenses() {
 
               <div className={styles.field}>
                 <label htmlFor="expense-category">Category <span className={styles.requiredMark}>*</span></label>
-                <select
-                  id="expense-category"
+                <Select
                   value={draft.category}
-                  onChange={(event) => updateDraft('category', event.target.value as '' | ExpenseCategory)}
-                  aria-describedby="expense-category-error"
+                  onValueChange={(value) => updateDraft('category', value as ExpenseCategory)}
                 >
-                  <option value="">Select a category</option>
-                  {OPERATIONAL_EXPENSE_CATEGORIES.map((category) => <option key={category} value={category}>{category}</option>)}
-                </select>
+                  <SelectTrigger id="expense-category" aria-describedby="expense-category-error" aria-invalid={Boolean(errors.category)} className="w-full bg-white text-slate-600">
+                    <SelectValue placeholder="Select a category" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {OPERATIONAL_EXPENSE_CATEGORIES.map((category) => <SelectItem key={category} value={category}>{category}</SelectItem>)}
+                  </SelectContent>
+                </Select>
                 {errors.category && <p id="expense-category-error" className={styles.error}>{errors.category}</p>}
               </div>
 
@@ -480,9 +505,7 @@ export default function MonthlyExpenses() {
                     <span>₱</span>
                     <input
                       id="expense-amount"
-                      type="number"
-                      min="0.01"
-                      step="0.01"
+                      type="text"
                       inputMode="decimal"
                       value={draft.amount}
                       onChange={(event) => updateDraft('amount', event.target.value)}
@@ -521,7 +544,7 @@ export default function MonthlyExpenses() {
                 <span className={styles.fieldLabel}>Receipt filename</span>
                 <label className={styles.receiptUpload} htmlFor="expense-receipt">
                   <Paperclip aria-hidden="true" />
-                  <span><strong>{draft.receiptName ?? 'Choose a receipt (optional)'}</strong><small>PDF, JPG or PNG · filename saved only</small></span>
+                  <span><strong>{draft.receiptName ?? 'Choose a receipt (optional)'}</strong><small>PDF, JPG or PNG · up to 5 MB</small></span>
                 </label>
                 <input
                   ref={receiptInputRef}
@@ -543,7 +566,7 @@ export default function MonthlyExpenses() {
 
               <div className={styles.formNote} aria-live="polite">
                 <ShieldCheck aria-hidden="true" />
-                <span>{successMessage || `Entries are stored in your branch's ${currentPeriod.label} expense log.`}</span>
+                <span>Entries are stored in your branch&apos;s {currentPeriod.label} expense log.</span>
               </div>
             </form>
           </aside>

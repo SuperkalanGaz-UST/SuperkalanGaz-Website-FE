@@ -28,6 +28,7 @@ export interface ExpenseApiRow {
 }
 
 export interface ExpensePayload {
+  receiptData?: string | null;
   expenseDate: string;
   category: ExpenseCategory;
   amount: number;

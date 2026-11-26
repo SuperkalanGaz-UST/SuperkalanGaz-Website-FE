@@ -59,7 +59,7 @@ export function BranchManagerApp() {
     <div className="bm-root" style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
       <BMSidebar activeScreen={activeScreen === 'vehicles' ? 'fleet' : activeScreen} onNavigate={handleNavigate} />
 
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         <AppHeader
           title={SCREEN_TITLES[activeScreen] ?? 'Overview'}
           badge={
@@ -72,7 +72,7 @@ export function BranchManagerApp() {
         />
 
         <main style={{ flex: 1, padding: '2rem', overflowY: 'auto' }}>
-          {activeScreen === 'overview' && <Overview onViewOrders={viewCustomerOrders} />}
+          {activeScreen === 'overview' && <Overview onViewOrders={viewCustomerOrders} onNavigate={handleNavigate} />}
           {activeScreen === 'orders' && <Orders initialSearch={ordersCustomerSearch} />}
           {activeScreen === 'inventory' && <Inventory />}
           {activeScreen === 'customers' && <Customers onViewOrders={viewCustomerOrders} />}

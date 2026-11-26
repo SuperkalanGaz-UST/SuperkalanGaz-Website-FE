@@ -199,6 +199,59 @@ async function screenshot(page, name) {
   });
 }
 
+test('Manager opens saved receipts and sees an explicit message for filename-only records', { timeout: 45000 }, async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const { context } = await contextFor(browser, 'branch-manager');
+    await context.route(`${apiOrigin}/api/expenses?*`, route => route.fulfill({ json: { expenses: [{
+      id: staffId, branch_id: branchA, expense_date: `${month}-01`, category: 'Utilities',
+      description: 'Receipt test', amount: 100, receipt_name: 'bill.png',
+      created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+    }] } }));
+    let missing = false;
+    await context.route(`${apiOrigin}/api/expenses/${staffId}/receipt`, route => missing
+      ? route.fulfill({ status: 404, json: { message: 'Receipt file is unavailable. Older entries may contain only a filename.' } })
+      : route.fulfill({ contentType: 'image/png', body: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aX1sAAAAASUVORK5CYII=', 'base64') }));
+    const page = await context.newPage();
+    await page.goto(`${baseUrl}/branch-manager/expenses`);
+    await page.getByRole('button', { name: 'File noted', exact: true }).click();
+    await page.getByRole('dialog').getByRole('img', { name: 'Receipt: bill.png' }).waitFor();
+    await page.keyboard.press('Escape');
+    missing = true;
+    await page.getByRole('button', { name: 'File noted', exact: true }).click();
+    await page.getByRole('dialog').getByRole('alert').waitFor();
+    await page.keyboard.press('Escape');
+    const table = page.getByRole('table');
+    assert.equal(await table.evaluate(element => element.parentElement.scrollWidth > element.parentElement.clientWidth), true, 'wide entries scroll within the table');
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true, 'the screen does not overflow horizontally');
+  } finally { await browser.close(); }
+});
+
+test('Owner previews receipts using the selected branch without expense editing controls', { timeout: 45000 }, async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const { context } = await contextFor(browser, 'branch-owner');
+    await context.route(`${apiOrigin}/api/expenses?*`, route => route.fulfill({ json: { expenses: [{
+      id: staffId, branch_id: branchA, expense_date: `${month}-01`, category: 'Utilities',
+      description: 'Owner receipt test', amount: 100, receipt_name: 'bill.png',
+      created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+    }] } }));
+    let receiptBranch;
+    await context.route(`${apiOrigin}/api/expenses/${staffId}/receipt?*`, route => {
+      receiptBranch = new URL(route.request().url()).searchParams.get('branchId');
+      return route.fulfill({ contentType: 'image/png', body: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aX1sAAAAASUVORK5CYII=', 'base64') });
+    });
+    const page = await context.newPage();
+    await page.goto(`${baseUrl}/branch-owner/expenses-log`);
+    await page.getByRole('button', { name: 'Select branch', exact: true }).click();
+    await page.getByRole('button', { name: branches[0].name, exact: true }).click();
+    await page.getByRole('button', { name: 'File noted', exact: true }).click();
+    await page.getByRole('dialog').getByRole('img', { name: 'Receipt: bill.png' }).waitFor();
+    assert.equal(receiptBranch, branchA);
+    assert.equal(await page.getByRole('button', { name: /Update Expense|Save Expense|Edit expense/i }).count(), 0);
+  } finally { await browser.close(); }
+});
+
 test(
   'Owner modal calculations, retry, overview, responsive layout and branch isolation',
   { timeout: 120_000 },

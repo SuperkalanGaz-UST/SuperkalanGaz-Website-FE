@@ -518,10 +518,13 @@ export default function Csat() {
                                             <tr className={styles.panelRow}>
                                                 <td colSpan={6}>
                                                     <div className={styles.resolvePanel}>
-                                                        <label className={styles.fieldLabel}>Resolution note</label>
+                                                        <label className={styles.fieldLabel}>
+                                                            Resolution note <span className={styles.requiredMark} aria-hidden="true">*</span>
+                                                        </label>
                                                         <textarea
                                                             className={styles.textArea}
                                                             rows={3}
+                                                            aria-required="true"
                                                             placeholder="e.g. Called the customer, apologised for the delay, refunded the delivery fee and re-briefed the rider."
                                                             value={note}
                                                             onChange={(e) => { setNote(e.target.value); setNoteError(null); }}
@@ -628,7 +631,9 @@ export default function Csat() {
                                                     ) : '—'}
                                             </td>
                                             <td>
-                                                <Badge variant={i.status === 'open' ? 'warning' : 'secondary'}>{i.status}</Badge>
+                                                <Badge variant={i.status === 'open' ? 'warning' : i.status === 'resolved' ? 'success' : 'secondary'}>
+                                                    {i.status.charAt(0).toUpperCase() + i.status.slice(1)}
+                                                </Badge>
                                                 {i.escalated && (
                                                     <div className={styles.escalatedTag}>
                                                         <Flag size={11} /> Escalated {formatDateTime(i.escalated_at)}
