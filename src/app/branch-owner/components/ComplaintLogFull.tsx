@@ -8,6 +8,7 @@ import { ArrowLeft, RefreshCw, Search } from 'lucide-react';
 import { fetchJson } from '../../lib/api';
 import { useBranch } from '../contexts/BranchContext';
 import { RatingRow, RatingStars, formatDate } from './CSATSatisfaction';
+import { ReportFilterDropdown } from './ReportFilterDropdown';
 
 export function ComplaintLogFull({ onBack }: { onBack: () => void }) {
   const { selectedBranchId } = useBranch();
@@ -87,15 +88,12 @@ export function ComplaintLogFull({ onBack }: { onBack: () => void }) {
                 className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-[#007BC1]"
               />
             </div>
-            <select
+            <ReportFilterDropdown
+              label="Filter complaint status"
               value={filterStatus}
-              onChange={(e) => { setFilterStatus(e.target.value); setCurrentPage(1); }}
-              className="text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-[#007BC1]"
-            >
-              <option value="all">All Statuses</option>
-              <option value="open">Open</option>
-              <option value="resolved">Resolved</option>
-            </select>
+              onChange={(value) => { setFilterStatus(value); setCurrentPage(1); }}
+              options={[{ value: 'all', label: 'All Statuses' }, { value: 'open', label: 'Open' }, { value: 'resolved', label: 'Resolved' }]}
+            />
             {hasFilters && (
               <button
                 onClick={clearFilters}

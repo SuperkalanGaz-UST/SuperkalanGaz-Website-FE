@@ -606,3 +606,68 @@ test('Branch Manager creates one walk-in order with several cylinder sizes', { t
     await browser.close();
   }
 });
+
+test('Branch Manager edits a customer profile and can see later pages of order history', { timeout: 30_000 }, async () => {
+  const browser = await chromium.launch({ headless: true });
+  const session = sessionFor('branch-manager');
+  session.user.app_metadata.branch_ids = [branches[0].id];
+  session.user.app_metadata.branches = [branches[0].name];
+  const { context } = await createContext(browser, session);
+  try {
+    const customer = {
+      id: '00000000-0000-4000-8000-000000000010',
+      name: 'Fixture Customer',
+      contact_number: '+639171234567',
+      delivery_address: 'Test address',
+      registration_source: 'staff-created',
+      account_type: 'household',
+      customer_code: 'H-00001',
+      created_at: '2026-11-19T05:00:00Z',
+      last_order_date: '2026-11-19T06:00:00Z',
+    };
+    await context.route(`${apiOrigin}/api/branches/assigned`, route => route.fulfill({ json: { branches: [branches[0]] } }));
+    await context.route(`${apiOrigin}/api/customers`, route => route.fulfill({ json: { customers: [customer] } }));
+    await context.route(`${apiOrigin}/api/service-requests/customers/${customer.id}`, route => route.fulfill({
+      json: {
+        serviceRequests: Array.from({ length: 8 }, (_, index) => ({
+          id: String(index),
+          requested_at: customer.last_order_date,
+          cylinder_size: '11kg',
+          quantity: index + 1,
+          total_amount: 659,
+          status: 'Delivered',
+        })),
+      },
+    }));
+    let attempts = 0;
+    await context.route(`${apiOrigin}/api/customers/${customer.id}`, route => {
+      assert.equal(route.request().method(), 'PATCH');
+      assert.deepEqual(route.request().postDataJSON(), {
+        name: 'Updated Customer', contactNumber: customer.contact_number, deliveryAddress: customer.delivery_address,
+      });
+      if (++attempts === 1) {
+        return route.fulfill({ status: 409, json: { message: 'Contact number already exists' } });
+      }
+      customer.name = 'Updated Customer';
+      return route.fulfill({ json: { customer } });
+    });
+    const page = await context.newPage();
+    await page.goto(`${baseUrl}/branch-manager/customers`);
+    await page.getByRole('button', { name: 'View →' }).click();
+    const profile = page.getByRole('dialog');
+    await profile.getByRole('button', { name: '2', exact: true }).click();
+    await profile.getByRole('cell', { name: '8', exact: true }).waitFor();
+    await profile.getByRole('button', { name: 'Edit profile' }).click();
+    await profile.getByLabel('Name', { exact: true }).fill('Updated Customer');
+    const save = profile.getByRole('button', { name: 'Save changes' });
+    await save.click();
+    await profile.getByText('Contact number already exists').waitFor();
+    await save.click();
+    await profile.getByText('Profile updated.').waitFor();
+    await profile.getByRole('heading', { name: 'Updated Customer · H-00001' }).waitFor();
+    assert.equal(attempts, 2);
+  } finally {
+    await context.close();
+    await browser.close();
+  }
+});

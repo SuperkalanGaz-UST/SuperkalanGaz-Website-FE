@@ -2,6 +2,7 @@ import { useCallback, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import dynamic from 'next/dynamic';
 import { Header } from './Header';
+import { ReportFilterDropdown } from './ReportFilterDropdown';
 import { KPICard } from './KPICard';
 import { Users, Navigation, AlertTriangle, Loader2, Truck } from 'lucide-react';
 import VehicleGeofenceAlerts from '../../branch-manager/screens/fleet/VehicleGeofenceAlerts';
@@ -235,11 +236,10 @@ export function FleetOverview({ vehiclesActive, onNavigate }: {
           <section className="min-w-0 bg-white rounded-lg border border-gray-200 p-4 md:p-6" aria-label="Fleet roster">
             <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
               <h3 className="font-semibold text-gray-900">Fleet roster</h3>
-              <select aria-label="Roster view" value={rosterView}
-                onChange={event => setRosterView(event.target.value === 'vehicles' ? 'vehicles' : 'riders')}
-                className="min-w-0 rounded-md border border-gray-200 bg-white px-2 py-1.5 text-sm text-gray-700">
-                <option value="riders">Delivery Riders</option><option value="vehicles">Vehicles</option>
-              </select>
+              <ReportFilterDropdown label="Roster view" value={rosterView}
+                onChange={value => setRosterView(value === 'vehicles' ? 'vehicles' : 'riders')}
+                sizingClassName="min-w-0 rounded-md border border-gray-200 pl-3 pr-10 py-1.5 text-sm"
+                options={[{ value: 'riders', label: 'Delivery Riders' }, { value: 'vehicles', label: 'Vehicles' }]} />
             </div>
             <div className="space-y-3 max-h-[500px] overflow-y-auto">
               {rosterView === 'vehicles' ? (

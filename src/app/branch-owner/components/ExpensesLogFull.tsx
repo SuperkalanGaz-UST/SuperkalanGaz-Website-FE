@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, Search } from 'lucide-react';
+import { FranchiseDropdown } from '../../components/FranchiseDropdown';
 import { Header } from './Header';
 import { Pagination } from './Pagination';
 import { useBranch } from '../contexts/BranchContext';
@@ -139,23 +140,25 @@ export function ExpensesLogFull({ onBack }: { onBack?: () => void }) {
                 className="w-full rounded-lg border border-gray-300 py-2 pl-9 pr-4 text-sm outline-none focus:border-transparent focus:ring-2 focus:ring-[#007BC1]"
               />
             </div>
-            <select
-              value={selectedMonth}
-              onChange={(event) => { setSelectedMonth(event.target.value); setCurrentPage(1); }}
-              className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#007BC1]"
+            <FranchiseDropdown
               aria-label="Expense month"
-            >
-              {monthOptions.map((month) => <option key={month.key} value={month.key}>{month.label}</option>)}
-            </select>
-            <select
-              value={category}
-              onChange={(event) => { setCategory(event.target.value as 'all' | ExpenseCategory); setCurrentPage(1); }}
-              className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#007BC1]"
+              value={selectedMonth}
+              onChange={(value) => { setSelectedMonth(value); setCurrentPage(1); }}
+              options={monthOptions.map((month) => ({ value: month.key, label: month.label }))}
+              wrapperClassName="w-[190px] shrink-0"
+              className="h-10"
+            />
+            <FranchiseDropdown
               aria-label="Expense category"
-            >
-              <option value="all">All categories</option>
-              {EXPENSE_CATEGORIES.map((option) => <option key={option} value={option}>{option}</option>)}
-            </select>
+              value={category}
+              onChange={(value) => { setCategory(value as 'all' | ExpenseCategory); setCurrentPage(1); }}
+              options={[
+                { value: 'all', label: 'All categories' },
+                ...EXPENSE_CATEGORIES.map((option) => ({ value: option, label: option })),
+              ]}
+              wrapperClassName="w-[210px] shrink-0"
+              className="h-10"
+            />
           </div>
 
           <div className="overflow-x-auto">

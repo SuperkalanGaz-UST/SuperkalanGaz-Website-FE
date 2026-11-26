@@ -62,10 +62,10 @@ export function AppSidebar({ entries, activeScreen, onNavigate, compactSpacing }
               width={80}
               height={57}
               loading="eager"
-              className={`h-auto w-20 object-contain transition-opacity duration-100 ${
+              className={`object-contain transition-opacity duration-100 ${
                 isExpanded ? 'opacity-0' : 'opacity-100'
               }`}
-              style={{ filter: 'brightness(0) invert(1)', height: 'auto' }}
+              style={{ filter: 'brightness(0) invert(1)', width: 'auto', height: 'auto' }}
             />
           </div>
           <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
@@ -76,10 +76,10 @@ export function AppSidebar({ entries, activeScreen, onNavigate, compactSpacing }
               width={160}
               height={115}
               loading="eager"
-              className={`h-auto w-40 object-contain transition-opacity duration-100 ${
+              className={`object-contain transition-opacity duration-100 ${
                 isExpanded ? 'opacity-100' : 'opacity-0'
               }`}
-              style={{ filter: 'brightness(0) invert(1)', height: 'auto' }}
+              style={{ filter: 'brightness(0) invert(1)', width: 'auto', height: 'auto' }}
             />
           </div>
         </div>

@@ -12,6 +12,7 @@ import { formatPHMobile } from '../../../lib/phMobile';
 import { useBranch } from '../../contexts/BranchContext';
 import { serviceRequestCylinderSummary, serviceRequestTotalQuantity, type ServiceRequestCylinderFields } from '../../../lib/serviceRequestItems';
 import { Header } from '../Header';
+import { FranchiseDropdown } from '../../../components/FranchiseDropdown';
 import styles from './screen.module.css';
 import '../../../branch-manager/bm-theme.css';
 
@@ -218,18 +219,21 @@ export default function Customers(_props: CustomersProps = {}) {
                         <Search size={14} className={styles.searchIcon} />
                         <input
                             className={styles.searchInput}
-                            placeholder="Search name or number…"
+                            placeholder="Search name, ID or phone…"
+                            aria-label="Search customers by name, customer ID, or phone number"
                             value={search}
                             onChange={(e) => { setSearch(e.target.value); setPage(1); }}
                         />
                     </div>
-                    <select
+                    <FranchiseDropdown
+                        aria-label="Filter customer source"
+                        matchTriggerWidth
+                        wrapperClassName={styles.sourceSelectWrapper}
                         className={styles.sourceSelect}
                         value={sourceFilter}
-                        onChange={(e) => { setSourceFilter(e.target.value as (typeof SOURCE_FILTERS)[number]); setPage(1); }}
-                    >
-                        {SOURCE_FILTERS.map((s) => <option key={s} value={s}>{s}</option>)}
-                    </select>
+                        onChange={(value) => { setSourceFilter(value as (typeof SOURCE_FILTERS)[number]); setPage(1); }}
+                        options={SOURCE_FILTERS.map(source => ({ value: source, label: source }))}
+                    />
                     {hasFilters && (
                         <button type="button" className={styles.clearLink} onClick={clearFilters}>Clear</button>
                     )}

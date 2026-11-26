@@ -59,7 +59,7 @@ async function contextFor(browser, role) {
     user,
   };
   const context = await browser.newContext({
-    viewport: { width: 1600, height: 1100 },
+    viewport: { width: 1189, height: 728 },
   });
   await context.addInitScript(
     ({ session, key }) => localStorage.setItem(key, JSON.stringify(session)),
@@ -234,7 +234,17 @@ test(
         .click();
       const dialog = page.getByRole('dialog');
       await dialog.waitFor();
-      await dialog.getByRole('combobox').selectOption(staffId);
+      await dialog.getByRole('combobox', { name: 'Staff member' }).click();
+      await page
+        .getByRole('option', { name: 'Ana Test · Delivery Rider' })
+        .click();
+      const saveButtonBounds = await dialog
+        .getByRole('button', { name: 'Save entry', exact: true })
+        .boundingBox();
+      assert.ok(
+        saveButtonBounds && saveButtonBounds.y + saveButtonBounds.height <= 728,
+        'The save action fits in the short desktop viewport',
+      );
       await dialog.getByLabel('Regular hours', { exact: true }).fill('144');
       await dialog.getByLabel('Hourly rate (₱)', { exact: true }).fill('125');
       await dialog.getByLabel('Overtime hours', { exact: true }).fill('6');
@@ -260,7 +270,8 @@ test(
         /19,200/,
       );
       const box = await dialog.boundingBox();
-      assert.ok(box.width >= 900 && box.width <= 1100);
+      assert.ok(box.width >= 940 && box.width <= 960);
+      assert.ok(box.x >= 110, 'The dialog keeps clear space on both sides');
       await page.waitForFunction(
         () =>
           getComputedStyle(document.querySelector('[role=dialog]')).opacity ===
@@ -337,8 +348,9 @@ test(
       assert.ok(state.salaryReads.includes(branchB));
       state.unavailable = true;
       await page
-        .getByLabel('Expense month', { exact: true })
-        .selectOption({ index: 1 });
+        .getByRole('combobox', { name: 'Expense month' })
+        .click();
+      await page.getByRole('option').nth(1).click();
       await page
         .getByRole('alert')
         .filter({ hasText: 'Salary connection unavailable' })

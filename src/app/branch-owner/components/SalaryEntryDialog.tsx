@@ -9,6 +9,7 @@ import {
   DialogDescription,
   DialogTitle,
 } from '../../components/ui/dialog';
+import { FranchiseDropdown } from '../../components/FranchiseDropdown';
 import {
   fetchSalaryStaff,
   formatExpensePeso,
@@ -131,30 +132,34 @@ export function SalaryEntryDialog({
         <form onSubmit={(event) => void submit(event)}>
           <fieldset disabled={saving} className={styles.formFields}>
             <div className={styles.identityRow}>
-              <label className={styles.field}>
-                Staff member
-                <select
+              <div className={styles.field}>
+                <label htmlFor="salary-staff-select">Staff member</label>
+                <FranchiseDropdown
+                  id="salary-staff-select"
                   aria-label="Staff member"
-                  required
                   value={staffId}
-                  onChange={(event) => setStaffId(event.target.value)}
-                  disabled={!staffReady}
-                >
-                  <option value="">
-                    {staff.isFetching
+                  onChange={setStaffId}
+                  placeholder={
+                    staff.isFetching
                       ? 'Loading branch staff…'
-                      : 'Select branch staff'}
-                  </option>
-                  {staff.data?.map((person) => (
-                    <option key={person.id} value={person.id}>
-                      {person.name} ·{' '}
-                      {person.role === 'driver'
-                        ? 'Delivery Rider'
-                        : 'Branch Manager'}
-                    </option>
-                  ))}
-                </select>
-              </label>
+                      : 'Select branch staff'
+                  }
+                  options={
+                    staff.data?.map((person) => ({
+                      value: person.id,
+                      label: `${person.name} · ${
+                        person.role === 'driver'
+                          ? 'Delivery Rider'
+                          : 'Branch Manager'
+                      }`,
+                    })) ?? []
+                  }
+                  wrapperClassName="w-full"
+                  className="min-h-12 rounded-[9px] border-[#d9e2ee] px-3 text-[#172339]"
+                  disabled={!staffReady}
+                  required
+                />
+              </div>
               <label className={styles.field}>
                 Period start
                 <input

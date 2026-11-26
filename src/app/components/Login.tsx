@@ -50,6 +50,7 @@ export function Login({
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [resetComplete, setResetComplete] = useState(false);
   const [error, setError] = useState(signInError ?? '');
   const [loading, setLoading] = useState(false);
@@ -220,15 +221,18 @@ export function Login({
         onChange={(e) => onChange(e.target.value)}
         autoComplete={autoComplete}
         required
-        className="w-full px-4 py-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-[#007BC1] focus:border-transparent outline-none pr-12 text-sm [&::-ms-reveal]:hidden [&::-ms-clear]:hidden"
+        className="w-full px-4 py-3 border border-gray-300 rounded-md focus:border-[#007BC1] outline-none pr-12 text-sm [&::-ms-reveal]:hidden [&::-ms-clear]:hidden"
       />
       <button
         type="button"
+        onMouseDown={(event) => event.preventDefault()}
         onClick={onToggleVisibility}
         aria-label={visible ? 'Hide password' : 'Show password'}
-        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+        aria-controls={id}
+        aria-pressed={visible}
+        className="absolute inset-y-0 right-0 flex w-12 cursor-pointer items-center justify-center rounded-r-md text-gray-500 hover:text-gray-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#007BC1]"
       >
-        {visible ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+        {visible ? <Eye className="w-5 h-5" aria-hidden="true" /> : <EyeOff className="w-5 h-5" aria-hidden="true" />}
       </button>
     </div>
   );
@@ -290,8 +294,8 @@ export function Login({
                 'invitation-password-confirm',
                 confirmPassword,
                 setConfirmPassword,
-                showNewPassword,
-                () => setShowNewPassword((visible) => !visible),
+                showConfirmPassword,
+                () => setShowConfirmPassword((visible) => !visible),
                 'new-password',
               )}
             </div>
@@ -341,8 +345,8 @@ export function Login({
                 'confirm-password',
                 confirmPassword,
                 setConfirmPassword,
-                showNewPassword,
-                () => setShowNewPassword((visible) => !visible),
+                showConfirmPassword,
+                () => setShowConfirmPassword((visible) => !visible),
                 'new-password',
               )}
             </div>
@@ -516,7 +520,7 @@ export function Login({
               }}
               autoComplete="username"
               required
-              className="w-full px-4 py-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-[#007BC1] focus:border-transparent outline-none text-sm"
+              className="w-full px-4 py-3 border border-gray-300 rounded-md focus:border-[#007BC1] outline-none text-sm"
             />
           </div>
 

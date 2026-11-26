@@ -89,7 +89,7 @@ export function BranchOwnerAccountSettings() {
   const [currentPassword, setCurrentPassword] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
+  const [showPassword, setShowPassword] = useState({ current: false, next: false, confirm: false });
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [passwordSaving, setPasswordSaving] = useState(false);
 
@@ -201,7 +201,7 @@ export function BranchOwnerAccountSettings() {
 
       setPassword('');
       setConfirmPassword('');
-      setShowPassword(false);
+      setShowPassword({ current: false, next: false, confirm: false });
       toast.success('Password updated.');
     } catch {
       setPasswordError('Could not reach the server.');
@@ -345,36 +345,20 @@ export function BranchOwnerAccountSettings() {
           </div>
 
           <label className="mt-6 block text-sm font-medium text-gray-700">
-            Current password
-            <input
-              type={showPassword ? 'text' : 'password'}
-              value={currentPassword}
-              onChange={(event) => setCurrentPassword(event.target.value)}
-              className={fieldClassName}
-              autoComplete="current-password"
-            />
-          </label>
+Current password
+<span className="relative block">
+<input id="owner-password-current" type={showPassword.current ? 'text' : 'password'} value={currentPassword} onChange={event => setCurrentPassword(event.target.value)} className={fieldClassName + ' pr-11 [&::-ms-reveal]:hidden [&::-ms-clear]:hidden'} autoComplete="current-password" />
+<button type="button" onMouseDown={event => event.preventDefault()} onClick={() => setShowPassword(visible => ({ ...visible, current: !visible.current }))} aria-label={showPassword.current ? 'Hide current password' : 'Show current password'} aria-controls="owner-password-current" aria-pressed={showPassword.current} className="absolute bottom-1.5 right-1.5 flex h-8 w-8 items-center justify-center text-gray-400 hover:text-gray-600">
+{showPassword.current ? <Eye aria-hidden="true" className="h-4 w-4" /> : <EyeOff aria-hidden="true" className="h-4 w-4" />}
+</button></span></label>
 
           <label className="mt-4 block text-sm font-medium text-gray-700">
-            New password
-            <span className="relative block">
-              <input
-                type={showPassword ? 'text' : 'password'}
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                className={`${fieldClassName} pr-11`}
-                autoComplete="new-password"
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword((visible) => !visible)}
-                className="absolute bottom-1.5 right-1.5 flex h-8 w-8 items-center justify-center text-gray-400 hover:text-gray-600"
-                aria-label={showPassword ? 'Hide password' : 'Show password'}
-              >
-                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-              </button>
-            </span>
-          </label>
+New password
+<span className="relative block">
+<input id="owner-password-next" type={showPassword.next ? 'text' : 'password'} value={password} onChange={event => setPassword(event.target.value)} className={fieldClassName + ' pr-11 [&::-ms-reveal]:hidden [&::-ms-clear]:hidden'} autoComplete="new-password" />
+<button type="button" onMouseDown={event => event.preventDefault()} onClick={() => setShowPassword(visible => ({ ...visible, next: !visible.next }))} aria-label={showPassword.next ? 'Hide new password' : 'Show new password'} aria-controls="owner-password-next" aria-pressed={showPassword.next} className="absolute bottom-1.5 right-1.5 flex h-8 w-8 items-center justify-center text-gray-400 hover:text-gray-600">
+{showPassword.next ? <Eye aria-hidden="true" className="h-4 w-4" /> : <EyeOff aria-hidden="true" className="h-4 w-4" />}
+</button></span></label>
 
           <div className="mt-2 flex items-center gap-2 text-xs text-gray-500">
             <Check className={`h-3.5 w-3.5 ${password.length >= 8 ? 'text-green-500' : 'text-gray-300'}`} aria-hidden="true" />
@@ -382,15 +366,12 @@ export function BranchOwnerAccountSettings() {
           </div>
 
           <label className="mt-4 block text-sm font-medium text-gray-700">
-            Confirm new password
-            <input
-              type={showPassword ? 'text' : 'password'}
-              value={confirmPassword}
-              onChange={(event) => setConfirmPassword(event.target.value)}
-              className={fieldClassName}
-              autoComplete="new-password"
-            />
-          </label>
+Confirm new password
+<span className="relative block">
+<input id="owner-password-confirm" type={showPassword.confirm ? 'text' : 'password'} value={confirmPassword} onChange={event => setConfirmPassword(event.target.value)} className={fieldClassName + ' pr-11 [&::-ms-reveal]:hidden [&::-ms-clear]:hidden'} autoComplete="new-password" />
+<button type="button" onMouseDown={event => event.preventDefault()} onClick={() => setShowPassword(visible => ({ ...visible, confirm: !visible.confirm }))} aria-label={showPassword.confirm ? 'Hide confirm new password' : 'Show confirm new password'} aria-controls="owner-password-confirm" aria-pressed={showPassword.confirm} className="absolute bottom-1.5 right-1.5 flex h-8 w-8 items-center justify-center text-gray-400 hover:text-gray-600">
+{showPassword.confirm ? <Eye aria-hidden="true" className="h-4 w-4" /> : <EyeOff aria-hidden="true" className="h-4 w-4" />}
+</button></span></label>
 
           {passwordError && <p className="mt-3 text-sm text-red-600">{passwordError}</p>}
 

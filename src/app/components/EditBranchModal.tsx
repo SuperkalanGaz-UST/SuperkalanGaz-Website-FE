@@ -13,6 +13,7 @@ import { cityMunicipalityFocus } from "../lib/phCitiesMunicipalities";
 import { formatPhMobileNational, normalizePhMobile } from "../lib/phMobile";
 import { BranchOwnerReassignmentForm } from "../franchise-admin/components/BranchOwnerReassignmentForm";
 import type { GovernanceRequest } from "../super-admin/types";
+import { FranchiseDropdown as Select } from "./FranchiseDropdown";
 
 /** The branch's linked owner, as returned by GET /users. */
 interface OwnerProfile {
@@ -370,16 +371,17 @@ export function EditBranchModal({ branch, revision, onClose, onSaved }: EditBran
                   </div>
                   <div>
                     <label className={label}>Status</label>
-                    <select
+                    <Select
+                      aria-label="Owner status"
                       disabled={owner.status === "Pending"}
                       value={ownerStatus}
-                      onChange={(e) => setOwnerStatus(e.target.value as "Active" | "Inactive")}
-                      className={field}
-                    >
-                      {owner.status === "Pending" && <option value="Pending">Pending invitation</option>}
-                      <option value="Active">Active</option>
-                      <option value="Inactive">Inactive</option>
-                    </select>
+                      onChange={(value) => setOwnerStatus(value as "Active" | "Inactive")}
+                      options={[
+                        ...(owner.status === "Pending" ? [{ value: "Pending", label: "Pending invitation" }] : []),
+                        { value: "Active", label: "Active" },
+                        { value: "Inactive", label: "Inactive" },
+                      ]}
+                    />
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-3">

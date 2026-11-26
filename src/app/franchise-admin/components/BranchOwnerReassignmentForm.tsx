@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { fetchJson } from '../../lib/api';
 import { useSubmitGovernanceRequest } from '../useSubmitGovernanceRequest';
 import type { GovernanceRequest } from '../../super-admin/types';
+import { FranchiseDropdown as Select } from '../../components/FranchiseDropdown';
 
 interface OwnerOption {
   id: string;
@@ -96,21 +97,17 @@ export function BranchOwnerReassignmentForm({
           <label htmlFor={ownerSelectId} className="block text-sm font-medium text-slate-700">
             Proposed Branch Owner
           </label>
-          <select id={ownerSelectId} required disabled={loading || submitting || owners.length === 0} value={ownerId}
-            onChange={(event) => setOwnerId(event.target.value)} className={fieldClass}>
-            <option value="">
-              {loading ? 'Loading Branch Owners…' : owners.length === 0 ? 'No other active Branch Owners' : 'Select a Branch Owner'}
-            </option>
-            {owners.map((owner) => (
-              <option key={owner.id} value={owner.id}>
-                {owner.display_name ?? owner.email ?? owner.id}
-              </option>
-            ))}
-          </select>
+          <div className="mt-1">
+            <Select id={ownerSelectId} required disabled={loading || submitting || owners.length === 0} value={ownerId}
+              onChange={setOwnerId} options={[
+                { value: '', label: loading ? 'Loading Branch Owners…' : owners.length === 0 ? 'No other active Branch Owners' : 'Select a Branch Owner' },
+                ...owners.map(owner => ({ value: owner.id, label: owner.display_name ?? owner.email ?? owner.id })),
+              ]} />
+          </div>
         </div>
       )}
       <label className="block text-sm font-medium text-slate-700">
-        Business justification
+        Business justification <span aria-hidden="true" className="text-red-600">*</span>
         <textarea required minLength={5} maxLength={1000} rows={4} value={reason} disabled={submitting}
           onChange={(event) => setReason(event.target.value)} className={fieldClass} />
       </label>

@@ -8,6 +8,7 @@ import { ArrowLeft, RefreshCw, Search } from 'lucide-react';
 import { fetchJson } from '../../lib/api';
 import { useBranch } from '../contexts/BranchContext';
 import { RatingRow, RatingStars, formatDate } from './CSATSatisfaction';
+import { ReportFilterDropdown } from './ReportFilterDropdown';
 
 export function CustomerRatingsFull({ onBack }: { onBack: () => void }) {
   const { selectedBranchId } = useBranch();
@@ -86,16 +87,12 @@ export function CustomerRatingsFull({ onBack }: { onBack: () => void }) {
                 className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-[#007BC1]"
               />
             </div>
-            <select
+            <ReportFilterDropdown
+              label="Filter customer rating"
               value={filterRating}
-              onChange={(e) => { setFilterRating(e.target.value); setCurrentPage(1); }}
-              className="text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-[#007BC1]"
-            >
-              <option value="all">All Ratings</option>
-              {[5, 4, 3, 2, 1].map((n) => (
-                <option key={n} value={n}>{n} Star{n !== 1 ? 's' : ''}</option>
-              ))}
-            </select>
+              onChange={(value) => { setFilterRating(value); setCurrentPage(1); }}
+              options={[{ value: 'all', label: 'All Ratings' }, ...[5, 4, 3, 2, 1].map(n => ({ value: String(n), label: `${n} Star${n !== 1 ? 's' : ''}` }))]}
+            />
             {hasFilters && (
               <button
                 onClick={clearFilters}

@@ -1,5 +1,6 @@
 import { ReactNode } from 'react';
-import { AlertCircle, Building2, CalendarDays, ChevronDown, ChevronLeft, ChevronRight, Filter, Inbox, LoaderCircle, Search } from 'lucide-react';
+import { AlertCircle, CalendarDays, ChevronLeft, ChevronRight, Inbox, LoaderCircle, Search } from 'lucide-react';
+import { FranchiseDropdown as Select } from './FranchiseDropdown';
 import { useReportBranches } from '../lib/franchise-reports';
 import styles from './FranchiseReports.module.css';
 
@@ -42,14 +43,8 @@ export function ReportScope({ label }: { label: string }) {
 export function ReportBranchSelect({ value, onChange }: { value: string; onChange: (id: string) => void }) {
   const branches = useReportBranches();
   return <div>
-    <label className={styles.selectControl}>
-      <Building2 size={15} className={styles.selectIcon} aria-hidden="true" />
-      <select aria-label="Filter by branch" value={value} onChange={e => onChange(e.target.value)}>
-        <option value="">All Branches</option>
-        {branches.data?.branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-      </select>
-      <ChevronDown size={14} className={styles.selectChevron} aria-hidden="true" />
-    </label>
+    <ReportFilterSelect label="Filter by branch" value={value} onChange={onChange}
+      options={[{ value: '', label: 'All Branches' }, ...(branches.data?.branches ?? []).map(b => ({ value: b.id, label: b.name }))]} />
     {branches.error && <ReportStatus loading={false} error={branches.error} retry={branches.refetch} />}
   </div>;
 }
@@ -62,13 +57,11 @@ export function ReportSearch({ value, onChange, placeholder, label }: { value: s
 }
 
 export function ReportFilterSelect({ value, onChange, label, options }: { value: string; onChange: (value: string) => void; label: string; options: { value: string; label: string }[] }) {
-  return <label className={styles.selectControl}>
-    <Filter size={15} className={styles.selectIcon} aria-hidden="true" />
-    <select aria-label={label} value={value} onChange={e => onChange(e.target.value)}>
-      {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-    </select>
-    <ChevronDown size={14} className={styles.selectChevron} aria-hidden="true" />
-  </label>;
+  return <div className={styles.reportSelect}>
+    {options.map(option => <span key={option.value} aria-hidden="true" className={styles.reportSelectSizer}>{option.label}</span>)}
+    <Select aria-label={label} value={value} onChange={onChange} options={options}
+      wrapperClassName={styles.reportSelectControl} className={styles.reportSelectTrigger} />
+  </div>;
 }
 
 export function ReportTable({ headers, children, empty }: { headers: string[]; children: ReactNode; empty: boolean }) {

@@ -16,8 +16,11 @@
 .metric p:nth-child(2) { font-size: 28px; font-variant-numeric: tabular-nums; }
 .metric > p:last-child { font-size: 12px; }
 .list { min-width: 0; border: 1px solid #e5e7eb; border-radius: 12px; }
-.listHeader { flex-wrap: wrap; gap: 16px; padding: 22px 32px; }
+.listHeader { display: flex; flex-direction: column; gap: 4px; padding: 16px 32px; }
 .listHeader > div:first-child { min-width: 0; }
+.titleRow, .detailsRow { display: flex; justify-content: space-between; align-items: center; gap: 16px; width: 100%; }
+.titleRow h2 { position: relative; top: 12px; }
+.titleRow button, .detailsRow .filters { flex-shrink: 0; }
 .listHeader h2 { font-size: 17px; }
 .listHeader p { max-width: 520px; font-size: 12px; line-height: 1.7; }
 .filters { display: flex; flex-wrap: wrap; max-width: 100%; gap: 3px; }
@@ -74,6 +77,14 @@
 .state { padding: 40px 24px; text-align: center; font-size: 13px; line-height: 1.7; }
 
 /* Keep this screen's shared header controls below its title on narrow windows. */
+@media (max-width: 767px) {
+  .titleRow h2 { top: 0; }
+  .listHeader { flex-direction: column; align-items: stretch; }
+  .detailsRow { flex-direction: column; align-items: flex-start; }
+  .filters { width: 100%; }
+  .filters button { flex: 1; }
+}
+
 @media (max-width: 700px) {
   .page > div:first-child { flex-wrap: wrap; align-items: flex-start; padding: 24px 20px 16px; }
   .page > div:first-child > div:first-child { flex-basis: 100%; }
@@ -92,9 +103,12 @@
   .inventoryRow > * { min-width: 0; }
 }
 @container owner-inventory (max-width: 719px) {
+  .titleRow h2 { top: 0; }
   .metrics { grid-template-columns: minmax(0, 1fr); }
   .listHeader { flex-direction: column; align-items: stretch; padding-left: 20px; padding-right: 20px; }
-  .filters { align-self: flex-start; }
+  .detailsRow { flex-direction: column; align-items: flex-start; }
+  .filters { width: 100%; align-self: stretch; }
+  .filters button { flex: 1; }
   .inventoryRow {
     grid-template-columns: minmax(0, 1fr);
     grid-template-areas: 'item' 'stock' 'status';
@@ -112,7 +126,7 @@
 }
 @container owner-inventory (max-width: 399px) {
   .metric { padding: 18px; }
-  .listHeader,
+  .listHeader { padding-left: 16px; padding-right: 16px; }
   .inventoryRow { padding: 18px 16px; }
   .inventoryRow { gap: 14px; }
   .image { width: 64px; height: 64px; flex-basis: 64px; }

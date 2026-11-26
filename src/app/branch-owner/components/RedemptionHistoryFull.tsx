@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Header } from './Header';
 import { Pagination } from './Pagination';
-import { Select } from './Select';
+import { ReportFilterDropdown } from './ReportFilterDropdown';
 import { ArrowLeft, Search } from 'lucide-react';
 import { fetchJson } from '../../lib/api';
 import { useBranch } from '../contexts/BranchContext';
@@ -143,7 +143,9 @@ export function RedemptionHistoryFull({ onBack }: { onBack: () => void }) {
                 className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#007BC1] focus:border-transparent outline-none text-sm"
               />
             </div>
-            <Select
+            <ReportFilterDropdown
+              label="Filter redemption status"
+              sizingClassName="appearance-none w-full px-4 py-2 pr-10 border border-gray-300 rounded-lg text-sm"
               value={filterStatus}
               onChange={(value) => { setFilterStatus(value); setCurrentPage(1); }}
               options={[

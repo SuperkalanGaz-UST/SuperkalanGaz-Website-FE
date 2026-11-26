@@ -24,7 +24,7 @@ test('branch registration, coverage editing and owner reassignment stay separate
   const registrations = [];
   const proposals = [];
   const errors = [];
-  const browser = await chromium.launch({ headless: true, args: ['--enable-webgl', '--use-gl=angle', '--use-angle=swiftshader'] });
+  const browser = await chromium.launch({ headless: true, ...(process.env.TEST_BROWSER_CHANNEL ? { channel: process.env.TEST_BROWSER_CHANNEL } : {}), args: ['--enable-webgl', '--use-gl=angle', '--use-angle=swiftshader'] });
   try {
     const context = await browser.newContext({ viewport: { width: 1440, height: 1100 } });
     await context.addInitScript(({ key, session }) => localStorage.setItem(key, JSON.stringify(session)), { key: `sb-${projectRef}-auth-token`, session: { access_token: token, refresh_token: 'synthetic', token_type: 'bearer', expires_in: 3600, expires_at: exp, user } });
@@ -91,7 +91,17 @@ test('branch registration, coverage editing and owner reassignment stay separate
     await page.getByRole('button', { name: 'New owner', exact: true }).click();
     await page.getByLabel('Owner first name', { exact: true }).fill('Nora');
     await page.getByLabel('Owner last name', { exact: true }).fill('Santos');
-    await page.getByLabel('Owner email address', { exact: true }).fill('nora@example.invalid');
+    const ownerEmail = page.getByLabel('Owner email address', { exact: true });
+    const invalidEmail = page.getByRole('alert').filter({ hasText: 'Enter a valid email address.' });
+    assert.equal(await invalidEmail.count(), 0, 'an untouched email field has no error');
+    await ownerEmail.fill('invalid-email');
+    await invalidEmail.waitFor();
+    assert.equal(await ownerEmail.evaluate(element => element === document.activeElement), true, 'validation appears before blur');
+    assert.equal(await ownerEmail.getAttribute('aria-invalid'), 'true');
+    assert.equal(await page.getByRole('button', { name: 'Continue →', exact: true }).isDisabled(), true);
+    await ownerEmail.fill('nora@example.invalid');
+    assert.equal(await invalidEmail.count(), 0, 'correcting the email clears its error');
+    assert.equal(await ownerEmail.getAttribute('aria-invalid'), 'false');
     await page.locator('input[type="tel"]').fill('9181234567');
     await page.getByRole('button', { name: 'Continue →', exact: true }).click();
     await page.getByRole('button', { name: 'Continue →', exact: true }).click();
@@ -115,8 +125,9 @@ test('branch registration, coverage editing and owner reassignment stay separate
     await page.getByRole('button', { name: 'Request Branch Owner reassignment', exact: true }).click();
     await page.getByText('Current Owner (Active)', { exact: true }).waitFor();
     const ownerSelect = page.getByLabel('Proposed Branch Owner', { exact: true });
-    await ownerSelect.selectOption(proposedOwner.id);
-    assert.deepEqual(await ownerSelect.locator('option').allTextContents(), ['Select a Branch Owner', 'Proposed Owner']);
+    await ownerSelect.click();
+    assert.deepEqual(await page.getByRole('option').allTextContents(), ['Select a Branch Owner', 'Proposed Owner']);
+    await page.getByRole('option', { name: proposedOwner.display_name, exact: true }).click();
     await page.getByLabel('Business justification').fill('Transfer ownership of this branch.');
     await page.getByRole('button', { name: 'Submit reassignment request', exact: true }).click();
     await page.getByText('Request submitted for Super Administrator review.', { exact: true }).waitFor();

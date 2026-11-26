@@ -46,6 +46,7 @@ export function Dashboard() {
       <Header title="Dashboard" />
 
       <div className="p-8">
+        {branchData.error && <p role="alert" className="mb-4 text-sm text-red-600">{branchData.error}</p>}
         {/* KPI row */}
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6 mb-6">
           <KPICard
@@ -69,7 +70,8 @@ export function Dashboard() {
             tooltip={(
               <div className="flex flex-col gap-1">
                 <span>{branchData.completedDeliveries} completed deliveries</span>
-                <span>{branchData.cancelledFailedDeliveries} cancelled/failed</span>
+                <span>{branchData.cancelledFailedDeliveries} cancelled/under review</span>
+                <span>Completion rate excludes cancelled orders.</span>
                 <span>{branchData.slaBreaches} SLA breaches</span>
               </div>
             )}
@@ -82,7 +84,7 @@ export function Dashboard() {
             trend={undefined}
             tooltip={branchData.trends.csat
               ? <span>{branchData.trends.csat.text}</span>
-              : <span>No ratings yet this month.</span>}
+              : <span>{branchData.csatScore === '—' && branchData.error ? 'CSAT data is unavailable.' : 'No ratings yet this month.'}</span>}
           />
           <KPICard
             title="Loyalty Claims This Month"
@@ -90,7 +92,7 @@ export function Dashboard() {
             icon={<Gift className="w-4 h-4 text-[#9333EA]" />}
             accentColor="#9333EA"
             trend={branchData.trends.loyalty}
-            tooltip={<span>Rewards redeemed by repeat customers this month.</span>}
+            tooltip={<span>Claims submitted this month, excluding rejected or cancelled claims.</span>}
           />
         </div>
 

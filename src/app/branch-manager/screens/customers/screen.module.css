@@ -62,6 +62,15 @@
 .closeButton:hover { background-color: var(--muted); }
 
 .dialogBody { display: flex; flex-direction: column; gap: 1.5rem; padding: 1.25rem 1.5rem 1.5rem; }
+.profileForm { display: grid; gap: .75rem; }
+.profileForm label { display: grid; gap: .35rem; font-size: .875rem; font-weight: 500; }
+.profileForm input, .profileForm textarea { padding: .5rem; border: 1px solid var(--border); border-radius: .375rem; background: var(--card); }
+.profileForm [role='alert'] { color: var(--destructive); font-size: .875rem; }
+.profileActions { display: flex; align-items: center; gap: .75rem; }
+.profileActions button { padding: .4rem .75rem; border: 1px solid var(--primary); border-radius: .375rem; color: var(--primary); cursor: pointer; }
+.profileActions button[type='submit'] { background: var(--primary); color: white; }
+.profileActions button:disabled { cursor: wait; opacity: .65; }
+.profileActions span { font-size: .875rem; }
 .detailSection { display: flex; flex-direction: column; gap: 0.6rem; }
 .sectionTitle { display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; font-weight: 600; color: var(--foreground); }
 

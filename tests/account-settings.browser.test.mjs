@@ -133,3 +133,44 @@ test('renamed username login exchanges credentials through NestJS and restores t
     await browser.close();
   }
 });
+
+test('franchise-admin: password visibility controls are independent and match their icons', { timeout: 60_000 }, async () => {
+  const browser = await chromium.launch({ headless: true, ...(process.env.TEST_BROWSER_CHANNEL ? { channel: process.env.TEST_BROWSER_CHANNEL } : {}) });
+  const { context, page, state, errors } = await setup(browser, 'franchise-admin');
+  try {
+    await page.goto(`${baseUrl}/franchise-admin/settings`);
+    await page.getByRole('button', { name: 'Change password', exact: true }).click();
+    const labels = ['Current password', 'New password', 'Confirm new password'];
+    const fields = labels.map(label => page.getByLabel(label, { exact: true }));
+    for (const field of fields) await field.fill('synthetic-password-123');
+    for (let index = 0; index < labels.length; index++) {
+      const show = page.getByRole('button', { name: `Show ${labels[index].toLowerCase()}`, exact: true });
+      assert.match(await show.locator('svg').getAttribute('class'), /lucide-eye-off/);
+      await fields[index].focus();
+      await show.click();
+      assert.equal(await fields[index].evaluate(element => element === document.activeElement), true);
+      for (let other = 0; other < fields.length; other++) {
+        assert.equal(await fields[other].getAttribute('type'), other === index ? 'text' : 'password');
+        assert.equal(await fields[other].inputValue(), 'synthetic-password-123');
+      }
+      const hide = page.getByRole('button', { name: `Hide ${labels[index].toLowerCase()}`, exact: true });
+      assert.match(await hide.locator('svg').getAttribute('class'), /lucide-eye(?!-off)/);
+      assert.equal(await hide.getAttribute('aria-pressed'), 'true');
+      await hide.focus();
+      await hide.press('Space');
+      assert.equal(await fields[index].getAttribute('type'), 'password');
+    }
+    for (const label of labels) await page.getByRole('button', { name: `Show ${label.toLowerCase()}`, exact: true }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Cancel', exact: true }).click();
+    await page.getByRole('button', { name: 'Change password', exact: true }).click();
+    for (const field of fields) {
+      assert.equal(await field.getAttribute('type'), 'password');
+      assert.equal(await field.inputValue(), '');
+    }
+    assert.deepEqual(state.writes, []);
+    assert.deepEqual(errors, []);
+  } finally {
+    await context.close();
+    await browser.close();
+  }
+});

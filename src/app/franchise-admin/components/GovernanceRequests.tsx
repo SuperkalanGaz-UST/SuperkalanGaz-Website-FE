@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { Clock3, ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
 import { Header } from '../../components/Header';
+import { FranchiseDropdown as Select } from '../../components/FranchiseDropdown';
 import { fetchJson } from '../../lib/api';
 import { staffScreenPath } from '../../lib/staffRoutes';
 import { governanceApi } from '../../super-admin/api';
@@ -140,9 +141,11 @@ export function GovernanceRequests() {
               )}
               <label className="text-sm font-medium text-slate-700">
                 SLA segment
-                <select value={slaSegment} onChange={(e) => setSlaSegment(e.target.value as typeof slaSegment)} className={inputClass}>
-                  {SEGMENTS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-                </select>
+                <div className="mt-2">
+                  <Select aria-label="SLA segment" value={slaSegment} onChange={(value) => setSlaSegment(value as typeof slaSegment)}
+                    className="h-11"
+                    options={SEGMENTS.map(([value, label]) => ({ value, label }))} />
+                </div>
               </label>
               <label className="text-sm font-medium text-slate-700">
                 Threshold in minutes
@@ -152,7 +155,7 @@ export function GovernanceRequests() {
                 </span>
               </label>
               <label className="text-sm font-medium text-slate-700 sm:col-span-2">
-                Business justification
+                Business justification <span aria-hidden="true" className="text-red-600">*</span>
                 <textarea required minLength={5} maxLength={1000} rows={4} value={slaReason} onChange={(e) => setSlaReason(e.target.value)} className={`${inputClass} h-auto py-3`} />
               </label>
               <div className="sm:col-span-2 flex justify-end">
