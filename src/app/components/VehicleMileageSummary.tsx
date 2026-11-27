@@ -26,7 +26,7 @@ const dateTime = new Intl.DateTimeFormat('en-PH', {
 
 function trackerMessage(vehicle: VehicleMileageSummaryData) {
   switch (vehicle.gps_provisioning_status) {
-    case 'unconfigured': return { label: 'Staff enter the distance' };
+    case 'unconfigured': return {};
     case 'pending': return { label: 'Setting up the tracker' };
     case 'failed': return { label: 'Tracker setup needs attention' };
   }
@@ -42,7 +42,7 @@ function trackerMessage(vehicle: VehicleMileageSummaryData) {
     case 'unavailable': return { label: 'Couldn’t get a distance update', detail: 'Showing the last saved distance.' };
     case 'stale': return { label: 'Distance updates are delayed', detail: 'Showing the last saved distance.' };
     case 'counter-reset': return { label: 'The tracker started counting again', detail: 'The saved total stays the same.' };
-    case 'disabled': return { label: 'Staff enter the distance', detail: 'Automatic updates are off.' };
+    case 'disabled': return { detail: 'Automatic updates are off.' };
     default: return { label: 'Last distance update is unknown' };
   }
 }
@@ -61,6 +61,7 @@ export function VehicleMileageSummary({ vehicle }: { vehicle: VehicleMileageSumm
   const tracker = trackerMessage(vehicle);
   const positionAt = vehicle.gps_mileage?.position_at;
   const date = positionAt ? new Date(positionAt) : null;
+  const hasValidDate = Boolean(date && Number.isFinite(date.getTime()));
 
   return (
     <div className={styles.summary}>
@@ -75,13 +76,13 @@ export function VehicleMileageSummary({ vehicle }: { vehicle: VehicleMileageSumm
           <dd className={due ? styles.value : styles.detail}>{serviceDetail}</dd>
         </div>
       </dl>
-      <div className={styles.gps}>
+      {tracker.label || tracker.detail || hasValidDate ? <div className={styles.gps}>
         {tracker.label ? <p><strong>{tracker.label}</strong></p> : null}
         {positionAt && date && Number.isFinite(date.getTime()) ? (
           <p><strong>Last distance update</strong> · <time dateTime={positionAt}>{dateTime.format(date)}</time></p>
         ) : null}
         {tracker.detail ? <p>{tracker.detail}</p> : null}
-      </div>
+      </div> : null}
     </div>
   );
 }
