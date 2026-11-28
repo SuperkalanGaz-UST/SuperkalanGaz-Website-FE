@@ -47,7 +47,7 @@ export function IdleLogoutWarningDialog({ open, warningSeconds, idleMinutes, onS
           </div>
           <AlertDialogTitle>You&apos;ve been inactive</AlertDialogTitle>
           <AlertDialogDescription>
-            For security, Super Administrator sessions end after {idleMinutes} minutes without activity.
+            For security, web dashboard sessions end after {idleMinutes} minutes without activity.
             You&apos;ll be logged out in {secondsLeft}s unless you stay signed in.
           </AlertDialogDescription>
         </AlertDialogHeader>
