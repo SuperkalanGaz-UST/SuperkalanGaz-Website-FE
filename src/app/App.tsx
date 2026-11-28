@@ -46,8 +46,6 @@ const BranchManagerApp = dynamic(
 );
 
 const AUTH_RESTORE_TIMEOUT_MS = 5_000;
-// Super Admin manages account access/security config, so it gets a stricter
-// idle-timeout than the operational personas — 15 minutes, warned 60s ahead.
 const IDLE_TIMEOUT_MS = 15 * 60_000;
 const IDLE_WARNING_SECONDS = 60;
 
@@ -75,7 +73,7 @@ export default function App({ children }: { children: ReactNode }) {
   }, [roleRedirectPath, router]);
 
   const idleTimer = useIdleTimer({
-    enabled: account?.role === 'super-admin',
+    enabled: account !== null,
     idleMs: IDLE_TIMEOUT_MS,
     warningMs: IDLE_WARNING_SECONDS * 1000,
     onWarning: () => setShowIdleWarning(true),
@@ -118,6 +116,7 @@ export default function App({ children }: { children: ReactNode }) {
 
       if (!session || passwordRecoveryRef.current) {
         setAccount(null);
+        setShowIdleWarning(false);
         setAuthReady(true);
         return;
       }
@@ -170,6 +169,7 @@ export default function App({ children }: { children: ReactNode }) {
         passwordRecoveryRef.current = true;
         setPasswordRecovery(true);
         setAccount(null);
+        setShowIdleWarning(false);
         setAuthReady(true);
         return;
       }
@@ -218,6 +218,7 @@ export default function App({ children }: { children: ReactNode }) {
     try {
       await signOut();
       setShowLogoutConfirm(false);
+      setShowIdleWarning(false);
       setAccount(null);
       router.replace('/');
       toast.success('You have been successfully logged out.');

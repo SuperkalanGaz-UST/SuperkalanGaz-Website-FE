@@ -56,7 +56,7 @@ interface RatingRow {
 
 /** Branch CSAT KPIs (story BM-041). */
 interface SummaryRow {
-    open_count: number;
+    open_ratings_count?: number;
     resolved_count: number;
     low_csat_open_count: number;
     average_stars: number | null;
@@ -350,11 +350,10 @@ export default function Csat() {
 
             {view === 'ratings' && (
             <>
-            {/* KPI tiles — Open Complaints is the figure BM-041 watches decrement. */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
                 <KPICard
-                    title="Open Complaints"
-                    value={summary ? summary.open_count.toString() : '—'}
+                    title="Open Ratings"
+                    value={summary?.open_ratings_count?.toString() ?? '—'}
                     icon={<AlertTriangle className="w-4 h-4 text-[#ef4444]" />}
                     accentColor="#ef4444"
                 />

@@ -382,6 +382,47 @@ test('staff URLs preserve navigation, refresh and role isolation for every staff
   } finally { await browser.close(); }
 });
 
+test('every staff dashboard warns before idle logout and Stay signed in resets the timer', { timeout: 90_000 }, async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    for (const role of ['super-admin', 'franchise-admin', 'branch-owner', 'branch-manager']) {
+      const { context } = await createContext(browser, sessionFor(role));
+      try {
+        const page = await context.newPage();
+        await page.clock.install();
+        await page.goto(`${baseUrl}/${role}/dashboard`);
+        await page.locator('aside').waitFor();
+        await page.clock.pauseAt(new Date(await page.evaluate(() => Date.now() + 1000)));
+        await page.evaluate(() => window.dispatchEvent(new KeyboardEvent('keydown')));
+
+        const warning = page.getByRole('alertdialog', { name: "You've been inactive" });
+        await page.clock.fastForward(14 * 60_000 - 1);
+        assert.equal(await warning.count(), 0, `${role} warned before 14 minutes`);
+        await page.clock.runFor(1);
+        await warning.getByText(/logged out in 60s/).waitFor();
+        await page.clock.runFor(1000);
+        await warning.getByText(/logged out in 59s/).waitFor();
+        await warning.getByRole('button', { name: 'Stay signed in' }).press('Enter');
+        await warning.waitFor({ state: 'hidden' });
+
+        await page.clock.fastForward(14 * 60_000);
+        await warning.waitFor();
+        await page.clock.fastForward(59_999);
+        await expectPath(page, `/${role}/dashboard`);
+        const logout = page.waitForResponse(response => new URL(response.url()).pathname === '/auth/v1/logout');
+        await page.clock.runFor(1);
+        assert.equal((await logout).status(), 204);
+        await expectPath(page, '/');
+        await page.getByRole('heading', { name: 'Sign In', exact: true }).waitFor();
+      } finally {
+        await context.close();
+      }
+    }
+  } finally {
+    await browser.close();
+  }
+});
+
 test('password recovery stays in its password form before any dashboard redirect', { timeout: 30_000 }, async () => {
   const browser = await chromium.launch({ headless: true });
   try {
