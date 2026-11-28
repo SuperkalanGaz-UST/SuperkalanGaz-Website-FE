@@ -13,6 +13,13 @@
 .cardHeader { padding: 1rem 1.25rem; border-bottom: 1px solid var(--border); }
 .cardTitle { font-size: 0.9375rem; font-weight: 600; color: var(--foreground); }
 
+/* Both carousel panels retain one compact height as their contents change. */
+.dashboardSideCard { height: 366px; display: flex; flex-direction: column; overflow: hidden; }
+.dashboardSideCard > .cardHeader { flex-shrink: 0; }
+.dashboardSideBody { flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: none; }
+.dashboardSideBody::-webkit-scrollbar { display: none; }
+.dashboardSideFooter { flex-shrink: 0; margin-top: auto; }
+
 /* Table */
 .tableWrapper { overflow-x: auto; }
 .table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }

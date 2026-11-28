@@ -3,8 +3,9 @@
 import { serviceRequestCylinderSummary, serviceRequestTotalQuantity, type ServiceRequestCylinderFields } from '../../../lib/serviceRequestItems';
 import React, { useMemo, useState, useEffect } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { RefreshCw, Search, UserRound, X, Coins, Boxes, Users } from 'lucide-react';
+import { RefreshCw, Search, UserRound, X, Coins, Boxes, Users, Pencil } from 'lucide-react';
 import { KPICard } from '../../../components/KPICard';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../../components/ui/select';
 import { Badge } from '../../components/Badge';
 import { Progress } from '../../components/Progress';
 import { Pagination } from '../../../components/Pagination';
@@ -142,6 +143,12 @@ export default function Customers({ onViewOrders }: CustomersProps = {}) {
     const [selectedCustomer, setSelectedCustomer] = useState<CustomerRow | null>(null);
     const [historyPage, setHistoryPage] = useState(1);
     const [profileDraft, setProfileDraft] = useState<CustomerProfileFields | null>(null);
+    const [profileNotification, setProfileNotification] = useState(0);
+    useEffect(() => {
+        if (!profileNotification) return;
+        const timer = window.setTimeout(() => setProfileNotification(0), 4000);
+        return () => window.clearTimeout(timer);
+    }, [profileNotification]);
     const saveProfile = useMutation({
         mutationFn: async ({ id, fields }: { id: string; fields: CustomerProfileFields }) => {
             const contactNumber = toE164PhMobile(fields.contactNumber);
@@ -155,6 +162,7 @@ export default function Customers({ onViewOrders }: CustomersProps = {}) {
             });
         },
         onSuccess: ({ customer }) => {
+            setProfileNotification(value => value + 1);
             setSelectedCustomer((current) => current?.id === customer.id ? customer : current);
             setProfileDraft(null);
             void queryClient.invalidateQueries({ queryKey: ['customers'] });
@@ -208,6 +216,7 @@ export default function Customers({ onViewOrders }: CustomersProps = {}) {
     };
 
     const closeCustomer = () => {
+        setProfileNotification(0);
         if (saveProfile.isPending) return;
         setProfileDraft(null);
         saveProfile.reset();
@@ -259,13 +268,15 @@ export default function Customers({ onViewOrders }: CustomersProps = {}) {
                             onChange={(e) => { setSearch(e.target.value); setPage(1); }}
                         />
                     </div>
-                    <select
-                        className={styles.sourceSelect}
+                    <Select
                         value={sourceFilter}
-                        onChange={(e) => { setSourceFilter(e.target.value as (typeof SOURCE_FILTERS)[number]); setPage(1); }}
+                        onValueChange={(value) => { setSourceFilter(value as (typeof SOURCE_FILTERS)[number]); setPage(1); }}
                     >
-                        {SOURCE_FILTERS.map((s) => <option key={s} value={s}>{s}</option>)}
-                    </select>
+                        <SelectTrigger aria-label="Filter by source" className="w-auto min-w-40 bg-white text-slate-600"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                            {SOURCE_FILTERS.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                        </SelectContent>
+                    </Select>
                     {hasFilters && (
                         <button type="button" className={styles.clearLink} onClick={clearFilters}>Clear</button>
                     )}
@@ -289,7 +300,7 @@ export default function Customers({ onViewOrders }: CustomersProps = {}) {
                 </div>
 
                 <div className={styles.tableWrapper}>
-                    <table className={styles.table}>
+                    <table className={`${styles.table} ${styles.customerTable}`}>
                         <thead>
                             <tr>
                                 <th>Customer ID</th>
@@ -365,6 +376,7 @@ export default function Customers({ onViewOrders }: CustomersProps = {}) {
             {selectedCustomer && (
                 <div className={styles.dialogOverlay} onClick={closeCustomer}>
                     <div className={styles.dialogContent} role="dialog" aria-modal="true" aria-labelledby="customer-profile-title" onClick={(e) => e.stopPropagation()}>
+                        {profileNotification > 0 && <div role="status" className={styles.profileNotification}>Profile updated.</div>}
                         <div className={styles.dialogHeader}>
                             <div>
                                 <h2 id="customer-profile-title" className={styles.dialogTitle}>
@@ -380,9 +392,16 @@ export default function Customers({ onViewOrders }: CustomersProps = {}) {
                                     {selectedCustomer.account_type === 'commercial' ? 'Commercial' : 'Household'}
                                 </p>
                             </div>
+                            <div className={styles.headerActions}>
+                            {!profileDraft && <button type="button" className={styles.headerEdit} aria-label="Edit profile" onClick={() => setProfileDraft({
+                                name: selectedCustomer.name,
+                                contactNumber: formatPHMobile(selectedCustomer.contact_number),
+                                deliveryAddress: selectedCustomer.delivery_address,
+                            })}><Pencil size={13} aria-hidden="true" /> Edit</button>}
                             <button type="button" className={styles.closeButton} onClick={closeCustomer} aria-label="Close" disabled={saveProfile.isPending}>
                                 <X size={18} />
                             </button>
+                            </div>
                         </div>
 
                         <div className={styles.dialogBody}>
@@ -400,16 +419,7 @@ export default function Customers({ onViewOrders }: CustomersProps = {}) {
                                         <button type="submit" disabled={saveProfile.isPending}>{saveProfile.isPending ? 'Saving…' : 'Save changes'}</button>
                                     </div>
                                 </form>
-                            ) : (
-                                <div className={styles.profileActions}>
-                                    <button type="button" onClick={() => setProfileDraft({
-                                        name: selectedCustomer.name,
-                                        contactNumber: formatPHMobile(selectedCustomer.contact_number),
-                                        deliveryAddress: selectedCustomer.delivery_address,
-                                    })}>Edit profile</button>
-                                    {saveProfile.isSuccess && <span role="status">Profile updated.</span>}
-                                </div>
-                            )}
+                            ) : null}
                             <section className={styles.detailSection}>
                                 <h3 className={styles.sectionTitle}><Coins size={15} /> Loyalty Standing</h3>
                                 {loyaltyLoading && <div className={styles.mutedText}>Loading…</div>}

@@ -74,7 +74,9 @@ export default function BranchManagerAccountSettings() {
   const [currentPassword, setCurrentPassword] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [passwordSaving, setPasswordSaving] = useState(false);
 
@@ -177,7 +179,9 @@ export default function BranchManagerAccountSettings() {
     setPassword('');
     setConfirmPassword('');
     setPasswordError(null);
-    setShowPassword(false);
+    setShowCurrentPassword(false);
+    setShowNewPassword(false);
+    setShowConfirmPassword(false);
   };
 
   const handlePasswordSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -401,46 +405,78 @@ export default function BranchManagerAccountSettings() {
             <form onSubmit={handlePasswordSubmit} className="mt-5">
               <label className="block text-sm font-medium text-gray-700">
                 Current password
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  value={currentPassword}
-                  onChange={(event) => setCurrentPassword(event.target.value)}
-                  className={`${fieldClassName} mt-2`}
-                  autoComplete="current-password"
-                  autoFocus
-                />
+                <span className="relative mt-2 block">
+                  <input
+                    id="bm-current-password"
+                    type={showCurrentPassword ? 'text' : 'password'}
+                    value={currentPassword}
+                    onChange={(event) => setCurrentPassword(event.target.value)}
+                    className={`${fieldClassName} pr-11 [&::-ms-reveal]:hidden [&::-ms-clear]:hidden`}
+                    autoComplete="current-password"
+                    autoFocus
+                  />
+                  <button
+                    type="button"
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => setShowCurrentPassword((visible) => !visible)}
+                    className="absolute right-3 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center text-gray-400 hover:text-gray-600"
+                    aria-label={showCurrentPassword ? 'Hide current password' : 'Show current password'}
+                    aria-controls="bm-current-password"
+                    aria-pressed={showCurrentPassword}
+                  >
+                    {showCurrentPassword ? <Eye aria-hidden="true" className="h-4 w-4" /> : <EyeOff aria-hidden="true" className="h-4 w-4" />}
+                  </button>
+                </span>
               </label>
 
               <label className="mt-4 block text-sm font-medium text-gray-700">
                 New password
                 <span className="relative mt-2 block">
                   <input
-                    type={showPassword ? 'text' : 'password'}
+                    id="bm-new-password"
+                    type={showNewPassword ? 'text' : 'password'}
                     value={password}
                     onChange={(event) => setPassword(event.target.value)}
-                    className={`${fieldClassName} pr-11`}
+                    className={`${fieldClassName} pr-11 [&::-ms-reveal]:hidden [&::-ms-clear]:hidden`}
                     autoComplete="new-password"
                   />
                   <button
                     type="button"
-                    onClick={() => setShowPassword((visible) => !visible)}
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => setShowNewPassword((visible) => !visible)}
                     className="absolute right-3 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center text-gray-400 hover:text-gray-600"
-                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    aria-label={showNewPassword ? 'Hide new password' : 'Show new password'}
+                    aria-controls="bm-new-password"
+                    aria-pressed={showNewPassword}
                   >
-                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    {showNewPassword ? <Eye aria-hidden="true" className="h-4 w-4" /> : <EyeOff aria-hidden="true" className="h-4 w-4" />}
                   </button>
                 </span>
               </label>
 
               <label className="mt-4 block text-sm font-medium text-gray-700">
                 Confirm new password
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  value={confirmPassword}
-                  onChange={(event) => setConfirmPassword(event.target.value)}
-                  className={`${fieldClassName} mt-2`}
-                  autoComplete="new-password"
-                />
+                <span className="relative mt-2 block">
+                  <input
+                    id="bm-confirm-password"
+                    type={showConfirmPassword ? 'text' : 'password'}
+                    value={confirmPassword}
+                    onChange={(event) => setConfirmPassword(event.target.value)}
+                    className={`${fieldClassName} pr-11 [&::-ms-reveal]:hidden [&::-ms-clear]:hidden`}
+                    autoComplete="new-password"
+                  />
+                  <button
+                    type="button"
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => setShowConfirmPassword((visible) => !visible)}
+                    className="absolute right-3 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center text-gray-400 hover:text-gray-600"
+                    aria-label={showConfirmPassword ? 'Hide confirm new password' : 'Show confirm new password'}
+                    aria-controls="bm-confirm-password"
+                    aria-pressed={showConfirmPassword}
+                  >
+                    {showConfirmPassword ? <Eye aria-hidden="true" className="h-4 w-4" /> : <EyeOff aria-hidden="true" className="h-4 w-4" />}
+                  </button>
+                </span>
               </label>
 
               {passwordError && <p className="mt-3 text-sm text-red-600">{passwordError}</p>}

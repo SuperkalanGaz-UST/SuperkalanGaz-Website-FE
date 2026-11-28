@@ -140,6 +140,10 @@ const newRequestSchema = z.object({
 
 type NewRequestValues = z.infer<typeof newRequestSchema>;
 
+type EditableServiceRequestItem = Omit<ServiceRequestItem, 'quantity'> & {
+    quantity: number | '';
+};
+
 const formatRequestedAt = (iso: string) => {
     const d = new Date(iso);
     if (Number.isNaN(d.getTime())) return '—';
@@ -321,7 +325,7 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
     const [editingId, setEditingId] = useState<string | null>(null);
     const [editValues, setEditValues] = useState({
         deliveryAddress: '',
-        items: [] as ServiceRequestItem[],
+        items: [] as EditableServiceRequestItem[],
         specialInstructions: '',
     });
     const [editError, setEditError] = useState<string | null>(null);
@@ -363,7 +367,7 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
     const form = useForm({
         defaultValues: {
             customerName: '', customerContact: '', deliveryAddress: '',
-            cylinderSize: '', quantity: 1 as number | '', specialInstructions: '',
+            cylinderSize: '', quantity: '' as number | '', specialInstructions: '',
         },
         schema: newRequestSchema,
     });
@@ -391,7 +395,7 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
         for (const item of editValues.items) {
             const price = recorded.find(line => line.cylinder_size === item.cylinder_size)?.unit_price
                 ?? catalogPrices.find(p => p.cylinder_size === item.cylinder_size)?.unit_price;
-            if (price == null || !Number.isInteger(item.quantity) || item.quantity < 1) return null;
+            if (price == null || typeof item.quantity !== 'number' || !Number.isInteger(item.quantity) || item.quantity < 1) return null;
             total += price * item.quantity;
         }
         return total;
@@ -516,7 +520,7 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
             });
             const data = await res.json();
             if (!res.ok) throw new Error(apiErrorMessage(data, 'Failed to register customer'));
-            toast.success('Customer registered.');
+            toast.success('Customer registered.', { className: 'crm-toast--compact' });
             // Close the modal, autopopulate the order, and link the id (BM-032).
             selectCustomer(data.customer as CustomerRow);
             setShowNewCustomerModal(false);
@@ -533,7 +537,7 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
     const resetIntake = () => {
         form.setValues({
             customerName: '', customerContact: '', deliveryAddress: '',
-            cylinderSize: '', quantity: 1, specialInstructions: '',
+            cylinderSize: '', quantity: '', specialInstructions: '',
         });
         setExtraLines([]);
         setExtraLinesError(null);
@@ -684,7 +688,7 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
         setEditError(null);
     };
 
-    const updateEditItem = (index: number, change: Partial<ServiceRequestItem>) => {
+    const updateEditItem = (index: number, change: Partial<EditableServiceRequestItem>) => {
         setEditValues(current => ({
             ...current,
             items: current.items.map((item, i) => i === index ? { ...item, ...change } : item),
@@ -697,6 +701,11 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
         const nextAddress = editValues.deliveryAddress.trim();
         const nextInstructions = editValues.specialInstructions.trim();
         const currentInstructions = req.special_instructions ?? '';
+
+        if (editValues.items.some(item => typeof item.quantity !== 'number' || !Number.isInteger(item.quantity) || item.quantity < 1)) {
+            setEditError('Each cylinder quantity must be at least 1.');
+            return;
+        }
 
         const changes: {
             deliveryAddress?: string;
@@ -713,19 +722,14 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
         if (itemsChanged && currentItems.length === 1 && editValues.items.length === 1) {
             const [item] = editValues.items;
             if (item.cylinder_size !== req.cylinder_size) changes.cylinderSize = item.cylinder_size;
-            if (item.quantity !== req.quantity) changes.quantity = item.quantity;
+            if (item.quantity !== req.quantity) changes.quantity = Number(item.quantity);
         } else if (itemsChanged) {
-            changes.items = editValues.items.map(({ cylinder_size, quantity }) => ({ cylinderSize: cylinder_size, quantity }));
+            changes.items = editValues.items.map(({ cylinder_size, quantity }) => ({ cylinderSize: cylinder_size, quantity: Number(quantity) }));
         }
         // Empty string is an allowed value here (clears the note); only include it
         // when it actually differs from the current value.
         if (nextInstructions !== currentInstructions) changes.specialInstructions = nextInstructions;
 
-        // Client-side validation before hitting the API.
-        if (editValues.items.some(item => !Number.isInteger(item.quantity) || item.quantity < 1)) {
-            setEditError('Each cylinder quantity must be at least 1.');
-            return;
-        }
         if (new Set(editValues.items.map(item => item.cylinder_size)).size !== editValues.items.length) {
             setEditError('Choose a different cylinder size for each item.');
             return;
@@ -764,7 +768,7 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                 toast.error(apiErrorMessage(data, 'Failed to update request'));
                 return;
             }
-            toast.success('Service request updated.');
+            toast.success('Service request updated.', { className: 'crm-toast--compact' });
             void queryClient.invalidateQueries({ queryKey: ['stock-levels'] });
             closeEdit();
             await loadRequests();
@@ -1047,7 +1051,7 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
             });
             const data = await res.json();
             if (!res.ok) throw new Error(apiErrorMessage(data, 'Failed to create service request'));
-            toast.success('Walk-in/phone service request created.');
+            toast.success('Walk-in/phone service request created.', { className: 'crm-toast--compact' });
             void queryClient.invalidateQueries({ queryKey: ['stock-levels'] });
             resetIntake();
             if (!startAnotherRef.current) setIsCreateFormVisible(false);
@@ -1172,6 +1176,7 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                                                             setCustomerSearch(e.target.value);
                                                              setHighlightedCustomerIndex(-1);
                                                             form.setValues(p => ({ ...p, customerName: e.target.value }));
+                                                            if (form.errors.customerName) form.validateField('customerName', e.target.value);
                                                             setShowCustomerDropdown(true);
                                                         }}
                                                         onFocus={() => setShowCustomerDropdown(true)}
@@ -1353,7 +1358,7 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                                 {extraLinesError && <p className={styles.extraCylinderError} role="alert">{extraLinesError}</p>}
                                 {chosenSizes.size < catalogPrices.length && extraLines.length + 1 < catalogPrices.length && (
                                     <Button type="button" variant="outline" size="sm" className={styles.addCylinderBtn}
-                                        onClick={() => { setExtraLines(lines => [...lines, { cylinderSize: '', quantity: 1 }]); setExtraLinesError(null); }}>
+                                        onClick={() => { setExtraLines(lines => [...lines, { cylinderSize: '', quantity: '' }]); setExtraLinesError(null); }}>
                                         <Plus size={16} /> Add another cylinder
                                     </Button>
                                 )}
@@ -1447,14 +1452,14 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                     )}
                     <table className={styles.table}>
                         <colgroup>
-                            <col style={{ width: '10%' }} />
-                            <col style={{ width: '10%' }} />
+                            <col style={{ width: '12%' }} />
+                            <col style={{ width: '12%' }} />
                             <col style={{ width: '8%' }} />
                             <col style={{ width: '11%' }} />
-                            <col style={{ width: '10%' }} />
                             <col style={{ width: '9%' }} />
-                            <col style={{ width: '9%' }} />
-                            <col style={{ width: '9%' }} />
+                            <col style={{ width: '8%' }} />
+                            <col style={{ width: '8%' }} />
+                            <col style={{ width: '8%' }} />
                             <col style={{ width: '10%' }} />
                             <col style={{ width: '14%' }} />
                         </colgroup>
@@ -1510,7 +1515,12 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                                                 ) : (
                                                     <ChevronDown size={10} style={{ color: '#64748b', flexShrink: 0, minWidth: '10px', display: 'block' }} />
                                                 )}
-                                                <Badge variant={getStatusVariant(req.status)} className={styles.statusBadge}>{req.status}</Badge>
+                                                <Badge
+                                                    variant={getStatusVariant(req.status)}
+                                                    className={`${styles.statusBadge} ${req.status === 'Dispatched' ? styles.dispatchedStatusBadge : ''} ${req.status === 'Under Review' ? styles.underReviewStatusBadge : ''}`}
+                                                >
+                                                    {req.status}
+                                                </Badge>
                                                 {req.delivery_offer_expires_at && <span className={styles.subText}>Awaiting Delivery Rider acceptance</span>}
                                             </div>
                                         </td>
@@ -1521,7 +1531,7 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                                                     <Smartphone size={16} /> Mobile App
                                                 </Badge>
                                             ) : (
-                                                <Badge variant="secondary" className={styles.sourceBadge}>
+                                                <Badge variant="secondary" className={`${styles.sourceBadge} ${styles.walkInSourceBadge}`}>
                                                     <Store size={16} /> Walk-in/Phone
                                                 </Badge>
                                             )}
@@ -1588,7 +1598,7 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                                         </td>
                                         <td className={styles.actionsCell} onClick={e => e.stopPropagation()}>
                                             {req.status === 'Pending' ? (
-                                                <div className={styles.actionButtons}>
+                                                <div className={`${styles.actionButtons} ${styles.assignButtonRow}`}>
                                                     <Popover open={assigningId === req.id} onOpenChange={(open) => { if (!open) closeAssign(); }}>
                                                         <PopoverTrigger asChild>
                                                             <Button size="sm" variant="primary" disabled={Boolean(req.delivery_offer_expires_at)} onClick={() => openAssign(req.id)}>Assign Delivery Rider</Button>
@@ -1691,7 +1701,7 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                                                         serviceRequestId={req.id}
                                                         serviceRequestCode={req.sr_code}
                                                     />
-                                                    <span className={styles.mutedText}>Complaint open · resolve it in Feedback</span>
+                                                    <span className={`${styles.mutedText} ${styles.complaintOpenNote}`}>Complaint open · resolve it in Feedback</span>
                                                 </div>
                                             ) : (
                                                 <span className={styles.mutedText}>—</span>
@@ -1713,14 +1723,6 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                                                             <div className={styles.timelineItem}>
                                                                 <span className={styles.timelineLabel}>Delivered</span>
                                                                 <span className={styles.timelineTime}>{formatRequestedAt(req.delivered_at)}</span>
-                                                            </div>
-                                                        )}
-                                                        {req.rider_id && req.delivered_at && (
-                                                            <div className={styles.timelineItem}>
-                                                                <DeliveryProofViewer
-                                                                    serviceRequestId={req.id}
-                                                                    serviceRequestCode={req.sr_code}
-                                                                />
                                                             </div>
                                                         )}
                                                         {req.delay_reason && (
@@ -1778,19 +1780,25 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                                                             <div key={index} className={styles.cylinderEditorRow}>
                                                                 <div className={styles.editorField}>
                                                                     <label className={styles.fieldLabel} htmlFor={`edit-cylinder-${req.id}-${index}`}>Cylinder Size</label>
-                                                                    <select
-                                                                        id={`edit-cylinder-${req.id}-${index}`}
-                                                                        className={styles.riderSelect}
+                                                                    <Select
                                                                         value={item.cylinder_size}
-                                                                        onChange={event => updateEditItem(index, { cylinder_size: event.target.value })}
+                                                                        onValueChange={value => updateEditItem(index, { cylinder_size: value })}
                                                                     >
-                                                                        {!CYLINDER_SIZES.some(size => size === item.cylinder_size) && (
-                                                                            <option value={item.cylinder_size}>{item.cylinder_size}</option>
-                                                                        )}
-                                                                        {[...CYLINDER_SIZES].reverse().map(size => (
-                                                                            <option key={size} value={size} disabled={editValues.items.some((other, i) => i !== index && other.cylinder_size === size)}>{size}</option>
-                                                                        ))}
-                                                                    </select>
+                                                                        <SelectTrigger
+                                                                            id={`edit-cylinder-${req.id}-${index}`}
+                                                                            className="min-h-[2.65rem] bg-white text-slate-600"
+                                                                        >
+                                                                            <SelectValue />
+                                                                        </SelectTrigger>
+                                                                        <SelectContent>
+                                                                            {!CYLINDER_SIZES.some(size => size === item.cylinder_size) && (
+                                                                                <SelectItem value={item.cylinder_size}>{item.cylinder_size}</SelectItem>
+                                                                            )}
+                                                                            {[...CYLINDER_SIZES].reverse().map(size => (
+                                                                                <SelectItem key={size} value={size} disabled={editValues.items.some((other, i) => i !== index && other.cylinder_size === size)}>{size}</SelectItem>
+                                                                            ))}
+                                                                        </SelectContent>
+                                                                    </Select>
                                                                 </div>
                                                                 <div className={styles.editorField}>
                                                                     <label className={styles.fieldLabel} htmlFor={`edit-quantity-${req.id}-${index}`}>Quantity</label>
@@ -1799,7 +1807,7 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                                                                         type="number"
                                                                         min="1"
                                                                         value={item.quantity}
-                                                                        onChange={event => updateEditItem(index, { quantity: Number(event.target.value) })}
+                                                                        onChange={event => updateEditItem(index, { quantity: event.target.value === '' ? '' : Number(event.target.value) })}
                                                                     />
                                                                 </div>
                                                             </div>
@@ -1826,7 +1834,9 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                                             <td colSpan={10}>
                                                 <div className={styles.cancelPanel}>
                                                     <span className={styles.editorTitle}>Cancel request — {req.customer_name}</span>
-                                                    <label className={styles.fieldLabel} htmlFor={`cancel-reason-${req.id}`}>Reason for cancellation (required)</label>
+                                                    <label className={styles.fieldLabel} htmlFor={`cancel-reason-${req.id}`}>
+                                                        Reason for cancellation <span className={styles.requiredMark} aria-hidden="true">*</span>
+                                                    </label>
                                                     <Input
                                                         id={`cancel-reason-${req.id}`}
                                                         placeholder="e.g. Customer no longer needs the delivery"
@@ -1866,7 +1876,9 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                                                             <SelectItem value="other">Other</SelectItem>
                                                         </SelectContent>
                                                     </Select>
-                                                    <label className={styles.fieldLabel} htmlFor={`complaint-desc-${req.id}`}>Description (required)</label>
+                                                    <label className={styles.fieldLabel} htmlFor={`complaint-desc-${req.id}`}>
+                                                        Description <span className={styles.requiredMark} aria-hidden="true">*</span>
+                                                    </label>
                                                     <Input
                                                         id={`complaint-desc-${req.id}`}
                                                         placeholder="e.g. Customer reports the cylinder never arrived; Delivery Rider marked it delivered."
@@ -1902,18 +1914,22 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                                                     ) : availableRiders.length === 0 ? (
                                                         <span className={styles.mutedText}>No other available Delivery Riders</span>
                                                     ) : (
-                                                        <select
-                                                            id={`reassign-rider-${req.id}`}
-                                                            className={styles.riderSelect}
-                                                            value={selectedRiderId}
-                                                            onChange={(e) => setSelectedRiderId(e.target.value)}
-                                                            aria-label="Select new Delivery Rider"
-                                                        >
-                                                            <option value="" disabled>Select Delivery Rider…</option>
-                                                            {availableRiders.map(r => (
-                                                                <option key={r.id} value={r.id}>{r.name} · {operationalLocationLabel(r)}</option>
-                                                            ))}
-                                                        </select>
+                                                        <Select value={selectedRiderId} onValueChange={setSelectedRiderId}>
+                                                            <SelectTrigger
+                                                                id={`reassign-rider-${req.id}`}
+                                                                aria-label="Select new Delivery Rider"
+                                                                className="min-h-[2.65rem] bg-white text-slate-600"
+                                                            >
+                                                                <SelectValue placeholder="Select Delivery Rider…" />
+                                                            </SelectTrigger>
+                                                            <SelectContent>
+                                                                {availableRiders.map(r => (
+                                                                    <SelectItem key={r.id} value={r.id}>
+                                                                        {r.name} · {operationalLocationLabel(r)}
+                                                                    </SelectItem>
+                                                                ))}
+                                                            </SelectContent>
+                                                        </Select>
                                                     )}
                                                     {reassignError && <p className={styles.fieldError}>{reassignError}</p>}
                                                     <div className={styles.editorActions}>
@@ -2055,7 +2071,7 @@ export default function Orders({ initialSearch }: OrdersProps = {}) {
                                     <SelectTrigger id="modal-customer-account-type" style={{ height: '2.25rem', borderRadius: '0.375rem', borderColor: 'rgba(0,0,0,0.15)' }}>
                                         <SelectValue placeholder="Select loyalty program..." />
                                     </SelectTrigger>
-                                    <SelectContent>
+                                    <SelectContent style={{ zIndex: 10000 }}>
                                         <SelectItem value="Household Points">Household Points</SelectItem>
                                         <SelectItem value="Commercial 30+1">Commercial 30+1</SelectItem>
                                     </SelectContent>

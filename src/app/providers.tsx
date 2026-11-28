@@ -3,6 +3,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ReactNode, useEffect, useState } from 'react';
 import { supabase } from './lib/supabase/client';
+import { clearBranchSelection } from './lib/branchSelection';
 
 export function Providers({ children }: { children: ReactNode }) {
   const [queryClient] = useState(
@@ -21,6 +22,7 @@ export function Providers({ children }: { children: ReactNode }) {
   useEffect(() => {
     let identity: string | null = null;
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_OUT' || !session) clearBranchSelection();
       const nextIdentity = session
         ? `${session.user.id}:${String(session.user.app_metadata.role)}`
         : null;

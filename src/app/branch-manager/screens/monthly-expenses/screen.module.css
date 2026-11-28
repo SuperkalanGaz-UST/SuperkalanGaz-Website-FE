@@ -309,26 +309,32 @@
   white-space: nowrap;
 }
 
-.tableWrapper { overflow-x: auto; }
+.tableWrapper { max-width: 100%; overflow-x: auto; }
 
 .table {
+  width: 100%;
+  table-layout: fixed;
   min-width: 53rem;
   font-size: 0.78rem;
 }
 
 .table th {
-  padding: 0.72rem 0.85rem;
+  text-align: left;
+  padding: 0.72rem 0.5rem;
   color: #64748b;
   background: #f8fafc;
   font-size: 0.66rem;
   font-weight: 700;
   letter-spacing: 0.045em;
   text-transform: uppercase;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .table td {
-  padding: 0.85rem;
+  text-align: left;
+  padding: 0.85rem 0.5rem;
+  overflow-wrap: anywhere;
   vertical-align: middle;
   color: #334155;
   font-size: 0.77rem;
@@ -337,11 +343,12 @@
 .table tbody tr:nth-child(even) { background: #fbfdff; }
 .table tbody tr:hover { background: #f7fbfe; }
 
-.nowrap { white-space: nowrap; }
+.nowrap { overflow-wrap: anywhere; }
 .reference { color: #0f172a !important; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
-.description { min-width: 11rem; max-width: 17rem; }
-.amountColumn { text-align: right !important; }
-.amount { color: #0f172a !important; font-weight: 700; white-space: nowrap; }
+.description { overflow-wrap: anywhere; }
+.table th.amountColumn,
+.table td.amountColumn { text-align: left !important; }
+.amount { color: #0f172a !important; font-weight: 700; }
 
 .category {
   display: inline-flex;
@@ -352,7 +359,7 @@
   font-size: 0.66rem;
   font-weight: 650;
   line-height: 1.1;
-  white-space: nowrap;
+  white-space: normal;
 }
 
 .categoryFuel { color: #1e3a5f; background: #dbeafe; }
@@ -372,7 +379,7 @@
 }
 
 .receiptAttached svg { width: 0.82rem; height: 0.82rem; }
-.noReceipt { color: #94a3b8; white-space: nowrap; }
+.noReceipt { color: #94a3b8; }
 
 .editButton {
   display: inline-grid;
@@ -388,7 +395,7 @@
 
 .editButton:hover { color: var(--primary); background: #eff8ff; }
 .editButton svg { width: 0.9rem; height: 0.9rem; }
-.emptyState { padding: 2.5rem !important; text-align: center; color: var(--muted-foreground) !important; }
+.table td.emptyState { padding: 2.5rem !important; text-align: center; color: var(--muted-foreground) !important; }
 
 .formCard { padding-bottom: 0.2rem; }
 .formCard form { padding: 0 1.4rem 1.25rem; }
@@ -472,7 +479,7 @@
 .receiptUpload > span { display: flex; flex-direction: column; gap: 0.15rem; min-width: 0; }
 .receiptUpload strong { overflow: hidden; font-size: 0.75rem; text-overflow: ellipsis; white-space: nowrap; }
 .receiptUpload small { font-size: 0.65rem; }
-.fileInput { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
+.field .fileInput { position: absolute; left: 0; top: 0; width: 1px; min-width: 0; height: 1px; padding: 0; border: 0; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
 
 .formActions {
   display: grid;

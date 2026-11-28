@@ -126,12 +126,14 @@ function displayReward(row: RedemptionRow) {
 
 function RedemptionPhoto({ row, preview = false }: { row: RedemptionRow; preview?: boolean }) {
     const reward = displayReward(row);
-    const fallback = Object.entries(REWARD_IMAGES).find(([key]) => reward.toLowerCase().includes(key))?.[1];
+    const fallback = row.track === COMMERCIAL
+        ? '/catalog/22kg.png'
+        : Object.entries(REWARD_IMAGES).find(([key]) => reward.toLowerCase().includes(key))?.[1];
     const url = catalogPhotoUrl(row.photo_path);
     const [remoteFailed, setRemoteFailed] = useState(false);
     const source = remoteFailed ? fallback : url ?? fallback;
     if (!source) return <span className={styles.mutedText}>—</span>;
-    const size = preview ? 72 : 40;
+    const size = preview ? 56 : 40;
     return <div className={preview ? styles.pickupPhoto : styles.rewardThumb}>
         <Image src={source} alt={reward} width={size} height={size} className={styles.rewardImg}
             unoptimized={source === url} onError={() => setRemoteFailed(true)} />
@@ -749,7 +751,9 @@ export default function Rewards() {
                                             <tr className={styles.editorRow}>
                                                 <td colSpan={8}>
                                                     <div className={styles.rejectPanel}>
-                                                        <label className={styles.fieldLabel}>Reason for rejection</label>
+                                                        <label className={styles.fieldLabel}>
+                                                            Reason for rejection <span className={styles.requiredMark} aria-hidden="true">*</span>
+                                                        </label>
                                                         <input
                                                             className={styles.textInput}
                                                             placeholder="e.g. Reward out of stock at counter"

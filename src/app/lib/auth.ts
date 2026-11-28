@@ -10,6 +10,7 @@
 import { supabase } from './supabase/client';
 import { isAuthSessionMissingError, isAuthRetryableFetchError, type User } from '@supabase/supabase-js';
 import { apiErrorMessage, apiFetch, apiPublicFetch } from './api';
+import { clearBranchSelection } from './branchSelection';
 
 export type Role = 'super-admin' | 'franchise-admin' | 'branch-owner' | 'branch-manager';
 
@@ -128,6 +129,8 @@ export function accountFromUser(user: User, usernameFallback?: string): SignInRe
  * user's `app_metadata` — no profiles table, no PostgREST read.
  */
 export async function signIn(username: string, password: string): Promise<SignInResult> {
+  // A deliberate login starts a new branch choice, unlike session restoration.
+  clearBranchSelection();
   const identifier = username.trim();
   const { data, error } = identifier.includes('@')
     ? await supabase.auth.signInWithPassword({ email: identifier, password })

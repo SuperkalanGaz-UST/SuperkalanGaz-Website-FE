@@ -1,0 +1,93 @@
+.row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  width: 100%;
+  min-height: 44px;
+  flex-shrink: 0;
+  padding: 10px;
+  border: 1px solid var(--alert-border);
+  border-radius: 12px;
+  background: var(--alert-background);
+  color: #111827;
+  font: inherit;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+  transition: border-color 150ms, box-shadow 150ms;
+}
+
+.row:hover {
+  border-color: var(--alert-accent);
+  box-shadow: 0 2px 8px rgb(15 23 42 / 6%);
+}
+
+.row:focus-visible {
+  outline: 2px solid #007bc1;
+  outline-offset: 3px;
+}
+
+.urgent {
+  --alert-background: #fef2f2;
+  --alert-border: #fca5a5;
+  --alert-accent: #dc2626;
+  --alert-text: #991b1b;
+}
+
+.warning {
+  --alert-background: #fffbeb;
+  --alert-border: #fcd34d;
+  --alert-accent: #b45309;
+  --alert-text: #92400e;
+}
+
+.info {
+  --alert-background: #eff6ff;
+  --alert-border: #93c5fd;
+  --alert-accent: #1d4ed8;
+  --alert-text: #1e40af;
+}
+
+.iconTile {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 28px;
+  height: 28px;
+  border-radius: 7px;
+  background: var(--alert-accent);
+  color: #fff;
+}
+
+.body { flex: 1; min-width: 0; }
+.heading { display: flex; align-items: flex-start; gap: 8px; }
+.title, .subtext { display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden; -webkit-line-clamp: 2; overflow-wrap: anywhere; }
+.title { flex: 1; min-width: 0; font-size: 13px; font-weight: 600; line-height: 18px; }
+.subtext { margin-top: 4px; color: #475569; font-size: 12px; line-height: 16px; }
+
+.count {
+  display: inline-grid;
+  place-items: center;
+  flex-shrink: 0;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--alert-accent);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.items { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-top: 6px; }
+.chip { max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; padding: 1px 6px; border: 1px solid var(--alert-border); border-radius: 999px; background: #fff; color: #334155; font-size: 11px; line-height: 16px; }
+.more { color: var(--alert-text); font-size: 12px; line-height: 20px; font-weight: 600; }
+.action { display: block; margin-top: 6px; color: var(--alert-text); font-size: 12px; font-weight: 600; line-height: 16px; }
+.row:hover .action, .row:focus-visible .action { color: color-mix(in srgb, var(--alert-text) 85%, white); }
+
+@media (prefers-reduced-motion: reduce) {
+  .row { transition: none; }
+}

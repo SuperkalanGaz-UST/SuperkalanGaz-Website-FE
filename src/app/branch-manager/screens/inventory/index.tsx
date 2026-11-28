@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import Image from 'next/image';
-import { Cylinder, Gift, Package, PackageCheck, CheckCircle2, AlertTriangle, PackageX, ChevronDown } from 'lucide-react';
+import { Cylinder, Gift, Package, PackageCheck, CheckCircle2, AlertTriangle, PackageX } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import * as z from 'zod';
@@ -19,6 +19,7 @@ import { useAccount } from '../../../contexts/AccountContext';
 import { catalogPhotoUrl } from '../../../lib/household-rewards';
 import { fetchRewardStock, intakeRewardStock } from '../../../lib/reward-inventory';
 import rewardTabStyles from '../rewards/screen.module.css';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../../components/ui/select';
 
 /** Trimmed stock-level row (Inventory module, GET /inventory/stock-levels) —
  * one per product in the shared LPG catalog, sparse rows defaulted server-side. */
@@ -189,8 +190,14 @@ export default function Inventory() {
     const stockError = stockQueryError ? stockQueryError.message : null;
     const reordersError = reorderQueryError ? reorderQueryError.message : null;
 
-    const reorderForm = useForm({ defaultValues: { productId: "", qty: 10 }, schema: reorderSchema });
-    const stockForm = useForm({ defaultValues: { productId: "", receivedQty: 10 }, schema: stockUpdateSchema });
+    const reorderForm = useForm<{ productId: string; qty: number | '' }>({
+        defaultValues: { productId: "", qty: '' },
+        schema: reorderSchema,
+    });
+    const stockForm = useForm<{ productId: string; receivedQty: number | '' }>({
+        defaultValues: { productId: "", receivedQty: '' },
+        schema: stockUpdateSchema,
+    });
     const stockIntakeRef = React.useRef<HTMLDivElement>(null);
     const pendingIntakeFocus = React.useRef(false);
 
@@ -214,8 +221,8 @@ export default function Inventory() {
 
     const changeStockTab = (next: 'lpg' | 'rewards') => {
         if (next === activeStockTab) return;
-        reorderForm.setValues({ productId: '', qty: 10 });
-        stockForm.setValues({ productId: '', receivedQty: 10 });
+        reorderForm.setValues({ productId: '', qty: '' });
+        stockForm.setValues({ productId: '', receivedQty: '' });
         setActiveStockTab(next);
     };
     // One display filter feeds every Manager inventory surface, including historical logs.
@@ -271,7 +278,7 @@ export default function Inventory() {
             const body = await res.json();
             if (!res.ok) throw new Error(apiErrorMessage(body, 'Failed to submit reorder request'));
             setReorders((prev) => [body.reorderRequest as ReorderRequestRow, ...prev]);
-            reorderForm.setValues({ productId: "", qty: 10 });
+            reorderForm.setValues({ productId: "", qty: '' });
             toast.success('Reorder request submitted.');
         } catch (err) {
             toast.error(err instanceof Error ? err.message : 'Failed to submit reorder request');
@@ -287,7 +294,7 @@ export default function Inventory() {
         try {
             await intakeRewardStock(managerBranchId, data.productId.slice('reward:'.length), data.receivedQty);
             await queryClient.invalidateQueries({ queryKey: ['reward-stock-levels', managerBranchId] });
-            stockForm.setValues({ productId: '', receivedQty: 10 });
+            stockForm.setValues({ productId: '', receivedQty: '' });
             toast.success('Reward inventory updated.');
         } catch (err) {
             toast.error(err instanceof Error ? err.message : 'Failed to update reward inventory');
@@ -305,7 +312,7 @@ export default function Inventory() {
             if (!res.ok) throw new Error(apiErrorMessage(body, 'Failed to update inventory'));
             const updated = body.stockLevel as StockLevelRow;
             setStockLevels((prev) => prev.map((item) => (item.product_id === updated.product_id ? updated : item)));
-            stockForm.setValues({ productId: "", receivedQty: 10 });
+            stockForm.setValues({ productId: "", receivedQty: '' });
             toast.success('Inventory updated.');
         } catch (err) {
             toast.error(err instanceof Error ? err.message : 'Failed to update inventory');
@@ -470,17 +477,29 @@ export default function Inventory() {
                             <form onSubmit={reorderForm.handleSubmit(onReorderSubmit)} className={styles.formLayout}>
                                 <FormItem name="productId">
                                     <FormLabel>Product Line</FormLabel>
-                                    <FormControl><div className={styles.productSelectField}><select aria-label="Product Line" className={styles.productSelect} value={reorderForm.values.productId} onChange={event => { reorderForm.setValues(p => ({ ...p, productId: event.target.value })); reorderForm.validateField("productId"); }}>
-                                            <option value="" disabled hidden>Select product...</option>
-                                            {lpgProductOptions.map(item => (
-                                                <option key={item.product_id} value={item.product_id}>{item.product_name}</option>
-                                            ))}
-                                    </select><ChevronDown size={16} className={styles.productSelectArrow} aria-hidden="true" /></div></FormControl>
+                                    <FormControl>
+                                        <Select
+                                            value={reorderForm.values.productId}
+                                            onValueChange={value => {
+                                                reorderForm.setValues(p => ({ ...p, productId: value }));
+                                                reorderForm.validateField("productId");
+                                            }}
+                                        >
+                                            <SelectTrigger aria-label="Product Line" className="min-h-[2.65rem] w-full bg-white text-slate-600">
+                                                <SelectValue placeholder="Select product..." />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {lpgProductOptions.map(item => (
+                                                    <SelectItem key={item.product_id} value={item.product_id}>{item.product_name}</SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </FormControl>
                                     <FormMessage />
                                 </FormItem>
                                 <FormItem name="qty">
                                     <FormLabel>Quantity Requested</FormLabel>
-                                    <FormControl><Input type="number" aria-label="Quantity Requested" min="10" value={reorderForm.values.qty} onChange={e => reorderForm.setValues(p => ({ ...p, qty: Number(e.target.value) }))} onBlur={() => reorderForm.validateField("qty")} /></FormControl>
+                                    <FormControl><Input type="number" aria-label="Quantity Requested" min="10" value={reorderForm.values.qty} onChange={e => reorderForm.setValues(p => ({ ...p, qty: e.target.value === '' ? '' : Number(e.target.value) }))} onBlur={() => reorderForm.validateField("qty")} /></FormControl>
                                     <FormMessage />
                                 </FormItem>
                                 <div className={styles.formFooter}>
@@ -499,20 +518,32 @@ export default function Inventory() {
                             <form onSubmit={stockForm.handleSubmit(onStockUpdateSubmit)} className={styles.formLayout}>
                                 <FormItem name="productId">
                                     <FormLabel>Product Line</FormLabel>
-                                    <FormControl><div className={styles.productSelectField}><select aria-label="Product Line" className={styles.productSelect} value={stockForm.values.productId} onChange={event => { stockForm.setValues(p => ({ ...p, productId: event.target.value })); stockForm.validateField("productId"); }}>
-                                            <option value="" disabled hidden>Select product...</option>
-                                            {activeStockTab === 'lpg' && lpgProductOptions.map(item => (
-                                                <option key={item.product_id} value={item.product_id}>{item.product_name}</option>
-                                            ))}
-                                            {activeStockTab === 'rewards' && rewardProductOptions.map(item => (
-                                                <option key={`reward:${item.catalog_item_id}`} value={`reward:${item.catalog_item_id}`}>{item.item_name}</option>
-                                            ))}
-                                    </select><ChevronDown size={16} className={styles.productSelectArrow} aria-hidden="true" /></div></FormControl>
+                                    <FormControl>
+                                        <Select
+                                            value={stockForm.values.productId}
+                                            onValueChange={value => {
+                                                stockForm.setValues(p => ({ ...p, productId: value }));
+                                                stockForm.validateField("productId");
+                                            }}
+                                        >
+                                            <SelectTrigger aria-label="Product Line" className="min-h-[2.65rem] w-full bg-white text-slate-600">
+                                                <SelectValue placeholder="Select product..." />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {activeStockTab === 'lpg' && lpgProductOptions.map(item => (
+                                                    <SelectItem key={item.product_id} value={item.product_id}>{item.product_name}</SelectItem>
+                                                ))}
+                                                {activeStockTab === 'rewards' && rewardProductOptions.map(item => (
+                                                    <SelectItem key={`reward:${item.catalog_item_id}`} value={`reward:${item.catalog_item_id}`}>{item.item_name}</SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </FormControl>
                                     <FormMessage />
                                 </FormItem>
                                 <FormItem name="receivedQty">
                                     <FormLabel>Quantity Received</FormLabel>
-                                    <FormControl><Input type="number" aria-label="Quantity Received" min="1" value={stockForm.values.receivedQty} onChange={e => stockForm.setValues(p => ({ ...p, receivedQty: Number(e.target.value) }))} onBlur={() => stockForm.validateField("receivedQty")} /></FormControl>
+                                    <FormControl><Input type="number" aria-label="Quantity Received" min="1" value={stockForm.values.receivedQty} onChange={e => stockForm.setValues(p => ({ ...p, receivedQty: e.target.value === '' ? '' : Number(e.target.value) }))} onBlur={() => stockForm.validateField("receivedQty")} /></FormControl>
                                     <FormMessage />
                                 </FormItem>
                                 <div className={styles.formFooter}>

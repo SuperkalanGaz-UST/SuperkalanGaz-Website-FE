@@ -27,6 +27,8 @@ export function useForm<T extends Record<string, any>>({ defaultValues, schema }
         setErrors(prev => ({ ...prev, [name]: fieldError.message }));
         return false;
       }
+      // Another field may still fail while this field has become valid.
+      setErrors(prev => { const next = { ...prev }; delete next[name]; return next; });
       return true;
     }
   };
